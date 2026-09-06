@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import type { Finding, Severity } from "../lib/types";
 import { SEVERITY_ORDER, sortFindings } from "../lib/types";
 import { frameKind } from "../lib/analysis/logParser";
@@ -5,20 +6,61 @@ import { RepairAction } from "./Repair";
 
 const SEVERITIES: Severity[] = ["critical", "error", "warning", "info"];
 
-export function SeveritySummary({ findings }: { findings: Finding[] }) {
+/**
+ * Filter the list by severity.
+ *
+ * The active filter clears itself once nothing of that severity is left, so repairing
+ * the last critical does not leave the reader staring at an empty list wondering whether
+ * the findings vanished or the filter did.
+ */
+export function useSeverityFilter(findings: Finding[]) {
+  const [active, setActive] = useState<Severity | null>(null);
+
+  useEffect(() => {
+    if (active && !findings.some((f) => f.severity === active)) setActive(null);
+  }, [findings, active]);
+
+  const filtered = useMemo(
+    () => (active ? findings.filter((f) => f.severity === active) : findings),
+    [findings, active],
+  );
+
+  return {
+    active,
+    filtered,
+    toggle: (severity: Severity) => setActive((current) => (current === severity ? null : severity)),
+  };
+}
+
+export function SeveritySummary({
+  findings,
+  active,
+  onToggle,
+}: {
+  findings: Finding[];
+  active?: Severity | null;
+  onToggle?: (severity: Severity) => void;
+}) {
   return (
     <div className="summary">
       {SEVERITIES.map((severity) => {
         const count = findings.filter((f) => f.severity === severity).length;
+        const on = active === severity;
         return (
-          <div
+          <button
             key={severity}
-            className={`chip${count === 0 ? " zero" : ""}`}
+            type="button"
+            className={`chip${count === 0 ? " zero" : ""}${on ? " active" : ""}`}
             style={{ ["--sev" as string]: `var(--${severity})` }}
+            // Filtering to a severity with nothing in it would only ever show nothing.
+            disabled={!onToggle || count === 0}
+            aria-pressed={on}
+            title={count === 0 ? `No ${severity} findings` : on ? "Show everything" : `Show only ${severity}`}
+            onClick={() => onToggle?.(severity)}
           >
             <b>{count}</b>
             <small>{severity}</small>
-          </div>
+          </button>
         );
       })}
     </div>

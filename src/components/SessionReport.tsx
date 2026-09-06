@@ -1,6 +1,6 @@
 import type { SessionAnalysis } from "../lib/analysis/logParser";
 import type { Finding } from "../lib/types";
-import { FindingList, SeveritySummary } from "./Findings";
+import { FindingList, SeveritySummary, useSeverityFilter } from "./Findings";
 
 export function SessionReport({
   analysis,
@@ -12,6 +12,7 @@ export function SessionReport({
   source: string;
 }) {
   const { environment: env, timings } = analysis;
+  const filter = useSeverityFilter(findings);
   const slowest = timings[0]?.ms ?? 1;
 
   return (
@@ -25,8 +26,8 @@ export function SessionReport({
         <Fact label="Log lines" value={analysis.totalLines.toLocaleString()} />
       </div>
 
-      <SeveritySummary findings={findings} />
-      <FindingList findings={findings} empty="Nothing worth reporting in this session." />
+      <SeveritySummary findings={findings} active={filter.active} onToggle={filter.toggle} />
+      <FindingList findings={filter.filtered} empty="Nothing worth reporting in this session." />
 
       {timings.length > 0 && (
         <>

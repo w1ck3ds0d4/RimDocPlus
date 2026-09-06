@@ -4,7 +4,7 @@ import { runStaticRules } from "./lib/analysis/rules";
 import { analyzeLog, findingsFromLog, type SessionAnalysis } from "./lib/analysis/logParser";
 import { loadScan, loadSession, loadWorkshop } from "./lib/devData";
 import { diffProfiles, loadProfiles, profileFromScan, saveProfiles, type Profile } from "./lib/profiles";
-import { FindingList, SeveritySummary } from "./components/Findings";
+import { FindingList, SeveritySummary, useSeverityFilter } from "./components/Findings";
 import { PackEditor } from "./components/PackEditor";
 import { Packs } from "./components/Packs";
 import { SessionReport } from "./components/SessionReport";
@@ -136,6 +136,8 @@ export default function App() {
     [sessionAnalysis, scan],
   );
 
+  const doctorFilter = useSeverityFilter(staticFindings);
+
   if (loading) return <main />;
   if (!scan || !workingScan) return <NoFixtures />;
 
@@ -189,7 +191,11 @@ export default function App() {
       <main>
         {tab === "doctor" && (
           <>
-            <SeveritySummary findings={staticFindings} />
+            <SeveritySummary
+              findings={staticFindings}
+              active={doctorFilter.active}
+              onToggle={doctorFilter.toggle}
+            />
             {active && (
               <Triage
                 findings={staticFindings}
@@ -207,7 +213,7 @@ export default function App() {
               </div>
             )}
             <FindingList
-              findings={staticFindings}
+              findings={doctorFilter.filtered}
               empty="No static problems found. This load order is structurally sound."
             />
           </>

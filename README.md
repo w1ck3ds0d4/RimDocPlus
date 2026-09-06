@@ -35,7 +35,7 @@ Nine independent rules, each provable without launching the game:
 - **load-order-violation**: `loadAfter` and `loadBefore` constraints the current order breaks
 - **version-mismatch**: mods not advertising the running game cycle, collapsed into one counted finding
 
-Every finding carries a proposed repair tagged with its tier and whether it can be applied automatically.
+Every finding carries a proposed repair tagged with its tier and whether it can be applied automatically. The severity counts above the list are filters: click one to show only that severity, click it again to clear. A filter clears itself once nothing of that severity is left, so repairing the last critical never leaves an empty list behind.
 
 ### Session report (log intelligence)
 

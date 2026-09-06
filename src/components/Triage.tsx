@@ -120,7 +120,6 @@ export function Triage({
           </span>
           <span className="auto-text">
             <b>Auto</b>
-            <small>{auto ? "decides for you" : "asks you"}</small>
           </span>
         </label>
         <button className={`triage-btn${findings.length === 0 ? " clean" : ""}`} type="button" onClick={run}>
