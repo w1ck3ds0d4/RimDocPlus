@@ -5,10 +5,10 @@ import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS } from "./analysis/about.ts
  * A saved mod list. This is the unit a player runs the game with: a named set of
  * package ids in load order, pinned to a game cycle.
  *
- * A profile records ids only, never mod files. Pinning exact mod versions arrives with
- * the vault, which is what makes a profile reproducible rather than merely repeatable.
+ * A modpack records ids only, never mod files. Pinning exact mod versions arrives with
+ * the vault, which is what makes a modpack reproducible rather than merely repeatable.
  */
-export interface Profile {
+export interface Modpack {
   id: string;
   name: string;
   createdAt: string;
@@ -32,16 +32,18 @@ export interface Baseline {
   activeOrder: string[];
 }
 
-export interface ProfileDiff {
+export interface ModpackDiff {
   added: string[];
   removed: string[];
   reordered: boolean;
 }
 
-const STORAGE_KEY = "rimdoc.profiles.v1";
+const STORAGE_KEY = "rimdoc.modpacks.v1";
+/** What modpacks were stored under before they were called modpacks. */
+const LEGACY_STORAGE_KEY = "rimdoc.profiles.v1";
 const BASELINE_KEY = "rimdoc.baseline.v1";
 
-export function newProfileId(): string {
+export function newModpackId(): string {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
@@ -59,10 +61,10 @@ export function setupName(scan: ScanResult): string {
 }
 
 /** Snapshot whatever the game is currently set to run. */
-export function profileFromScan(scan: ScanResult, name: string): Profile {
+export function modpackFromScan(scan: ScanResult, name: string): Modpack {
   const now = new Date().toISOString();
   return {
-    id: newProfileId(),
+    id: newModpackId(),
     name,
     createdAt: now,
     updatedAt: now,
@@ -71,13 +73,13 @@ export function profileFromScan(scan: ScanResult, name: string): Profile {
   };
 }
 
-export function duplicateProfile(profile: Profile, name: string): Profile {
+export function duplicateModpack(modpack: Modpack, name: string): Modpack {
   const now = new Date().toISOString();
-  return { ...profile, id: newProfileId(), name, createdAt: now, updatedAt: now };
+  return { ...modpack, id: newModpackId(), name, createdAt: now, updatedAt: now };
 }
 
-function touch(profile: Profile, activeOrder: string[]): Profile {
-  return { ...profile, activeOrder, updatedAt: new Date().toISOString() };
+function touch(modpack: Modpack, activeOrder: string[]): Modpack {
+  return { ...modpack, activeOrder, updatedAt: new Date().toISOString() };
 }
 
 /**
@@ -87,39 +89,39 @@ function touch(profile: Profile, activeOrder: string[]): Profile {
  * framework does not land behind the mods that depend on it and immediately trip the
  * load-order rules.
  */
-export function toggleMod(profile: Profile, packageId: string, mods: ModEntry[]): Profile {
-  if (profile.activeOrder.includes(packageId)) {
+export function toggleMod(modpack: Modpack, packageId: string, mods: ModEntry[]): Modpack {
+  if (modpack.activeOrder.includes(packageId)) {
     return touch(
-      profile,
-      profile.activeOrder.filter((id) => id !== packageId),
+      modpack,
+      modpack.activeOrder.filter((id) => id !== packageId),
     );
   }
-  const next = [...profile.activeOrder];
+  const next = [...modpack.activeOrder];
   next.splice(insertionIndex(packageId, next, mods), 0, packageId);
-  return touch(profile, next);
+  return touch(modpack, next);
 }
 
 export function setEnabled(
-  profile: Profile,
+  modpack: Modpack,
   packageIds: string[],
   enabled: boolean,
   mods: ModEntry[],
-): Profile {
+): Modpack {
   return packageIds.reduce(
     (acc, id) => (acc.activeOrder.includes(id) === enabled ? acc : toggleMod(acc, id, mods)),
-    profile,
+    modpack,
   );
 }
 
 /** Move one mod up or down the load order by `delta` positions. */
-export function moveMod(profile: Profile, packageId: string, delta: number): Profile {
-  const from = profile.activeOrder.indexOf(packageId);
-  if (from === -1) return profile;
-  const to = Math.max(0, Math.min(profile.activeOrder.length - 1, from + delta));
-  if (to === from) return profile;
-  const next = [...profile.activeOrder];
+export function moveMod(modpack: Modpack, packageId: string, delta: number): Modpack {
+  const from = modpack.activeOrder.indexOf(packageId);
+  if (from === -1) return modpack;
+  const to = Math.max(0, Math.min(modpack.activeOrder.length - 1, from + delta));
+  if (to === from) return modpack;
+  const next = [...modpack.activeOrder];
   next.splice(to, 0, ...next.splice(from, 1));
-  return touch(profile, next);
+  return touch(modpack, next);
 }
 
 /** Where a newly enabled mod should go: after everything it declares it loads after. */
@@ -225,7 +227,7 @@ export function sortLoadOrder(activeOrder: string[], mods: ModEntry[]): string[]
   return sorted;
 }
 
-export function diffProfiles(from: string[], to: string[]): ProfileDiff {
+export function diffModpacks(from: string[], to: string[]): ModpackDiff {
   const before = new Set(from);
   const after = new Set(to);
   const added = to.filter((id) => !before.has(id));
@@ -238,7 +240,7 @@ export function diffProfiles(from: string[], to: string[]): ProfileDiff {
   };
 }
 
-/** Render a profile as the ModsConfig.xml RimWorld reads on launch. */
+/** Render a modpack as the ModsConfig.xml RimWorld reads on launch. */
 export function toModsConfigXml(activeOrder: string[], gameVersion: string): string {
   const items = activeOrder.map((id) => `    <li>${id}</li>`).join("\n");
   return [
@@ -256,23 +258,25 @@ export function toModsConfigXml(activeOrder: string[], gameVersion: string): str
 /* Storage ------------------------------------------------------------------ */
 
 /**
- * Browser storage for the preview. The desktop build persists profiles to the app data
+ * Browser storage for the preview. The desktop build persists modpacks to the app data
  * directory instead; this keeps the editor usable before the Tauri shell exists.
  */
-export function loadProfiles(): Profile[] {
+export function loadModpacks(): Modpack[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    // Read through to the old key once, so a rename of the concept does not throw away
+    // the modpacks someone already built.
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Profile[]) : [];
+    return Array.isArray(parsed) ? (parsed as Modpack[]) : [];
   } catch {
     return [];
   }
 }
 
-export function saveProfiles(profiles: Profile[]): void {
+export function saveModpacks(modpacks: Modpack[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(modpacks));
   } catch {
     // Private windows and blocked site data both throw here. Losing persistence is
     // survivable; losing the editor is not.

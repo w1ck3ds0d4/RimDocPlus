@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Finding, ScanResult } from "../lib/types";
-import type { Profile } from "../lib/profiles";
+import type { Modpack } from "../lib/modpacks";
 import { configDir, toPowerShell } from "../lib/repair/repairs";
 import {
   allFileActions,
@@ -33,15 +33,15 @@ function loadAuto(): boolean {
 export function Triage({
   findings,
   scan,
-  profile,
+  modpack,
   workshop,
-  applyProfile,
+  applyModpack,
 }: {
   findings: Finding[];
   scan: ScanResult;
-  profile: Profile;
+  modpack: Modpack;
   workshop?: WorkshopCache | null;
-  applyProfile: (profile: Profile, label: string) => void;
+  applyModpack: (modpack: Modpack, label: string) => void;
 }) {
   const [result, setResult] = useState<TriageResult | null>(null);
   const [steps, setSteps] = useState<TriageStep[]>([]);
@@ -58,33 +58,33 @@ export function Triage({
   }
 
   function run() {
-    const triage = runTriage(findings, { scan, profile }, { auto, workshop });
+    const triage = runTriage(findings, { scan, modpack }, { auto, workshop });
     if (triage.applied.length) {
-      applyProfile(
-        triage.profile,
+      applyModpack(
+        triage.modpack,
         `triage (${triage.applied.length} fix${triage.applied.length === 1 ? "" : "es"})`,
       );
     }
-    setSteps(triageSteps(triage, scan, profile.name));
+    setSteps(triageSteps(triage, scan, modpack.name));
     setResult(triage);
     // With Auto off, anything ambiguous is asked rather than filed away in a report.
     setQueue(auto ? [] : triage.decisions);
   }
 
-  /** Answer one decision, re-planned against the pack as it stands right now. */
+  /** Answer one decision, re-planned against the modpack as it stands right now. */
   function answer(finding: Finding, choiceIndex: number) {
     const resolved = resolveDecision(finding, choiceIndex, {
       scan,
-      profile: result?.profile ?? profile,
+      modpack: result?.modpack ?? modpack,
       workshop,
     });
-    if (resolved?.plan.kind === "pack") {
-      applyProfile(resolved.plan.profile, "decision");
+    if (resolved?.plan.kind === "modpack") {
+      applyModpack(resolved.plan.modpack, "decision");
       setResult((r) =>
         r
           ? {
               ...r,
-              profile: resolved.plan.kind === "pack" ? resolved.plan.profile : r.profile,
+              modpack: resolved.plan.kind === "modpack" ? resolved.plan.modpack : r.modpack,
               decisions: r.decisions.filter((d) => d.finding.id !== finding.id),
               applied: [...r.applied, { finding, summary: resolved.label }],
             }
@@ -241,7 +241,7 @@ function TriageReport({
       </div>
 
       <Section
-        title="Applied to the pack"
+        title="Applied to the modpack"
         count={result.applied.length}
         tone="ok"
         empty="No automatic repairs were needed."

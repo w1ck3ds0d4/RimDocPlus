@@ -1,4 +1,4 @@
-/** Hand a generated file to the browser. Shared by pack export and repair scripts. */
+/** Hand a generated file to the browser. Shared by modpack export and repair scripts. */
 export function download(filename: string, contents: string): void {
   const url = URL.createObjectURL(new Blob([contents], { type: "application/octet-stream" }));
   const link = document.createElement("a");
@@ -14,6 +14,6 @@ export function slug(name: string): string {
     name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "pack"
+      .replace(/^-|-$/g, "") || "modpack"
   );
 }

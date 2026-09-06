@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { ModEntry } from "./types";
 import {
-  diffProfiles,
+  diffModpacks,
   moveMod,
   setEnabled,
   setupName,
   sortLoadOrder,
   toModsConfigXml,
   toggleMod,
-} from "./profiles";
+} from "./modpacks";
 
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
   return {
@@ -30,7 +30,7 @@ function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
   };
 }
 
-function profile(activeOrder: string[]) {
+function modpack(activeOrder: string[]) {
   return {
     id: "p1",
     name: "Test",
@@ -43,30 +43,30 @@ function profile(activeOrder: string[]) {
 
 describe("toggleMod", () => {
   it("disables by removing the id", () => {
-    const next = toggleMod(profile(["a.one", "b.two"]), "a.one", [mod("a.one"), mod("b.two")]);
+    const next = toggleMod(modpack(["a.one", "b.two"]), "a.one", [mod("a.one"), mod("b.two")]);
     expect(next.activeOrder).toEqual(["b.two"]);
   });
 
   it("enables a mod after the dependency it declares", () => {
     const mods = [mod("core.lib"), mod("b.two"), mod("a.dependent", { loadAfter: ["core.lib"] })];
-    const next = toggleMod(profile(["core.lib", "b.two"]), "a.dependent", mods);
+    const next = toggleMod(modpack(["core.lib", "b.two"]), "a.dependent", mods);
     expect(next.activeOrder.indexOf("a.dependent")).toBeGreaterThan(next.activeOrder.indexOf("core.lib"));
   });
 
   it("enables Harmony into the bootstrap band, not the end of the list", () => {
     const mods = [mod("brrainz.harmony"), mod("some.mod")];
-    const next = toggleMod(profile(["some.mod"]), "brrainz.harmony", mods);
+    const next = toggleMod(modpack(["some.mod"]), "brrainz.harmony", mods);
     expect(next.activeOrder).toEqual(["brrainz.harmony", "some.mod"]);
   });
 
   it("enables an expansion ahead of third-party content", () => {
     const mods = [mod("ludeon.rimworld.odyssey"), mod("some.mod")];
-    const next = toggleMod(profile(["some.mod"]), "ludeon.rimworld.odyssey", mods);
+    const next = toggleMod(modpack(["some.mod"]), "ludeon.rimworld.odyssey", mods);
     expect(next.activeOrder).toEqual(["ludeon.rimworld.odyssey", "some.mod"]);
   });
 
   it("bumps updatedAt so the pack list can order by recency", () => {
-    const before = profile(["a.one"]);
+    const before = modpack(["a.one"]);
     expect(toggleMod(before, "a.one", [mod("a.one")]).updatedAt).not.toBe(before.updatedAt);
   });
 });
@@ -74,25 +74,25 @@ describe("toggleMod", () => {
 describe("setEnabled", () => {
   it("applies to many mods at once and ignores no-ops", () => {
     const mods = [mod("a.one"), mod("b.two"), mod("c.three")];
-    const next = setEnabled(profile(["a.one"]), ["b.two", "c.three", "a.one"], true, mods);
+    const next = setEnabled(modpack(["a.one"]), ["b.two", "c.three", "a.one"], true, mods);
     expect(next.activeOrder).toHaveLength(3);
   });
 
   it("disables a batch", () => {
     const mods = [mod("a.one"), mod("b.two")];
-    expect(setEnabled(profile(["a.one", "b.two"]), ["a.one", "b.two"], false, mods).activeOrder).toEqual([]);
+    expect(setEnabled(modpack(["a.one", "b.two"]), ["a.one", "b.two"], false, mods).activeOrder).toEqual([]);
   });
 });
 
 describe("moveMod", () => {
   it("moves within bounds and clamps at the edges", () => {
-    expect(moveMod(profile(["a", "b", "c"]), "c", -1).activeOrder).toEqual(["a", "c", "b"]);
-    expect(moveMod(profile(["a", "b", "c"]), "a", -5).activeOrder).toEqual(["a", "b", "c"]);
-    expect(moveMod(profile(["a", "b", "c"]), "c", 5).activeOrder).toEqual(["a", "b", "c"]);
+    expect(moveMod(modpack(["a", "b", "c"]), "c", -1).activeOrder).toEqual(["a", "c", "b"]);
+    expect(moveMod(modpack(["a", "b", "c"]), "a", -5).activeOrder).toEqual(["a", "b", "c"]);
+    expect(moveMod(modpack(["a", "b", "c"]), "c", 5).activeOrder).toEqual(["a", "b", "c"]);
   });
 
-  it("leaves a profile untouched when the mod is not in it", () => {
-    const before = profile(["a", "b"]);
+  it("leaves a modpack untouched when the mod is not in it", () => {
+    const before = modpack(["a", "b"]);
     expect(moveMod(before, "zz", 1)).toBe(before);
   });
 });
@@ -152,19 +152,19 @@ describe("sortLoadOrder", () => {
   });
 });
 
-describe("diffProfiles", () => {
+describe("diffModpacks", () => {
   it("separates additions, removals, and reordering", () => {
-    expect(diffProfiles(["a", "b"], ["a", "b", "c"])).toEqual({
+    expect(diffModpacks(["a", "b"], ["a", "b", "c"])).toEqual({
       added: ["c"],
       removed: [],
       reordered: false,
     });
-    expect(diffProfiles(["a", "b"], ["b", "a"])).toEqual({ added: [], removed: [], reordered: true });
-    expect(diffProfiles(["a", "b"], ["a"])).toEqual({ added: [], removed: ["b"], reordered: false });
+    expect(diffModpacks(["a", "b"], ["b", "a"])).toEqual({ added: [], removed: [], reordered: true });
+    expect(diffModpacks(["a", "b"], ["a"])).toEqual({ added: [], removed: ["b"], reordered: false });
   });
 
   it("does not call a list reordered when the only change is a removal", () => {
-    expect(diffProfiles(["a", "b", "c"], ["a", "c"]).reordered).toBe(false);
+    expect(diffModpacks(["a", "b", "c"], ["a", "c"]).reordered).toBe(false);
   });
 });
 

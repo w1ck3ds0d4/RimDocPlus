@@ -1,5 +1,5 @@
 import type { Finding, ScanResult, WorkshopCache } from "../types";
-import type { Profile } from "../profiles";
+import type { Modpack } from "../modpacks";
 import { runStaticRules } from "../analysis/rules.ts";
 import {
   estimateDurationMs,
@@ -11,7 +11,7 @@ import {
 
 export interface TriageResult {
   /** The pack after every safe automatic repair. Not yet committed. */
-  profile: Profile;
+  modpack: Modpack;
   applied: { finding: Finding; summary: string }[];
   /** Repairs that need a human decision before they can be planned. */
   decisions: { finding: Finding; plan: Extract<RepairPlan, { kind: "choice" }> }[];
@@ -69,11 +69,11 @@ export interface TriageOptions {
 
 export function runTriage(
   findings: Finding[],
-  ctx: { scan: ScanResult; profile: Profile },
+  ctx: { scan: ScanResult; modpack: Modpack },
   options: TriageOptions = {},
 ): TriageResult {
   const result: TriageResult = {
-    profile: ctx.profile,
+    modpack: ctx.modpack,
     applied: [],
     decisions: [],
     autoDecided: [],
@@ -90,7 +90,7 @@ export function runTriage(
   for (const finding of findings) {
     const plan = planRepair({
       scan: ctx.scan,
-      profile: result.profile,
+      modpack: result.modpack,
       workshop: options.workshop,
       finding,
     });
@@ -103,11 +103,11 @@ export function runTriage(
     }
 
     switch (plan.kind) {
-      case "pack":
+      case "modpack":
         // Only deterministic repairs run unattended. A pack repair the rule marked as
         // needing judgement is staged as a decision instead.
         if (finding.fix?.auto) {
-          result.profile = plan.profile;
+          result.modpack = plan.modpack;
           result.applied.push({ finding, summary: plan.summary });
         } else {
           result.unresolved.push(finding);
@@ -125,8 +125,8 @@ export function runTriage(
           reasons: resolved.choice.rationale?.reasons ?? [],
           caveats: resolved.choice.rationale?.caveats ?? [],
         });
-        if (resolved.plan.kind === "pack") {
-          result.profile = resolved.plan.profile;
+        if (resolved.plan.kind === "modpack") {
+          result.modpack = resolved.plan.modpack;
           result.applied.push({ finding, summary: resolved.plan.summary });
         } else if (resolved.plan.kind === "files") {
           result.files.push({
@@ -146,7 +146,7 @@ export function runTriage(
     }
   }
 
-  result.after = countRemaining(ctx.scan, result.profile);
+  result.after = countRemaining(ctx.scan, result.modpack);
   result.elapsedMs = performance.now() - startedAt;
   return result;
 }
@@ -174,7 +174,7 @@ function autoResolve(
 export function resolveDecision(
   finding: Finding,
   choiceIndex: number,
-  ctx: { scan: ScanResult; profile: Profile; workshop?: WorkshopCache | null },
+  ctx: { scan: ScanResult; modpack: Modpack; workshop?: WorkshopCache | null },
 ): { plan: RepairPlan; label: string } | null {
   const fresh = planRepair({ ...ctx, finding });
   if (fresh?.kind !== "choice") return null;
@@ -183,11 +183,11 @@ export function resolveDecision(
 }
 
 /** Re-run the rules against the repaired pack, which is the only honest "after" number. */
-function countRemaining(scan: ScanResult, profile: Profile): number {
-  const position = new Map(profile.activeOrder.map((id, i) => [id, i]));
+function countRemaining(scan: ScanResult, modpack: Modpack): number {
+  const position = new Map(modpack.activeOrder.map((id, i) => [id, i]));
   return runStaticRules({
     ...scan,
-    activeOrder: profile.activeOrder,
+    activeOrder: modpack.activeOrder,
     mods: scan.mods.map((mod) => ({
       ...mod,
       active: position.has(mod.packageId),
@@ -227,7 +227,7 @@ export function triageSteps(result: TriageResult, scan: ScanResult, packName: st
     {
       tone: "info",
       label: "scan",
-      text: `${scan.mods.length} mods on disk, ${result.profile.activeOrder.length} in load order`,
+      text: `${scan.mods.length} mods on disk, ${result.modpack.activeOrder.length} in load order`,
     },
     {
       tone: "info",

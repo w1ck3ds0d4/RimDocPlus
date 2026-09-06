@@ -1,17 +1,17 @@
 import type { ModEntry, ScanResult } from "../lib/types";
-import type { Baseline, Profile } from "../lib/profiles";
+import type { Baseline, Modpack } from "../lib/modpacks";
 import {
-  diffProfiles,
-  duplicateProfile,
+  diffModpacks,
+  duplicateModpack,
   loadBaseline,
-  profileFromScan,
+  modpackFromScan,
   toModsConfigXml,
-} from "../lib/profiles";
+} from "../lib/modpacks";
 import { download, slug } from "../lib/download";
-import { useConfirm } from "./Confirm";
+import { useConfirm, usePrompt } from "./Confirm";
 
-export function Packs({
-  profiles,
+export function Modpacks({
+  modpacks,
   activeId,
   scan,
   mods,
@@ -21,27 +21,46 @@ export function Packs({
   onRestore,
   onDelete,
 }: {
-  profiles: Profile[];
+  modpacks: Modpack[];
   activeId: string | null;
   scan: ScanResult;
   mods: ModEntry[];
   onSelect: (id: string) => void;
-  onCreate: (profile: Profile) => void;
-  onUpdate: (profile: Profile) => void;
-  onRestore: (profile: Profile) => void;
+  onCreate: (modpack: Modpack) => void;
+  onUpdate: (modpack: Modpack) => void;
+  onRestore: (modpack: Modpack) => void;
   onDelete: (id: string) => void;
 }) {
   const byId = new Map(mods.map((m) => [m.packageId, m]));
   const baseline = loadBaseline();
   const { confirm, dialog } = useConfirm();
+  const { prompt, dialog: promptDialog } = usePrompt();
 
-  async function confirmDelete(profile: Profile) {
+  async function confirmRename(modpack: Modpack) {
+    const name = await prompt({
+      title: "Rename modpack",
+      label: "Name",
+      initial: modpack.name,
+      confirmLabel: "Rename",
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return "A modpack needs a name.";
+        if (trimmed.length > 60) return "Keep it under 60 characters.";
+        // Two modpacks with one name is legal but makes the list unreadable.
+        const clash = modpacks.some((p) => p.id !== modpack.id && p.name.trim() === trimmed);
+        return clash ? "Another modpack already has that name." : null;
+      },
+    });
+    if (name && name !== modpack.name) onUpdate({ ...modpack, name });
+  }
+
+  async function confirmDelete(modpack: Modpack) {
     const ok = await confirm({
-      title: `Delete "${profile.name}"?`,
+      title: `Delete "${modpack.name}"?`,
       body: (
         <>
           <p>
-            This modpack holds {profile.activeOrder.length} mods in a particular order. Deleting it cannot be
+            This modpack holds {modpack.activeOrder.length} mods in a particular order. Deleting it cannot be
             undone, and it is the only copy unless you exported one.
           </p>
           <p className="muted">Nothing on your install changes. Your mods stay exactly where they are.</p>
@@ -50,26 +69,27 @@ export function Packs({
       confirmLabel: "Delete Modpack",
       destructive: true,
     });
-    if (ok) onDelete(profile.id);
+    if (ok) onDelete(modpack.id);
   }
 
   return (
     <>
       {dialog}
+      {promptDialog}
       <div className="toolbar">
         <button
           className="btn"
           type="button"
-          onClick={() => onCreate(profileFromScan(scan, nextName(profiles, "New pack")))}
+          onClick={() => onCreate(modpackFromScan(scan, nextName(modpacks, "New modpack")))}
         >
-          New pack from current game setup
+          New modpack from current setup
         </button>
         <button
           className="btn"
           type="button"
           onClick={() =>
             onCreate({
-              ...profileFromScan(scan, nextName(profiles, "Minimal")),
+              ...modpackFromScan(scan, nextName(modpacks, "Minimal")),
               // A vanilla-plus starting point: Ludeon content and the bootstrappers only.
               activeOrder: scan.activeOrder.filter(
                 (id) =>
@@ -80,31 +100,26 @@ export function Packs({
             })
           }
         >
-          New minimal pack
+          New minimal modpack
         </button>
       </div>
 
-      {baseline && <RestoreOriginal baseline={baseline} profiles={profiles} onRestore={onRestore} />}
+      {baseline && <RestoreOriginal baseline={baseline} modpacks={modpacks} onRestore={onRestore} />}
 
-      {profiles.length === 0 && <p className="muted">No packs yet.</p>}
+      {modpacks.length === 0 && <p className="muted">No modpacks yet.</p>}
 
-      {profiles.map((profile) => {
-        const drift = diffProfiles(scan.activeOrder, profile.activeOrder);
+      {modpacks.map((modpack) => {
+        const drift = diffModpacks(scan.activeOrder, modpack.activeOrder);
         const clean = !drift.added.length && !drift.removed.length && !drift.reordered;
         return (
-          <div key={profile.id} className={`pack${profile.id === activeId ? " current" : ""}`}>
-            <div className="pack-head">
-              <input
-                className="pack-name"
-                value={profile.name}
-                aria-label="Pack name"
-                onChange={(e) => onUpdate({ ...profile, name: e.target.value })}
-              />
-              <span className="pack-count">{profile.activeOrder.length} mods</span>
-              {profile.id === activeId && <span className="tag official">editing</span>}
+          <div key={modpack.id} className={`modpack${modpack.id === activeId ? " current" : ""}`}>
+            <div className="modpack-head">
+              <h3 className="modpack-name">{modpack.name}</h3>
+              <span className="modpack-count">{modpack.activeOrder.length} mods</span>
+              {modpack.id === activeId && <span className="tag official">editing</span>}
             </div>
 
-            <p className="pack-drift">
+            <p className="modpack-drift">
               {clean ? (
                 "Identical to what the game is set to run."
               ) : (
@@ -117,15 +132,18 @@ export function Packs({
               )}
             </p>
 
-            <div className="pack-actions">
-              <button className="btn" type="button" onClick={() => onSelect(profile.id)}>
+            <div className="modpack-actions">
+              <button className="btn" type="button" onClick={() => onSelect(modpack.id)}>
                 Edit
+              </button>
+              <button className="btn" type="button" onClick={() => void confirmRename(modpack)}>
+                Rename
               </button>
               <button
                 className="btn"
                 type="button"
                 onClick={() =>
-                  onCreate(duplicateProfile(profile, nextName(profiles, `${profile.name} copy`)))
+                  onCreate(duplicateModpack(modpack, nextName(modpacks, `${modpack.name} copy`)))
                 }
               >
                 Duplicate
@@ -135,8 +153,8 @@ export function Packs({
                 type="button"
                 onClick={() =>
                   download(
-                    `ModsConfig-${slug(profile.name)}.xml`,
-                    toModsConfigXml(profile.activeOrder, scan.gameVersion),
+                    `ModsConfig-${slug(modpack.name)}.xml`,
+                    toModsConfigXml(modpack.activeOrder, scan.gameVersion),
                   )
                 }
                 title="The file RimWorld reads on launch"
@@ -147,12 +165,12 @@ export function Packs({
                 className="btn"
                 type="button"
                 onClick={() =>
-                  download(`${slug(profile.name)}.rimdoc.json`, JSON.stringify(profile, null, 2))
+                  download(`${slug(modpack.name)}.rimdoc.json`, JSON.stringify(modpack, null, 2))
                 }
               >
-                Export pack
+                Export modpack
               </button>
-              <button className="btn danger" type="button" onClick={() => void confirmDelete(profile)}>
+              <button className="btn danger" type="button" onClick={() => void confirmDelete(modpack)}>
                 Delete
               </button>
             </div>
@@ -160,7 +178,7 @@ export function Packs({
         );
       })}
 
-      <p className="section-title">Applying a pack</p>
+      <p className="section-title">Applying a modpack</p>
       <p className="note">
         Writing the load order straight into the game and launching it belongs to the Tauri shell, which is
         the next slice. Until then, exporting ModsConfig.xml over the file in your save-data Config folder
@@ -178,19 +196,18 @@ export function Packs({
  */
 function RestoreOriginal({
   baseline,
-  profiles,
+  modpacks,
   onRestore,
 }: {
   baseline: Baseline;
-  profiles: Profile[];
-  onRestore: (profile: Profile) => void;
+  modpacks: Modpack[];
+  onRestore: (modpack: Modpack) => void;
 }) {
   const { confirm, dialog } = useConfirm();
-
-  async function confirmRestore(profile: Profile) {
-    const drift = diffProfiles(baseline.activeOrder, profile.activeOrder);
+  async function confirmRestore(modpack: Modpack) {
+    const drift = diffModpacks(baseline.activeOrder, modpack.activeOrder);
     const ok = await confirm({
-      title: `Restore "${profile.name}" to the original order?`,
+      title: `Restore "${modpack.name}" to the original order?`,
       body: (
         <>
           <p>
@@ -206,10 +223,10 @@ function RestoreOriginal({
       ),
       confirmLabel: "Restore",
     });
-    if (ok) onRestore({ ...profile, activeOrder: [...baseline.activeOrder] });
+    if (ok) onRestore({ ...modpack, activeOrder: [...baseline.activeOrder] });
   }
-  const drifted = profiles.filter((p) => {
-    const drift = diffProfiles(baseline.activeOrder, p.activeOrder);
+  const drifted = modpacks.filter((p) => {
+    const drift = diffModpacks(baseline.activeOrder, p.activeOrder);
     return drift.added.length > 0 || drift.removed.length > 0 || drift.reordered;
   });
   if (!drifted.length) return null;
@@ -224,17 +241,17 @@ function RestoreOriginal({
           {baseline.gameVersion}
         </small>
       </div>
-      {drifted.map((profile) => {
-        const drift = diffProfiles(baseline.activeOrder, profile.activeOrder);
+      {drifted.map((modpack) => {
+        const drift = diffModpacks(baseline.activeOrder, modpack.activeOrder);
         return (
           <button
-            key={profile.id}
+            key={modpack.id}
             className="btn"
             type="button"
             title={`+${drift.added.length} -${drift.removed.length}${drift.reordered ? " reordered" : ""}`}
-            onClick={() => void confirmRestore(profile)}
+            onClick={() => void confirmRestore(modpack)}
           >
-            Restore {profile.name}
+            Restore {modpack.name}
           </button>
         );
       })}
@@ -242,8 +259,8 @@ function RestoreOriginal({
   );
 }
 
-function nextName(profiles: Profile[], base: string): string {
-  const taken = new Set(profiles.map((p) => p.name));
+function nextName(modpacks: Modpack[], base: string): string {
+  const taken = new Set(modpacks.map((p) => p.name));
   if (!taken.has(base)) return base;
   for (let n = 2; ; n++) {
     if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;

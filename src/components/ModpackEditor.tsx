@@ -1,23 +1,23 @@
 import { useMemo, useState } from "react";
 import type { ModEntry } from "../lib/types";
-import type { Profile } from "../lib/profiles";
-import { moveMod, setEnabled, sortLoadOrder, toggleMod } from "../lib/profiles";
+import type { Modpack } from "../lib/modpacks";
+import { moveMod, setEnabled, sortLoadOrder, toggleMod } from "../lib/modpacks";
 
 type Filter = "active" | "inactive" | "all";
 
 export function PackEditor({
-  profile,
+  modpack,
   mods,
   onChange,
 }: {
-  profile: Profile;
+  modpack: Modpack;
   mods: ModEntry[];
-  onChange: (next: Profile) => void;
+  onChange: (next: Modpack) => void;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("active");
 
-  const position = useMemo(() => new Map(profile.activeOrder.map((id, i) => [id, i])), [profile.activeOrder]);
+  const position = useMemo(() => new Map(modpack.activeOrder.map((id, i) => [id, i])), [modpack.activeOrder]);
 
   /**
    * How many enabled mods declare each mod as a dependency. A high count means the list
@@ -75,7 +75,7 @@ export function PackEditor({
         <button
           className="btn"
           type="button"
-          onClick={() => onChange({ ...profile, activeOrder: sortLoadOrder(profile.activeOrder, mods) })}
+          onClick={() => onChange({ ...modpack, activeOrder: sortLoadOrder(modpack.activeOrder, mods) })}
           title="Bootstrappers first, then Ludeon content, then declared constraints"
         >
           Auto-sort
@@ -84,7 +84,7 @@ export function PackEditor({
           <button
             className="btn"
             type="button"
-            onClick={() => onChange(setEnabled(profile, visibleIds, !allVisibleOn, mods))}
+            onClick={() => onChange(setEnabled(modpack, visibleIds, !allVisibleOn, mods))}
           >
             {allVisibleOn ? "Disable" : "Enable"} {visibleIds.length} shown
           </button>
@@ -116,7 +116,7 @@ export function PackEditor({
                       role="switch"
                       aria-checked={on}
                       aria-label={`${on ? "Disable" : "Enable"} ${mod.name}`}
-                      onClick={() => onChange(toggleMod(profile, mod.packageId, mods))}
+                      onClick={() => onChange(toggleMod(modpack, mod.packageId, mods))}
                     >
                       <i />
                     </button>
@@ -147,15 +147,15 @@ export function PackEditor({
                           type="button"
                           aria-label={`Move ${mod.name} earlier`}
                           disabled={index === 0}
-                          onClick={() => onChange(moveMod(profile, mod.packageId, -1))}
+                          onClick={() => onChange(moveMod(modpack, mod.packageId, -1))}
                         >
                           &#9650;
                         </button>
                         <button
                           type="button"
                           aria-label={`Move ${mod.name} later`}
-                          disabled={index === profile.activeOrder.length - 1}
-                          onClick={() => onChange(moveMod(profile, mod.packageId, 1))}
+                          disabled={index === modpack.activeOrder.length - 1}
+                          onClick={() => onChange(moveMod(modpack, mod.packageId, 1))}
                         >
                           &#9660;
                         </button>

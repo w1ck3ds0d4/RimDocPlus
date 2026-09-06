@@ -1,5 +1,5 @@
 import type { Finding, ScanResult, WorkshopCache } from "../types";
-import { sortLoadOrder, toggleMod, toModsConfigXml, type Profile } from "../profiles.ts";
+import { sortLoadOrder, toggleMod, toModsConfigXml, type Modpack } from "../modpacks.ts";
 import { rankDuplicates, rankKeepPreference } from "../analysis/duplicates.ts";
 
 /**
@@ -31,14 +31,14 @@ export interface RepairChoice {
  * external repair is something only the player can do.
  */
 export type RepairPlan =
-  | { kind: "pack"; profile: Profile; summary: string }
+  | { kind: "modpack"; modpack: Modpack; summary: string }
   | { kind: "files"; actions: FileAction[]; summary: string }
   | { kind: "external"; summary: string; url?: string }
   | { kind: "choice"; summary: string; choices: RepairChoice[] };
 
 export interface RepairContext {
   scan: ScanResult;
-  profile: Profile;
+  modpack: Modpack;
   finding: Finding;
   /** Optional: lets a repair reason about popularity and maintenance, not just files. */
   workshop?: WorkshopCache | null;
@@ -63,7 +63,7 @@ function modsById(scan: ScanResult) {
 
 /** How many enabled mods depend on each mod, for repairs that weigh what breaking costs. */
 function dependentsOf(ctx: RepairContext): Map<string, number> {
-  const active = new Set(ctx.profile.activeOrder);
+  const active = new Set(ctx.modpack.activeOrder);
   const counts = new Map<string, number>();
   for (const mod of ctx.scan.mods) {
     if (!active.has(mod.packageId)) continue;
@@ -85,13 +85,13 @@ export function configDir(scan: ScanResult): string | null {
  * fixing one violation moves only what the constraints actually require and the diff
  * stays reviewable rather than reshuffling 224 entries.
  */
-const applySort: RepairFn = ({ profile, scan }) => {
-  const activeOrder = sortLoadOrder(profile.activeOrder, scan.mods);
-  const moved = activeOrder.filter((id, i) => profile.activeOrder[i] !== id).length;
+const applySort: RepairFn = ({ modpack, scan }) => {
+  const activeOrder = sortLoadOrder(modpack.activeOrder, scan.mods);
+  const moved = activeOrder.filter((id, i) => modpack.activeOrder[i] !== id).length;
   if (!moved) return null;
   return {
-    kind: "pack",
-    profile: { ...profile, activeOrder, updatedAt: profile.updatedAt },
+    kind: "modpack",
+    modpack: { ...modpack, activeOrder, updatedAt: modpack.updatedAt },
     summary: `Reorders ${moved} of ${activeOrder.length} entries to satisfy the declared constraints.`,
   };
 };
@@ -101,10 +101,10 @@ const REPAIRS: Record<string, RepairFn> = {
     const ids = new Set(list(ctx, "ids"));
     if (!ids.size) return null;
     return {
-      kind: "pack",
-      profile: {
-        ...ctx.profile,
-        activeOrder: ctx.profile.activeOrder.filter((id) => !ids.has(id)),
+      kind: "modpack",
+      modpack: {
+        ...ctx.modpack,
+        activeOrder: ctx.modpack.activeOrder.filter((id) => !ids.has(id)),
       },
       summary: `Drops ${ids.size} entry(s) that no folder provides. Nothing on disk changes.`,
     };
@@ -116,13 +116,13 @@ const REPAIRS: Record<string, RepairFn> = {
 
   "enable-dependency": (ctx) => {
     const dependency = str(ctx, "dependency");
-    if (!dependency || ctx.profile.activeOrder.includes(dependency)) return null;
-    const profile = toggleMod(ctx.profile, dependency, ctx.scan.mods);
+    if (!dependency || ctx.modpack.activeOrder.includes(dependency)) return null;
+    const modpack = toggleMod(ctx.modpack, dependency, ctx.scan.mods);
     const name = modsById(ctx.scan).get(dependency)?.name ?? dependency;
     return {
-      kind: "pack",
-      profile,
-      summary: `Enables ${name} at position ${profile.activeOrder.indexOf(dependency)}, ahead of what needs it.`,
+      kind: "modpack",
+      modpack,
+      summary: `Enables ${name} at position ${modpack.activeOrder.indexOf(dependency)}, ahead of what needs it.`,
     };
   },
 
@@ -150,10 +150,10 @@ const REPAIRS: Record<string, RepairFn> = {
         recommended: id === disable,
         rationale: ranking && id === disable ? ranking : undefined,
         plan: (): RepairPlan => ({
-          kind: "pack",
-          profile: {
-            ...ctx.profile,
-            activeOrder: ctx.profile.activeOrder.filter((other) => other !== id),
+          kind: "modpack",
+          modpack: {
+            ...ctx.modpack,
+            activeOrder: ctx.modpack.activeOrder.filter((other) => other !== id),
           },
           summary: `Removes ${byId.get(id)?.name ?? id} from the pack.`,
         }),
@@ -310,13 +310,13 @@ const REPAIRS: Record<string, RepairFn> = {
     return {
       kind: "files",
       summary:
-        `Writes this pack's ${ctx.profile.activeOrder.length} entries back into ModsConfig.xml, ` +
+        `Writes this pack's ${ctx.modpack.activeOrder.length} entries back into ModsConfig.xml, ` +
         "undoing the reset to Core only.",
       actions: [
         {
           op: "write",
           path: `${dir}/ModsConfig.xml`,
-          contents: toModsConfigXml(ctx.profile.activeOrder, ctx.scan.gameVersion),
+          contents: toModsConfigXml(ctx.modpack.activeOrder, ctx.scan.gameVersion),
           reason: "RimWorld reset the load order after a failed load",
         },
       ],
@@ -377,17 +377,17 @@ export function planRepair(ctx: RepairContext): RepairPlan | null {
 export function autoPackRepairs(
   findings: Finding[],
   base: Omit<RepairContext, "finding">,
-): { finding: Finding; plan: Extract<RepairPlan, { kind: "pack" }> }[] {
-  const out: { finding: Finding; plan: Extract<RepairPlan, { kind: "pack" }> }[] = [];
-  let profile = base.profile;
+): { finding: Finding; plan: Extract<RepairPlan, { kind: "modpack" }> }[] {
+  const out: { finding: Finding; plan: Extract<RepairPlan, { kind: "modpack" }> }[] = [];
+  let modpack = base.modpack;
 
   for (const finding of findings) {
     if (!finding.fix?.auto) continue;
-    const plan = planRepair({ ...base, profile, finding });
-    if (plan?.kind !== "pack") continue;
+    const plan = planRepair({ ...base, modpack, finding });
+    if (plan?.kind !== "modpack") continue;
     // Each repair is planned against the result of the previous one, so a batch cannot
     // apply two conflicting edits to the same load order.
-    profile = plan.profile;
+    modpack = plan.modpack;
     out.push({ finding, plan });
   }
   return out;

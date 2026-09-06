@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Finding, ModEntry, ProposedFix, ScanResult } from "../types";
-import type { Profile } from "../profiles";
+import type { Modpack } from "../modpacks";
 import { runStaticRules } from "../analysis/rules";
 import { allFileActions, runTriage } from "./triage";
 
@@ -35,7 +35,7 @@ function scanOf(mods: ModEntry[], activeOrder: string[]): ScanResult {
   };
 }
 
-function profileOf(activeOrder: string[]): Profile {
+function profileOf(activeOrder: string[]): Modpack {
   return {
     id: "p1",
     name: "Test",
@@ -82,7 +82,7 @@ describe("runTriage", () => {
 
     const result = runTriage(findings, {
       scan: scanOf(mods, ["a.one", "b.two", "gone"]),
-      profile: profileOf(["a.one", "b.two", "gone"]),
+      modpack: profileOf(["a.one", "b.two", "gone"]),
     });
 
     expect(result.applied.map((a) => a.finding.id)).toEqual(["pack"]);
@@ -98,7 +98,7 @@ describe("runTriage", () => {
     ];
     const result = runTriage(findings, {
       scan: scanOf(mods, ["a.one", "gone"]),
-      profile: profileOf(["a.one", "gone"]),
+      modpack: profileOf(["a.one", "gone"]),
     });
     expect(result.applied).toHaveLength(0);
     expect(result.unresolved.map((u) => u.id)).toEqual(["manual"]);
@@ -112,29 +112,29 @@ describe("runTriage", () => {
     ];
     const result = runTriage(findings, {
       scan: scanOf(withLib, ["a.one", "gone"]),
-      profile: profileOf(["a.one", "gone"]),
+      modpack: profileOf(["a.one", "gone"]),
     });
 
     expect(result.applied).toHaveLength(2);
-    expect(result.profile.activeOrder).toContain("c.lib");
-    expect(result.profile.activeOrder).not.toContain("gone");
+    expect(result.modpack.activeOrder).toContain("c.lib");
+    expect(result.modpack.activeOrder).not.toContain("gone");
   });
 
   it("leaves the original pack untouched, returning a new one", () => {
     const original = profileOf(["a.one", "gone"]);
     const result = runTriage(
       [findingWith({ ...auto, kind: "remove-orphan-entries", params: { ids: ["gone"] } })],
-      { scan: scanOf(mods, ["a.one", "gone"]), profile: original },
+      { scan: scanOf(mods, ["a.one", "gone"]), modpack: original },
     );
     expect(original.activeOrder).toEqual(["a.one", "gone"]);
-    expect(result.profile).not.toBe(original);
+    expect(result.modpack).not.toBe(original);
   });
 
   it("counts what is left by re-running the rules, not by subtracting", () => {
     // One real orphan; triage removes it, so the recount must actually drop.
     const scan = scanOf([mod("a.one")], ["a.one", "ghost.mod"]);
     const findings = runStaticRules(scan);
-    const result = runTriage(findings, { scan, profile: profileOf(["a.one", "ghost.mod"]) });
+    const result = runTriage(findings, { scan, modpack: profileOf(["a.one", "ghost.mod"]) });
 
     expect(result.before).toBeGreaterThan(0);
     expect(result.after).toBeLessThan(result.before);
@@ -142,7 +142,7 @@ describe("runTriage", () => {
   });
 
   it("reports nothing to do for a clean pack", () => {
-    const result = runTriage([], { scan: scanOf(mods, ["a.one"]), profile: profileOf(["a.one"]) });
+    const result = runTriage([], { scan: scanOf(mods, ["a.one"]), modpack: profileOf(["a.one"]) });
     expect(result.applied).toEqual([]);
     expect(result.before).toBe(0);
     expect(result.after).toBe(0);
@@ -158,7 +158,7 @@ describe("runTriage", () => {
     ];
     const result = runTriage(findings, {
       scan: scanOf(mods, ["a.one"]),
-      profile: profileOf(["a.one"]),
+      modpack: profileOf(["a.one"]),
     });
     expect(allFileActions(result)).toHaveLength(2);
   });
@@ -181,7 +181,7 @@ describe("auto mode", () => {
   it("leaves the decision to the player when off", () => {
     const result = runTriage([incompatibleFinding()], {
       scan: scanOf(incompatible, ["a.keep", "b.drop", "c.user"]),
-      profile: profileOf(["a.keep", "b.drop", "c.user"]),
+      modpack: profileOf(["a.keep", "b.drop", "c.user"]),
     });
     expect(result.decisions).toHaveLength(1);
     expect(result.autoDecided).toHaveLength(0);
@@ -192,15 +192,15 @@ describe("auto mode", () => {
       [incompatibleFinding()],
       {
         scan: scanOf(incompatible, ["a.keep", "b.drop", "c.user"]),
-        profile: profileOf(["a.keep", "b.drop", "c.user"]),
+        modpack: profileOf(["a.keep", "b.drop", "c.user"]),
       },
       { auto: true },
     );
     expect(result.decisions).toHaveLength(0);
     expect(result.autoDecided).toHaveLength(1);
     // Keeps the mod something depends on, so it disables the other one.
-    expect(result.profile.activeOrder).toContain("a.keep");
-    expect(result.profile.activeOrder).not.toContain("b.drop");
+    expect(result.modpack.activeOrder).toContain("a.keep");
+    expect(result.modpack.activeOrder).not.toContain("b.drop");
   });
 
   it("records the reasoning it used, so an auto decision is still inspectable", () => {
@@ -208,7 +208,7 @@ describe("auto mode", () => {
       [incompatibleFinding()],
       {
         scan: scanOf(incompatible, ["a.keep", "b.drop", "c.user"]),
-        profile: profileOf(["a.keep", "b.drop", "c.user"]),
+        modpack: profileOf(["a.keep", "b.drop", "c.user"]),
       },
       { auto: true },
     );
@@ -225,7 +225,7 @@ describe("auto mode", () => {
       [finding],
       {
         scan: scanOf([mod("a.one")], ["a.one"]),
-        profile: profileOf(["a.one"]),
+        modpack: profileOf(["a.one"]),
       },
       { auto: true },
     );
@@ -248,7 +248,7 @@ describe("auto mode", () => {
     );
     const result = runTriage(
       [finding],
-      { scan: scanOf(copies, ["dup.mod"]), profile: profileOf(["dup.mod"]) },
+      { scan: scanOf(copies, ["dup.mod"]), modpack: profileOf(["dup.mod"]) },
       { auto: true },
     );
     expect(result.autoDecided).toHaveLength(1);

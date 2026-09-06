@@ -1,15 +1,15 @@
 import { createContext, useContext, useState } from "react";
 import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
-import type { Profile } from "../lib/profiles";
+import type { Modpack } from "../lib/modpacks";
 import { configDir, planRepair, toPowerShell, type FileAction, type RepairPlan } from "../lib/repair/repairs";
 import { download } from "../lib/download";
 
 export interface RepairApi {
   scan: ScanResult;
-  profile: Profile;
+  modpack: Modpack;
   workshop?: WorkshopCache | null;
-  /** Commit a repaired pack. The caller records the previous one so this can be undone. */
-  applyProfile: (profile: Profile, label: string) => void;
+  /** Commit a repaired modpack. The caller records the previous one so this can be undone. */
+  applyModpack: (modpack: Modpack, label: string) => void;
 }
 
 const RepairContext = createContext<RepairApi | null>(null);
@@ -30,7 +30,7 @@ export function RepairAction({ finding }: { finding: Finding }) {
   const [open, setOpen] = useState(false);
   if (!api || !finding.fix) return null;
 
-  const plan = planRepair({ scan: api.scan, profile: api.profile, workshop: api.workshop, finding });
+  const plan = planRepair({ scan: api.scan, modpack: api.modpack, workshop: api.workshop, finding });
 
   if (!plan) {
     return (
@@ -61,17 +61,17 @@ function RepairPanel({ plan, api, onDone }: { plan: RepairPlan; api: RepairApi; 
     <div className="repair-panel">
       <p className="repair-summary">{active.summary}</p>
 
-      {active.kind === "pack" && (
+      {active.kind === "modpack" && (
         <div className="repair-actions">
           <button
             className="btn primary"
             type="button"
             onClick={() => {
-              api.applyProfile(active.profile, "repair");
+              api.applyModpack(active.modpack, "repair");
               onDone();
             }}
           >
-            Apply to pack
+            Apply to modpack
           </button>
           <span className="repair-note">Instant and undoable. Nothing on disk changes.</span>
         </div>

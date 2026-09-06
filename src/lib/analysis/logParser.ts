@@ -295,7 +295,7 @@ const EXPLANATIONS: Record<string, Explanation> = {
     title: () => "RimWorld reset your mod list after a load failure",
     detail:
       "Loading threw with mods active, so the game rewrote ModsConfig.xml back to Core only and " +
-      "retried. Any load order you had is gone. Restore it from a pack before launching again.",
+      "retried. Any load order you had is gone. Restore it from a modpack before launching again.",
     fixKind: "restore-mods-config",
   },
   "ghost-subscription": {

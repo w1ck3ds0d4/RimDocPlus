@@ -51,13 +51,13 @@ Every finding carries a proposed repair tagged with its tier and whether it can 
 - Scrapes the environment header: game build, Unity version, GPU, VRAM, driver
 - Ranks startup phase costs, so a slow launch points at the phase responsible
 
-### Packs
+### Modpacks
 
-A pack is a named, saved mod list: the set of package ids you want the game to run, in load order. Build as many as you like and switch between them.
+A modpack is a named, saved mod list: the set of package ids you want the game to run, in load order. Build as many as you like and switch between them.
 
 - Create from the game's current setup, or start minimal with Ludeon content and the bootstrappers only
 - Duplicate, rename, and delete
-- Drift indicator per pack showing what it adds, removes, and reorders relative to what the game is currently set to run
+- Drift indicator per modpack showing what it adds, removes, and reorders relative to what the game is currently set to run
 - Export as `ModsConfig.xml`, which is the file RimWorld reads on launch, or as a portable `.rimdoc.json`
 
 ### Load order editor
@@ -70,19 +70,19 @@ A pack is a named, saved mod list: the set of package ids you want the game to r
 - **Auto-sort**: stable topological sort putting bootstrappers first, then Ludeon content in canonical order, then everything else resolved against declared `loadAfter`, `loadBefore`, `forceLoadAfter`, `forceLoadBefore`, and dependency constraints. Ties keep their current position so a mostly-correct list barely moves and the diff stays reviewable. Constraint cycles are emitted in existing order rather than dropped.
 - Filterable by name or package id, tagged by source and by whether the mod ships C# or XML patches
 
-**The doctor analyses the pack you are editing, not the load order the game happens to hold.** Toggling a mod updates the findings immediately. Turning off a framework that 53 mods depend on surfaces 53 findings before you ever launch the game.
+**The doctor analyses the modpack you are editing, not the load order the game happens to hold.** Toggling a mod updates the findings immediately. Turning off a framework that 53 mods depend on surfaces 53 findings before you ever launch the game.
 
 ### Triage
 
 One button that assesses everything, applies what is provably safe, and stages the rest as a worklist:
 
-- **Applied to the pack** - every deterministic repair, chained and committed as one undoable step
+- **Applied to the modpack** - every deterministic repair, chained and committed as one undoable step
 - **Needs your decision** - the ambiguous ones, with the options spelled out
 - **Needs a script** - every disk change gathered into a single PowerShell script that backs up each file first, deduplicated so no file is touched twice
 - **Needs you** - Workshop subscriptions and OS settings, with links
 - **No repair yet** - findings the engine cannot act on
 
-The "resolved" count is produced by re-running the rules against the repaired pack, not by subtracting what it attempted. Triage does not claim the game runs: faults that only appear once the game is executing need the supervised launch and the headless boot check, neither of which is built.
+The "resolved" count is produced by re-running the rules against the repaired modpack, not by subtracting what it attempted. Triage does not claim the game runs: faults that only appear once the game is executing need the supervised launch and the headless boot check, neither of which is built.
 
 ### Library and Workshop data
 
@@ -142,7 +142,7 @@ On the 253-mod install this was built against: 20.4 GB of decoded texture data, 
 
 Nothing is changed before a copy exists.
 
-- On first scan RimDoc+ records the load order as it was found, and never overwrites that record. It is kept apart from the pack list rather than sitting in it as a second identical entry, and a **Restore original load order** control appears only once a pack has actually diverged from it, since before that there is nothing to restore to.
+- On first scan RimDoc+ records the load order as it was found, and never overwrites that record. It is kept apart from the modpack list rather than sitting in it as a second identical entry, and a **Restore original load order** control appears only once a modpack has actually diverged from it, since before that there is nothing to restore to.
 - Every generated script opens with a backup phase: it copies the save-data `Config` folder to `~/RimDoc-Backups/original-version` once and never overwrites it, so that copy stays the install as it was before RimDoc+ first touched anything rather than before the latest run.
 - Each run additionally copies every file it will change into a timestamped `run-*` folder, so one run can be undone as a unit.
 - Individual files still get a `.rimdocbak` alongside them, so a single change can be reverted on its own.
@@ -153,7 +153,7 @@ Every finding that has a repair explains its plan before anything happens. The b
 
 Repairs split by what they actually have to touch:
 
-- **Pack repairs** apply instantly and are fully undoable, because a pack is app state: drop orphan entries, enable a disabled dependency, reorder to satisfy constraints. Nothing on disk changes.
+- **Modpack repairs** apply instantly and are fully undoable, because a modpack is app state: drop orphan entries, enable a disabled dependency, reorder to satisfy constraints. Nothing on disk changes.
 - **Choice repairs** refuse to guess, but they do not refuse to reason. A duplicate install is ranked on version support, whether a copy is a deliberate local pin, update recency and subscriber count, and the suggested copy is labelled with why. When the signals disagree the disagreement is printed rather than buried: the real case this was built against recommends a fork updated 398 days more recently while stating that the original has four times the subscribers. Two mods declaring mutual incompatibility, or one package id in two folders, is a decision only you can make, so RimDoc+ lays out the options and their consequences.
 - **File repairs** list every path they would touch, then generate a PowerShell script that backs up each file before changing it. Stamping a version into `About.xml`, resetting a mod's settings, restoring `ModsConfig.xml` after the game wiped it.
 - **External repairs** are the ones no tool can do for you, such as resubscribing to a Workshop item, and link straight to the right page.
@@ -166,9 +166,9 @@ The run streams into a terminal-style console: what was scanned, how long the an
 
 Every finding is accounted for in the summary, including the ones proposing no repair because none is wanted. Reporting "none auto-fixable" while twelve of fifteen findings were informational notes and three had already been staged was wrong on both counts.
 
-Anything that cannot be undone asks first: deleting a pack, restoring the original order. The dialog says what will be lost and what will not, and Escape cancels while Enter is deliberately unbound so a destructive action always needs a real click.
+Anything that cannot be undone asks first: deleting a modpack, restoring the original order. The dialog says what will be lost and what will not, and Escape cancels while Enter is deliberately unbound so a destructive action always needs a real click.
 
-**Fix all automatic** applies every deterministic pack repair in one go. Each is planned against the result of the previous one, so a batch can never apply two conflicting edits to the same load order, and the whole batch undoes as a unit.
+**Fix all automatic** applies every deterministic modpack repair in one go. Each is planned against the result of the previous one, so a batch can never apply two conflicting edits to the same load order, and the whole batch undoes as a unit.
 
 ### Settings and developer mode
 
@@ -233,9 +233,9 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 
 ## What's Not Yet Built
 
-- The Tauri shell itself. The analysis engine, scanner, packs, and UI are real; the desktop packaging is the next slice.
-- **Writing a pack back to the game and launching it**. Packs export as `ModsConfig.xml` today, which you copy into your save-data `Config` folder by hand. Writing it directly and launching from the app needs the shell.
-- **Version pinning in packs**: a pack records package ids, not exact mod versions, so it is repeatable but not yet reproducible. Pinning arrives with the vault.
+- The Tauri shell itself. The analysis engine, scanner, modpacks, and UI are real; the desktop packaging is the next slice.
+- **Writing a modpack back to the game and launching it**. Modpacks export as `ModsConfig.xml` today, which you copy into your save-data `Config` folder by hand. Writing it directly and launching from the app needs the shell.
+- **Version pinning in modpacks**: a modpack records package ids, not exact mod versions, so it is repeatable but not yet reproducible. Pinning arrives with the vault.
 - **Mod vault**: content-addressed local store so Steam updates land as new versions instead of overwriting a working setup
 - **Supervised launch**: child-process control, live structured log stream, crash and hang detection, case-file capture
 - **Auto-bisect**: binary search across the mod list to isolate a minimal breaking set unattended

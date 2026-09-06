@@ -1,6 +1,6 @@
 import type { ScanResult, WorkshopCache } from "./types";
 import { runPatchRulesWithIntents } from "./analysis/patches";
-import { loadBaseline, type Profile } from "./profiles";
+import { loadBaseline, type Modpack } from "./modpacks";
 
 export interface Stat {
   label: string;
@@ -29,7 +29,7 @@ export interface StatGroup {
 export function buildDiagnostics(
   scan: ScanResult,
   workshop: WorkshopCache | null,
-  profiles: Profile[],
+  modpacks: Modpack[],
   session: { path: string; text: string } | null,
 ): StatGroup[] {
   const active = scan.mods.filter((m) => m.active);
@@ -135,7 +135,7 @@ export function buildDiagnostics(
     {
       title: "Storage",
       stats: [
-        { label: "Packs", value: String(profiles.length), suspiciousWhenZero: true },
+        { label: "Packs", value: String(modpacks.length), suspiciousWhenZero: true },
         {
           label: "Baseline",
           value: baseline

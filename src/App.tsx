@@ -4,17 +4,17 @@ import { runStaticRules } from "./lib/analysis/rules";
 import { analyzeLog, findingsFromLog, type SessionAnalysis } from "./lib/analysis/logParser";
 import { loadScan, loadSession, loadWorkshop } from "./lib/devData";
 import {
-  diffProfiles,
-  loadProfiles,
-  profileFromScan,
+  diffModpacks,
+  loadModpacks,
+  modpackFromScan,
   saveBaselineOnce,
-  saveProfiles,
+  saveModpacks,
   setupName,
-  type Profile,
-} from "./lib/profiles";
+  type Modpack,
+} from "./lib/modpacks";
 import { FindingList, SeveritySummary, useSeverityFilter } from "./components/Findings";
-import { PackEditor } from "./components/PackEditor";
-import { Packs } from "./components/Packs";
+import { PackEditor } from "./components/ModpackEditor";
+import { Modpacks } from "./components/Modpacks";
 import { SessionReport } from "./components/SessionReport";
 import { RepairProvider } from "./components/Repair";
 import { Triage } from "./components/Triage";
@@ -29,7 +29,7 @@ export default function App() {
   const [workshop, setWorkshop] = useState<WorkshopCache | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("doctor");
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [modpacks, setProfiles] = useState<Modpack[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [devMode, setDevMode] = useState(loadDevMode);
 
@@ -41,8 +41,8 @@ export default function App() {
       /* private window; the toggle still works for this session */
     }
   }, []);
-  // Every repair pushes the pack it replaced, so any applied fix is one click from undone.
-  const [undoStack, setUndoStack] = useState<{ profile: Profile; label: string }[]>([]);
+  // Every repair pushes the modpack it replaced, so any applied fix is one click from undone.
+  const [undoStack, setUndoStack] = useState<{ modpack: Modpack; label: string }[]>([]);
 
   useEffect(() => {
     Promise.all([loadScan(), loadSession(), loadWorkshop()])
@@ -51,15 +51,15 @@ export default function App() {
         setSession(l);
         setWorkshop(w);
         if (!s) return;
-        const stored = loadProfiles();
-        // One pack to work in. The order the install started with is recorded separately
-        // as a baseline, because a second identical pack is noise until something
+        const stored = loadModpacks();
+        // One modpack to work in. The order the install started with is recorded separately
+        // as a baseline, because a second identical modpack is noise until something
         // diverges, and there is nothing to restore to before then.
         const seeded = stored.length
-          ? // Packs saved before the name depended on the install keep working; only
+          ? // Modpacks saved before the name depended on the install keep working; only
             // the placeholder name is brought up to date.
             stored.map((p) => (p.name === "Current game setup" ? { ...p, name: setupName(s) } : p))
-          : [profileFromScan(s, setupName(s))];
+          : [modpackFromScan(s, setupName(s))];
         // Recorded on the very first scan and never overwritten, so there is always a
         // record of the order the install started with.
         saveBaselineOnce(s);
@@ -70,44 +70,44 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (profiles.length) saveProfiles(profiles);
-  }, [profiles]);
+    if (modpacks.length) saveModpacks(modpacks);
+  }, [modpacks]);
 
-  const active = profiles.find((p) => p.id === activeId) ?? null;
+  const active = modpacks.find((p) => p.id === activeId) ?? null;
 
-  const upsert = useCallback((profile: Profile) => {
+  const upsert = useCallback((modpack: Modpack) => {
     setProfiles((current) =>
-      current.some((p) => p.id === profile.id)
-        ? current.map((p) => (p.id === profile.id ? profile : p))
-        : [...current, profile],
+      current.some((p) => p.id === modpack.id)
+        ? current.map((p) => (p.id === modpack.id ? modpack : p))
+        : [...current, modpack],
     );
   }, []);
 
-  const create = useCallback((profile: Profile) => {
-    setProfiles((current) => [...current, profile]);
-    setActiveId(profile.id);
+  const create = useCallback((modpack: Modpack) => {
+    setProfiles((current) => [...current, modpack]);
+    setActiveId(modpack.id);
   }, []);
 
   /**
-   * Commit a repaired pack, remembering the one it replaced.
+   * Commit a repaired modpack, remembering the one it replaced.
    *
    * Both updates are issued side by side rather than nesting one inside the other's
    * updater. React re-invokes updaters (twice under StrictMode), so a setState hidden
    * in one pushed the same undo entry twice per repair.
    */
-  const applyProfile = useCallback(
-    (profile: Profile, label: string) => {
-      const previous = profiles.find((p) => p.id === profile.id);
-      if (previous) setUndoStack((stack) => [{ profile: previous, label }, ...stack].slice(0, 20));
-      setProfiles((current) => current.map((p) => (p.id === profile.id ? profile : p)));
+  const applyModpack = useCallback(
+    (modpack: Modpack, label: string) => {
+      const previous = modpacks.find((p) => p.id === modpack.id);
+      if (previous) setUndoStack((stack) => [{ modpack: previous, label }, ...stack].slice(0, 20));
+      setProfiles((current) => current.map((p) => (p.id === modpack.id ? modpack : p)));
     },
-    [profiles],
+    [modpacks],
   );
 
   const undo = useCallback(() => {
     const [last, ...rest] = undoStack;
     if (!last) return;
-    setProfiles((current) => current.map((p) => (p.id === last.profile.id ? last.profile : p)));
+    setProfiles((current) => current.map((p) => (p.id === last.modpack.id ? last.modpack : p)));
     setUndoStack(rest);
   }, [undoStack]);
 
@@ -123,9 +123,9 @@ export default function App() {
   );
 
   /**
-   * The doctor analyses the pack being edited, not the load order the game happens to
+   * The doctor analyses the modpack being edited, not the load order the game happens to
    * hold. Toggling a mod therefore updates the findings immediately, which is the whole
-   * point of building a pack in here rather than in the game's own mod screen.
+   * point of building a modpack in here rather than in the game's own mod screen.
    */
   const workingScan = useMemo<ScanResult | null>(() => {
     if (!scan) return null;
@@ -162,16 +162,16 @@ export default function App() {
   if (loading) return <main />;
   if (!scan || !workingScan) return <NoFixtures />;
 
-  const drift = active ? diffProfiles(scan.activeOrder, active.activeOrder) : null;
+  const drift = active ? diffModpacks(scan.activeOrder, active.activeOrder) : null;
   const dirty = drift ? drift.added.length > 0 || drift.removed.length > 0 || drift.reordered : false;
 
   return (
     <RepairProvider
       value={{
         scan: workingScan,
-        profile: active ?? profileFromScan(scan, "scratch"),
+        modpack: active ?? modpackFromScan(scan, "scratch"),
         workshop,
-        applyProfile,
+        applyModpack,
       }}
     >
       {devMode && (
@@ -187,7 +187,7 @@ export default function App() {
       <header className="hdr">
         <Logo />
         {active && (
-          <div className={`pack-badge${dirty ? " dirty" : ""}`}>
+          <div className={`modpack-badge${dirty ? " dirty" : ""}`}>
             <small>Editing</small>
             <b>{active.name}</b>
             {dirty && <span className="dot" title="Differs from the game's current load order" />}
@@ -196,7 +196,7 @@ export default function App() {
         <div className="facts">
           <Fact label="Game" value={scan.gameVersion} />
           <Fact label="Installed" value={String(scan.mods.length)} />
-          <Fact label="In pack" value={String(workingScan.activeOrder.length)} />
+          <Fact label="In modpack" value={String(workingScan.activeOrder.length)} />
           <Fact
             label="Issues"
             value={String(staticFindings.length + sessionFindings.length)}
@@ -208,7 +208,7 @@ export default function App() {
       <nav className="tabs" role="tablist">
         <TabButton id="doctor" tab={tab} setTab={setTab} label="Doctor" count={staticFindings.length} />
         <TabButton id="session" tab={tab} setTab={setTab} label="Session" count={sessionFindings.length} />
-        <TabButton id="packs" tab={tab} setTab={setTab} label="Packs" count={profiles.length} />
+        <TabButton id="packs" tab={tab} setTab={setTab} label="Modpacks" count={modpacks.length} />
         <TabButton
           id="order"
           tab={tab}
@@ -232,9 +232,9 @@ export default function App() {
               <Triage
                 findings={staticFindings}
                 scan={workingScan}
-                profile={active}
+                modpack={active}
                 workshop={workshop}
-                applyProfile={applyProfile}
+                applyModpack={applyModpack}
               />
             )}
             {undoStack.length > 0 && (
@@ -261,8 +261,8 @@ export default function App() {
             <p className="muted">No session log loaded.</p>
           ))}
         {tab === "packs" && (
-          <Packs
-            profiles={profiles}
+          <Modpacks
+            modpacks={modpacks}
             activeId={activeId}
             scan={scan}
             mods={scan.mods}
@@ -272,7 +272,7 @@ export default function App() {
             }}
             onCreate={create}
             onUpdate={upsert}
-            onRestore={(profile) => applyProfile(profile, "restore original")}
+            onRestore={(modpack) => applyModpack(modpack, "restore original")}
             onDelete={remove}
           />
         )}
@@ -281,7 +281,7 @@ export default function App() {
           <Settings
             scan={workingScan}
             workshop={workshop}
-            profiles={profiles}
+            modpacks={modpacks}
             session={session}
             devMode={devMode}
             onDevMode={setDevModePersisted}
@@ -289,9 +289,9 @@ export default function App() {
         )}
         {tab === "order" &&
           (active ? (
-            <PackEditor profile={active} mods={scan.mods} onChange={upsert} />
+            <PackEditor modpack={active} mods={scan.mods} onChange={upsert} />
           ) : (
-            <p className="muted">Create a pack first.</p>
+            <p className="muted">Create a modpack first.</p>
           ))}
       </main>
     </RepairProvider>

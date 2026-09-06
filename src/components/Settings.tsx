@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
-import type { Profile } from "../lib/profiles";
+import type { Modpack } from "../lib/modpacks";
 import { runStaticRulesWithDiagnostics, type RuleRun } from "../lib/analysis/rules";
 import { buildDiagnostics } from "../lib/diagnostics";
 import { clearDevLog, getDevLog, subscribeDevLog, type CapturedEntry } from "../lib/devLog";
@@ -20,14 +20,14 @@ export function loadDevMode(): boolean {
 export function Settings({
   scan,
   workshop,
-  profiles,
+  modpacks,
   session,
   devMode,
   onDevMode,
 }: {
   scan: ScanResult;
   workshop: WorkshopCache | null;
-  profiles: Profile[];
+  modpacks: Modpack[];
   session: { path: string; text: string } | null;
   devMode: boolean;
   onDevMode: (on: boolean) => void;
@@ -56,7 +56,7 @@ export function Settings({
         </label>
       </div>
 
-      {devMode && <Diagnostics scan={scan} workshop={workshop} profiles={profiles} session={session} />}
+      {devMode && <Diagnostics scan={scan} workshop={workshop} modpacks={modpacks} session={session} />}
     </>
   );
 }
@@ -64,17 +64,17 @@ export function Settings({
 function Diagnostics({
   scan,
   workshop,
-  profiles,
+  modpacks,
   session,
 }: {
   scan: ScanResult;
   workshop: WorkshopCache | null;
-  profiles: Profile[];
+  modpacks: Modpack[];
   session: { path: string; text: string } | null;
 }) {
   const [runs, setRuns] = useState<RuleRun[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
-  const groups = buildDiagnostics(scan, workshop, profiles, session);
+  const groups = buildDiagnostics(scan, workshop, modpacks, session);
 
   useEffect(() => {
     const result = runStaticRulesWithDiagnostics(scan);

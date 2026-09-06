@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Finding, ModEntry, ProposedFix, ScanResult } from "../types";
-import type { Profile } from "../profiles";
+import type { Modpack } from "../modpacks";
 import { autoPackRepairs, planRepair, toPowerShell, type RepairPlan } from "./repairs";
 
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
@@ -34,7 +34,7 @@ function scanOf(mods: ModEntry[], activeOrder: string[]): ScanResult {
   };
 }
 
-function profileOf(activeOrder: string[]): Profile {
+function profileOf(activeOrder: string[]): Modpack {
   return {
     id: "p1",
     name: "Test",
@@ -65,7 +65,7 @@ describe("planRepair", () => {
   it("returns null for a fix kind with no implementation", () => {
     const ctx = {
       scan: scanOf([], []),
-      profile: profileOf([]),
+      modpack: profileOf([]),
       finding: findingWith({ ...auto, kind: "repair-xpath" }),
     };
     expect(planRepair(ctx)).toBeNull();
@@ -80,7 +80,7 @@ describe("planRepair", () => {
       detail: "d",
       packageIds: [],
     };
-    expect(planRepair({ scan: scanOf([], []), profile: profileOf([]), finding })).toBeNull();
+    expect(planRepair({ scan: scanOf([], []), modpack: profileOf([]), finding })).toBeNull();
   });
 });
 
@@ -88,17 +88,17 @@ describe("remove-orphan-entries", () => {
   it("drops exactly the listed ids and leaves the rest in order", () => {
     const plan = planRepair({
       scan: scanOf([mod("a.one")], ["a.one", "b.gone", "c.gone"]),
-      profile: profileOf(["a.one", "b.gone", "c.gone"]),
+      modpack: profileOf(["a.one", "b.gone", "c.gone"]),
       finding: findingWith({ ...auto, kind: "remove-orphan-entries", params: { ids: ["b.gone", "c.gone"] } }),
     });
-    expect(plan?.kind).toBe("pack");
-    expect((plan as Extract<RepairPlan, { kind: "pack" }>).profile.activeOrder).toEqual(["a.one"]);
+    expect(plan?.kind).toBe("modpack");
+    expect((plan as Extract<RepairPlan, { kind: "modpack" }>).modpack.activeOrder).toEqual(["a.one"]);
   });
 
   it("does nothing when the rule supplied no ids", () => {
     const plan = planRepair({
       scan: scanOf([], ["a"]),
-      profile: profileOf(["a"]),
+      modpack: profileOf(["a"]),
       finding: findingWith({ ...auto, kind: "remove-orphan-entries" }),
     });
     expect(plan).toBeNull();
@@ -110,10 +110,10 @@ describe("enable-dependency", () => {
     const mods = [mod("a.needs", { loadAfter: ["b.lib"] }), mod("b.lib")];
     const plan = planRepair({
       scan: scanOf(mods, ["a.needs"]),
-      profile: profileOf(["a.needs"]),
+      modpack: profileOf(["a.needs"]),
       finding: findingWith({ ...auto, kind: "enable-dependency", params: { dependency: "b.lib" } }),
-    }) as Extract<RepairPlan, { kind: "pack" }>;
-    expect(plan.profile.activeOrder).toContain("b.lib");
+    }) as Extract<RepairPlan, { kind: "modpack" }>;
+    expect(plan.modpack.activeOrder).toContain("b.lib");
   });
 
   it("offers nothing when the dependency is already enabled", () => {
@@ -121,7 +121,7 @@ describe("enable-dependency", () => {
     expect(
       planRepair({
         scan: scanOf(mods, ["b.lib", "a.needs"]),
-        profile: profileOf(["b.lib", "a.needs"]),
+        modpack: profileOf(["b.lib", "a.needs"]),
         finding: findingWith({ ...auto, kind: "enable-dependency", params: { dependency: "b.lib" } }),
       }),
     ).toBeNull();
@@ -134,17 +134,17 @@ describe("ordering repairs", () => {
   it("reorders to satisfy the declared constraint", () => {
     const plan = planRepair({
       scan: scanOf(mods, ["a.late", "b.first"]),
-      profile: profileOf(["a.late", "b.first"]),
+      modpack: profileOf(["a.late", "b.first"]),
       finding: findingWith({ ...auto, kind: "reorder", params: { mod: "a.late", other: "b.first" } }),
-    }) as Extract<RepairPlan, { kind: "pack" }>;
-    expect(plan.profile.activeOrder).toEqual(["b.first", "a.late"]);
+    }) as Extract<RepairPlan, { kind: "modpack" }>;
+    expect(plan.modpack.activeOrder).toEqual(["b.first", "a.late"]);
   });
 
   it("offers nothing when the order is already correct", () => {
     expect(
       planRepair({
         scan: scanOf(mods, ["b.first", "a.late"]),
-        profile: profileOf(["b.first", "a.late"]),
+        modpack: profileOf(["b.first", "a.late"]),
         finding: findingWith({ ...auto, kind: "reorder" }),
       }),
     ).toBeNull();
@@ -156,20 +156,20 @@ describe("choice repairs", () => {
     const mods = [mod("a.one"), mod("b.two")];
     const plan = planRepair({
       scan: scanOf(mods, ["a.one", "b.two"]),
-      profile: profileOf(["a.one", "b.two"]),
+      modpack: profileOf(["a.one", "b.two"]),
       finding: findingWith({ ...manual, kind: "disable-one-of", params: { candidates: ["a.one", "b.two"] } }),
     }) as Extract<RepairPlan, { kind: "choice" }>;
 
     expect(plan.kind).toBe("choice");
     expect(plan.choices).toHaveLength(2);
-    const first = plan.choices[0].plan() as Extract<RepairPlan, { kind: "pack" }>;
-    expect(first.profile.activeOrder).toEqual(["b.two"]);
+    const first = plan.choices[0].plan() as Extract<RepairPlan, { kind: "modpack" }>;
+    expect(first.modpack.activeOrder).toEqual(["b.two"]);
   });
 
   it("pick-duplicate-winner removes every folder except the chosen one", () => {
     const plan = planRepair({
       scan: scanOf([], []),
-      profile: profileOf([]),
+      modpack: profileOf([]),
       finding: findingWith({
         ...manual,
         kind: "pick-duplicate-winner",
@@ -188,7 +188,7 @@ describe("file repairs", () => {
     const mods = [mod("a.one", { folder: "C:/mods/a" }), mod("b.two", { folder: "C:/mods/b" })];
     const plan = planRepair({
       scan: scanOf(mods, ["a.one", "b.two"]),
-      profile: profileOf(["a.one", "b.two"]),
+      modpack: profileOf(["a.one", "b.two"]),
       finding: findingWith({
         ...auto,
         kind: "stamp-supported-version",
@@ -206,7 +206,7 @@ describe("file repairs", () => {
   it("skips mods that are no longer installed", () => {
     const plan = planRepair({
       scan: scanOf([mod("a.one")], ["a.one"]),
-      profile: profileOf(["a.one"]),
+      modpack: profileOf(["a.one"]),
       finding: findingWith({
         ...auto,
         kind: "stamp-supported-version",
@@ -219,7 +219,7 @@ describe("file repairs", () => {
   it("restore-mods-config writes the pack's own load order", () => {
     const plan = planRepair({
       scan: scanOf([mod("a.one")], []),
-      profile: profileOf(["a.one", "b.two"]),
+      modpack: profileOf(["a.one", "b.two"]),
       finding: findingWith({ ...manual, kind: "restore-mods-config" }),
     }) as Extract<RepairPlan, { kind: "files" }>;
 
@@ -233,7 +233,7 @@ describe("file repairs", () => {
     expect(
       planRepair({
         scan,
-        profile: profileOf(["a"]),
+        modpack: profileOf(["a"]),
         finding: findingWith({ ...manual, kind: "restore-mods-config" }),
       }),
     ).toBeNull();
@@ -282,7 +282,7 @@ describe("autoPackRepairs", () => {
     ];
     const applied = autoPackRepairs(findings, {
       scan: scanOf(mods, ["a.needs", "gone"]),
-      profile: profileOf(["a.needs", "gone"]),
+      modpack: profileOf(["a.needs", "gone"]),
     });
     expect(applied.map((a) => a.finding.id)).toEqual(["f1"]);
   });
@@ -294,17 +294,17 @@ describe("autoPackRepairs", () => {
     ];
     const applied = autoPackRepairs(findings, {
       scan: scanOf(mods, ["a.needs", "gone"]),
-      profile: profileOf(["a.needs", "gone"]),
+      modpack: profileOf(["a.needs", "gone"]),
     });
 
     expect(applied).toHaveLength(2);
     // The last plan carries both edits, so applying it alone is the whole batch.
-    const final = applied[applied.length - 1].plan.profile.activeOrder;
+    const final = applied[applied.length - 1].plan.modpack.activeOrder;
     expect(final).toContain("b.lib");
     expect(final).not.toContain("gone");
   });
 
   it("returns nothing when the pack is already clean", () => {
-    expect(autoPackRepairs([], { scan: scanOf(mods, []), profile: profileOf([]) })).toEqual([]);
+    expect(autoPackRepairs([], { scan: scanOf(mods, []), modpack: profileOf([]) })).toEqual([]);
   });
 });
