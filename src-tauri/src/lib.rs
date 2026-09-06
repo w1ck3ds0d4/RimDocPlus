@@ -93,10 +93,15 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
 ///
 /// It stays the install as it was before RimDoc+ first touched anything, rather than
 /// sliding forward to mean "before the most recent run".
+///
+/// Doneness is a marker file written after the copy, not the folder's existence. Gating on
+/// the folder would let a copy that failed halfway mark itself done permanently, and this is
+/// the one backup that can never be retaken once the install has changed.
 fn save_original(config_dir: Option<&str>) -> Result<PathBuf, String> {
     let root = backups_root()?;
     let original = root.join("original-version");
-    if original.exists() {
+    let done = original.join(".complete");
+    if done.exists() {
         return Ok(original);
     }
     fs::create_dir_all(&original).map_err(|e| e.to_string())?;
@@ -106,6 +111,7 @@ fn save_original(config_dir: Option<&str>) -> Result<PathBuf, String> {
             copy_dir(source, &original.join("Config"))?;
         }
     }
+    fs::write(&done, "").map_err(|e| e.to_string())?;
     Ok(original)
 }
 
@@ -313,4 +319,137 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, contents).unwrap();
+    }
+
+    /// The PowerShell executor once copied a directory without -Recurse, which produced an
+    /// empty folder and made removing a duplicate mod unrecoverable while reporting success.
+    #[test]
+    fn backing_up_a_directory_keeps_what_is_inside_it() {
+        let tmp = tempdir().unwrap();
+        let mod_dir = tmp.path().join("DuplicateMod");
+        write(&mod_dir.join("About/About.xml"), "<ModMetaData/>");
+        write(&mod_dir.join("Defs/Things.xml"), "<Defs/>");
+
+        backup_once(&mod_dir).unwrap();
+
+        let bak = tmp.path().join("DuplicateMod.rimdocbak");
+        assert_eq!(fs::read_to_string(bak.join("About/About.xml")).unwrap(), "<ModMetaData/>");
+        assert_eq!(fs::read_to_string(bak.join("Defs/Things.xml")).unwrap(), "<Defs/>");
+    }
+
+    /// A second run must not overwrite the copy the first run took, or the backup would
+    /// track the damage instead of preceding it.
+    #[test]
+    fn a_backup_is_never_retaken() {
+        let tmp = tempdir().unwrap();
+        let file = tmp.path().join("ModsConfig.xml");
+        write(&file, "original");
+        backup_once(&file).unwrap();
+
+        write(&file, "changed");
+        backup_once(&file).unwrap();
+
+        let bak = tmp.path().join("ModsConfig.xml.rimdocbak");
+        assert_eq!(fs::read_to_string(bak).unwrap(), "original");
+    }
+
+    /// "*" means the folder itself. This is the only destructive repair, so the round trip
+    /// through rollback is the property that matters, not the deletion on its own.
+    #[test]
+    fn removing_a_duplicate_folder_can_be_undone() {
+        let tmp = tempdir().unwrap();
+        let mod_dir = tmp.path().join("Hospitality");
+        write(&mod_dir.join("About/About.xml"), "<ModMetaData/>");
+        write(&mod_dir.join("Assemblies/Hospitality.dll"), "MZ");
+
+        let detail = delete_matching(&mod_dir, "*").unwrap();
+        assert_eq!(detail, "removed folder");
+        assert!(!mod_dir.exists());
+
+        let report = rollback(vec![mod_dir.display().to_string()]).unwrap();
+        assert_eq!(report.applied, 1);
+        assert_eq!(report.failed, 0);
+        assert_eq!(fs::read_to_string(mod_dir.join("About/About.xml")).unwrap(), "<ModMetaData/>");
+        assert_eq!(fs::read_to_string(mod_dir.join("Assemblies/Hospitality.dll")).unwrap(), "MZ");
+        assert!(!tmp.path().join("Hospitality.rimdocbak").exists());
+    }
+
+    /// The settings repair passes `Mod_<id>_*.xml`, which must not reach its neighbours.
+    #[test]
+    fn a_glob_removes_only_what_it_matches() {
+        let tmp = tempdir().unwrap();
+        write(&tmp.path().join("Mod_brrainz.harmony_Settings.xml"), "a");
+        write(&tmp.path().join("Mod_brrainz.harmony_Other.xml"), "b");
+        write(&tmp.path().join("Mod_other.mod_Settings.xml"), "c");
+        write(&tmp.path().join("ModsConfig.xml"), "keep");
+
+        delete_matching(tmp.path(), "Mod_brrainz.harmony_*.xml").unwrap();
+
+        assert!(!tmp.path().join("Mod_brrainz.harmony_Settings.xml").exists());
+        assert!(!tmp.path().join("Mod_brrainz.harmony_Other.xml").exists());
+        assert!(tmp.path().join("Mod_other.mod_Settings.xml").exists());
+        assert!(tmp.path().join("ModsConfig.xml").exists());
+    }
+
+    #[test]
+    fn stamping_a_cycle_is_idempotent() {
+        let tmp = tempdir().unwrap();
+        let about = tmp.path().join("About.xml");
+        write(&about, "<ModMetaData>\n  <supportedVersions>\n    <li>1.5</li>\n  </supportedVersions>\n</ModMetaData>");
+
+        assert_eq!(add_supported_version(&about, "1.6").unwrap(), "stamped 1.6");
+        assert_eq!(add_supported_version(&about, "1.6").unwrap(), "already advertises 1.6");
+
+        let xml = fs::read_to_string(&about).unwrap();
+        assert_eq!(xml.matches("<li>1.6</li>").count(), 1);
+        assert!(xml.contains("<li>1.5</li>"), "the existing cycle must survive");
+    }
+
+    /// The shell is a second executor of a plan the TypeScript layer writes, so the union it
+    /// emits has to land here unchanged. It carries fields Rust does not model, and dropping
+    /// them silently is the intended behaviour rather than an oversight.
+    #[test]
+    fn the_typescript_plan_deserialises() {
+        let json = r#"[
+          {"op":"add-supported-version","path":"C:/mods/a/About/About.xml","cycle":"1.6","reason":"stale"},
+          {"op":"write","path":"C:/cfg/ModsConfig.xml","contents":"<ModsConfigData/>","reason":"order"},
+          {"op":"delete-matching","directory":"C:/mods/dupe","pattern":"*","reason":"duplicate"},
+          {"op":"downscale-png","path":"C:/mods/a/T.png","maxPx":512,"fromPx":2048,"reason":"big"}
+        ]"#;
+
+        let actions: Vec<FileAction> = serde_json::from_str(json).unwrap();
+        assert_eq!(actions.len(), 4);
+        match &actions[3] {
+            FileAction::DownscalePng { path, max_px } => {
+                assert_eq!(max_px, &512);
+                assert!(path.ends_with("T.png"));
+            }
+            other => panic!("expected a downscale, got {other:?}"),
+        }
+    }
+
+    /// Rolling back a path nothing backed up is reported, not treated as a failure: the
+    /// undo runs over every target a plan named, including those that never changed.
+    #[test]
+    fn rolling_back_an_untouched_path_is_not_a_failure() {
+        let tmp = tempdir().unwrap();
+        let missing = tmp.path().join("never-touched.xml");
+
+        let report = rollback(vec![missing.display().to_string()]).unwrap();
+        assert_eq!(report.skipped, 1);
+        assert_eq!(report.failed, 0);
+        assert_eq!(report.outcomes[0].detail, "no backup");
+    }
 }

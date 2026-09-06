@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Finding, ModEntry, ProposedFix, ScanResult } from "../types";
 import type { Modpack } from "../modpacks";
-import { autoPackRepairs, planRepair, toPowerShell, type RepairPlan } from "./repairs";
+import {
+  autoPackRepairs,
+  planRepair,
+  toPowerShell,
+  toRollbackPowerShell,
+  type FileAction,
+  type RepairPlan,
+} from "./repairs";
 
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
   return {
@@ -255,6 +262,20 @@ describe("toPowerShell", () => {
       { op: "delete-matching", directory: "C:/it's/mods", pattern: "*.xml", reason: "test" },
     ]);
     expect(script).toContain("'C:/it''s/mods'");
+  });
+
+  it("removes a duplicate folder itself, so the rollback finds the backup it looks for", () => {
+    const actions: FileAction[] = [
+      { op: "delete-matching", directory: "C:/mods/dupe", pattern: "*", reason: "duplicate" },
+    ];
+    const script = toPowerShell(actions);
+    const undo = toRollbackPowerShell(actions);
+
+    // Emptying the folder would leave every backup inside the folder being emptied, while
+    // the rollback restores from <folder>.rimdocbak beside it.
+    expect(script).toContain("Remove-Item $d -Recurse -Force");
+    expect(script).not.toContain("Get-ChildItem -Path 'C:/mods/dupe'");
+    expect(undo).toContain("Restore-One 'C:/mods/dupe'");
   });
 
   it("carries the reason for every action into the script as a comment", () => {

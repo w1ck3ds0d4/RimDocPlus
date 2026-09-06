@@ -424,7 +424,12 @@ export function toPowerShell(actions: FileAction[], configDir?: string | null): 
     "",
     "# The original version: taken once and never overwritten, so it keeps the install as",
     "# it was before RimDoc+ first touched it rather than as it was before this run.",
-    "if (-not (Test-Path $Original)) {",
+    "#",
+    "# Completion is marked by a file written only once the copy has finished. Gating on the",
+    "# folder alone would let a copy that failed halfway mark itself done for good, and the",
+    "# one backup that can never be retaken is the one from before anything was touched.",
+    "$OriginalDone = Join-Path $Original '.complete'",
+    "if (-not (Test-Path $OriginalDone)) {",
     "  New-Item -ItemType Directory -Force -Path $Original | Out-Null",
   ];
 
@@ -439,6 +444,7 @@ export function toPowerShell(actions: FileAction[], configDir?: string | null): 
   }
 
   lines.push(
+    "  Set-Content $OriginalDone (Get-Date -Format 'o') -Encoding UTF8",
     "} else {",
     '  Write-Host "original version already saved at $Original"',
     "}",
@@ -511,9 +517,25 @@ export function toPowerShell(actions: FileAction[], configDir?: string | null): 
         "  } else { $img.Dispose() }",
         "}",
       );
+    } else if (action.pattern === "*") {
+      // "*" means the folder itself, which is how a duplicate mod is removed. Emptying it
+      // instead would leave each backup inside the folder being emptied, while the rollback
+      // looks for <folder>.rimdocbak beside it, so the undo would find nothing to restore.
+      lines.push(
+        `$d = ${ps(action.directory)}`,
+        "if (Test-Path $d) {",
+        "  Backup-Once $d",
+        "  Save-ToRun $d",
+        "  Remove-Item $d -Recurse -Force",
+        '  Write-Host "removed folder: $d"',
+        '} else { Write-Host "already gone: $d" }',
+      );
     } else {
       lines.push(
         `Get-ChildItem -Path ${ps(action.directory)} -Filter ${ps(action.pattern)} -ErrorAction SilentlyContinue |`,
+        // Get-ChildItem streams, so without this a backup written by the first iteration can
+        // be picked up by a later one and deleted as though it were an original.
+        "  Where-Object { -not $_.Name.EndsWith('.rimdocbak') } |",
         '  ForEach-Object { Backup-Once $_.FullName; Remove-Item $_.FullName -Recurse -Force; Write-Host "removed: $($_.FullName)" }',
       );
     }
