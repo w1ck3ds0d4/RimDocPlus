@@ -138,6 +138,10 @@ Repairs split by what they actually have to touch:
 - **File repairs** list every path they would touch, then generate a PowerShell script that backs up each file before changing it. Stamping a version into `About.xml`, resetting a mod's settings, restoring `ModsConfig.xml` after the game wiped it.
 - **External repairs** are the ones no tool can do for you, such as resubscribing to a Workshop item, and link straight to the right page.
 
+An **Auto** toggle sits beside the button. Off, anything ambiguous is put to you as a modal question with the app's preferred answer marked Recommended and the reasoning shown underneath, including whatever argues against it. On, the app answers those itself using the same reasoning, and the console records what it decided and why, flagging any decision where the evidence was contested.
+
+Auto still cannot touch disk unasked. A decision that resolves to removing files is staged into the repair script, which you read and run yourself, so the confirmation step is the script rather than the toggle.
+
 The run streams into a terminal-style console: what was scanned, how long the analysis took, each repair as it lands, and an estimated wall-clock for the staged file work. That estimate comes from a throughput model calibrated against timed runs on a real install (30 ms per file plus 15 ms per megapixel), validated to within 1% on a 30-file sample.
 
 **Fix all automatic** applies every deterministic pack repair in one go. Each is planned against the result of the previous one, so a batch can never apply two conflicting edits to the same load order, and the whole batch undoes as a unit.

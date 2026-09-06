@@ -4,36 +4,61 @@ import type { Profile } from "../lib/profiles";
 import { toPowerShell } from "../lib/repair/repairs";
 import {
   allFileActions,
+  resolveDecision,
   runTriage,
   triageSteps,
   type TriageResult,
   type TriageStep,
 } from "../lib/repair/triage";
+import type { WorkshopCache } from "../lib/types";
 import { download } from "../lib/download";
+
+const AUTO_KEY = "rimdoc.triage.auto";
+
+function loadAuto(): boolean {
+  try {
+    return localStorage.getItem(AUTO_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Triage: assess everything, treat what can be treated safely, escalate the rest.
  *
- * The automatic repairs are applied in one commit so the whole pass undoes as a unit.
- * Everything that needs a decision, a disk write, or the player is listed rather than
- * guessed at, so the report is a worklist and not a claim that the game is now fixed.
+ * With Auto off, anything ambiguous is put to the player as a modal question with the
+ * app's preferred answer marked. With Auto on, the app answers those itself using the
+ * same reasoning, and the console records what it decided and why.
  */
 export function Triage({
   findings,
   scan,
   profile,
+  workshop,
   applyProfile,
 }: {
   findings: Finding[];
   scan: ScanResult;
   profile: Profile;
+  workshop?: WorkshopCache | null;
   applyProfile: (profile: Profile, label: string) => void;
 }) {
   const [result, setResult] = useState<TriageResult | null>(null);
   const [steps, setSteps] = useState<TriageStep[]>([]);
+  const [auto, setAuto] = useState(loadAuto);
+  const [queue, setQueue] = useState<TriageResult["decisions"]>([]);
+
+  function setAutoMode(next: boolean) {
+    setAuto(next);
+    try {
+      localStorage.setItem(AUTO_KEY, next ? "1" : "0");
+    } catch {
+      /* private window; the toggle still works for this session */
+    }
+  }
 
   function run() {
-    const triage = runTriage(findings, { scan, profile });
+    const triage = runTriage(findings, { scan, profile }, { auto, workshop });
     if (triage.applied.length) {
       applyProfile(
         triage.profile,
@@ -42,11 +67,62 @@ export function Triage({
     }
     setSteps(triageSteps(triage, scan, profile.name));
     setResult(triage);
+    // With Auto off, anything ambiguous is asked rather than filed away in a report.
+    setQueue(auto ? [] : triage.decisions);
+  }
+
+  /** Answer one decision, re-planned against the pack as it stands right now. */
+  function answer(finding: Finding, choiceIndex: number) {
+    const resolved = resolveDecision(finding, choiceIndex, {
+      scan,
+      profile: result?.profile ?? profile,
+      workshop,
+    });
+    if (resolved?.plan.kind === "pack") {
+      applyProfile(resolved.plan.profile, "decision");
+      setResult((r) =>
+        r
+          ? {
+              ...r,
+              profile: resolved.plan.kind === "pack" ? resolved.plan.profile : r.profile,
+              decisions: r.decisions.filter((d) => d.finding.id !== finding.id),
+              applied: [...r.applied, { finding, summary: resolved.label }],
+            }
+          : r,
+      );
+    } else if (resolved?.plan.kind === "files") {
+      const plan = resolved.plan;
+      setResult((r) =>
+        r
+          ? {
+              ...r,
+              decisions: r.decisions.filter((d) => d.finding.id !== finding.id),
+              files: [...r.files, { finding, actions: plan.actions, summary: plan.summary }],
+            }
+          : r,
+      );
+    }
+    setQueue((q) => q.slice(1));
   }
 
   return (
     <>
       <div className="triage-bar">
+        <label className={`auto-toggle${auto ? " on" : ""}`}>
+          <input
+            type="checkbox"
+            checked={auto}
+            onChange={(e) => setAutoMode(e.target.checked)}
+            aria-label="Auto mode"
+          />
+          <span className="switch" aria-hidden="true">
+            <i />
+          </span>
+          <span className="auto-text">
+            <b>Auto</b>
+            <small>{auto ? "decides for you" : "asks you"}</small>
+          </span>
+        </label>
         <button className={`triage-btn${findings.length === 0 ? " clean" : ""}`} type="button" onClick={run}>
           <span className="cross" aria-hidden="true">
             <svg width="30" height="30" viewBox="0 0 16 16" focusable="false">
@@ -61,6 +137,14 @@ export function Triage({
         </button>
       </div>
 
+      {queue.length > 0 && (
+        <DecisionModal
+          decision={queue[0]}
+          remaining={queue.length}
+          onChoose={(index) => answer(queue[0].finding, index)}
+          onSkip={() => setQueue((q) => q.slice(1))}
+        />
+      )}
       {steps.length > 0 && <TriageConsole steps={steps} />}
       {result && <TriageReport result={result} onDismiss={() => setResult(null)} />}
     </>
@@ -257,6 +341,91 @@ function Section({
         <span className="n">{count}</span>
       </p>
       {count === 0 ? <p className="muted triage-empty">{empty}</p> : <ul>{children}</ul>}
+    </div>
+  );
+}
+
+/**
+ * One decision, asked properly.
+ *
+ * The recommendation is marked rather than preselected, and the reasoning sits under it,
+ * including whatever argues against it. A question that hides why it is being asked is
+ * just a slower version of deciding for someone.
+ */
+function DecisionModal({
+  decision,
+  remaining,
+  onChoose,
+  onSkip,
+}: {
+  decision: TriageResult["decisions"][number];
+  remaining: number;
+  onChoose: (index: number) => void;
+  onSkip: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onSkip();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onSkip]);
+
+  const recommended = decision.plan.choices.find((c) => c.recommended);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onSkip}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="decision-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-head">
+          <h2 id="decision-title">{decision.finding.title}</h2>
+          {remaining > 1 && <span className="modal-count">{remaining} to decide</span>}
+        </div>
+
+        <p className="modal-body">{decision.plan.summary}</p>
+
+        <div className="modal-choices">
+          {decision.plan.choices.map((choice, index) => (
+            <button
+              key={choice.label}
+              className={`btn modal-choice${choice.recommended ? " primary" : ""}`}
+              type="button"
+              title={choice.detail}
+              onClick={() => onChoose(index)}
+            >
+              <span>{choice.label}</span>
+              {choice.recommended && <span className="pick">Recommended</span>}
+            </button>
+          ))}
+        </div>
+
+        {recommended?.rationale && (
+          <div className="modal-why">
+            {recommended.rationale.reasons.map((r) => (
+              <p key={r} className="why-for">
+                + {r}
+              </p>
+            ))}
+            {recommended.rationale.caveats.map((c) => (
+              <p key={c} className="why-against">
+                - {c}
+              </p>
+            ))}
+          </div>
+        )}
+
+        <div className="modal-foot">
+          <button className="btn" type="button" onClick={onSkip}>
+            Skip for now
+          </button>
+          <span className="repair-note">Escape also skips. Nothing is applied until you choose.</span>
+        </div>
+      </div>
     </div>
   );
 }

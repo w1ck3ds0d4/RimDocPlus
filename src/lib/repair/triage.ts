@@ -1,4 +1,4 @@
-import type { Finding, ScanResult } from "../types";
+import type { Finding, ScanResult, WorkshopCache } from "../types";
 import type { Profile } from "../profiles";
 import { runStaticRules } from "../analysis/rules.ts";
 import {
@@ -15,6 +15,13 @@ export interface TriageResult {
   applied: { finding: Finding; summary: string }[];
   /** Repairs that need a human decision before they can be planned. */
   decisions: { finding: Finding; plan: Extract<RepairPlan, { kind: "choice" }> }[];
+  /** Choices Auto resolved on the app's own judgement, with the reasoning it used. */
+  autoDecided: {
+    finding: Finding;
+    choice: string;
+    reasons: string[];
+    caveats: string[];
+  }[];
   /** Everything that has to touch disk, gathered into one script. */
   files: { finding: Finding; actions: FileAction[]; summary: string }[];
   external: { finding: Finding; summary: string; url?: string }[];
@@ -41,11 +48,29 @@ export interface TriageStep {
  * rest is staged rather than guessed at, because the difference between a repair that is
  * safe to run unattended and one that is not is the whole point of the tier system.
  */
-export function runTriage(findings: Finding[], ctx: { scan: ScanResult; profile: Profile }): TriageResult {
+export interface TriageOptions {
+  /**
+   * Resolve choices on the app's own judgement instead of asking.
+   *
+   * Auto takes any option a repair can defend, including ones that resolve to deleting a
+   * folder, because a file plan is still only staged: it becomes a script the player
+   * reads and runs. That download is the confirmation step, so Auto is not acting
+   * unattended on disk, it is deciding what to put in front of them.
+   */
+  auto?: boolean;
+  workshop?: WorkshopCache | null;
+}
+
+export function runTriage(
+  findings: Finding[],
+  ctx: { scan: ScanResult; profile: Profile },
+  options: TriageOptions = {},
+): TriageResult {
   const result: TriageResult = {
     profile: ctx.profile,
     applied: [],
     decisions: [],
+    autoDecided: [],
     files: [],
     external: [],
     unresolved: [],
@@ -56,7 +81,12 @@ export function runTriage(findings: Finding[], ctx: { scan: ScanResult; profile:
   const startedAt = performance.now();
 
   for (const finding of findings) {
-    const plan = planRepair({ scan: ctx.scan, profile: result.profile, finding });
+    const plan = planRepair({
+      scan: ctx.scan,
+      profile: result.profile,
+      workshop: options.workshop,
+      finding,
+    });
 
     if (!plan) {
       if (finding.fix) result.unresolved.push(finding);
@@ -74,9 +104,30 @@ export function runTriage(findings: Finding[], ctx: { scan: ScanResult; profile:
           result.unresolved.push(finding);
         }
         break;
-      case "choice":
-        result.decisions.push({ finding, plan });
+      case "choice": {
+        const resolved = options.auto ? autoResolve(plan) : null;
+        if (!resolved) {
+          result.decisions.push({ finding, plan });
+          break;
+        }
+        result.autoDecided.push({
+          finding,
+          choice: resolved.choice.label,
+          reasons: resolved.choice.rationale?.reasons ?? [],
+          caveats: resolved.choice.rationale?.caveats ?? [],
+        });
+        if (resolved.plan.kind === "pack") {
+          result.profile = resolved.plan.profile;
+          result.applied.push({ finding, summary: resolved.plan.summary });
+        } else if (resolved.plan.kind === "files") {
+          result.files.push({
+            finding,
+            actions: resolved.plan.actions,
+            summary: resolved.plan.summary,
+          });
+        }
         break;
+      }
       case "files":
         result.files.push({ finding, actions: plan.actions, summary: plan.summary });
         break;
@@ -89,6 +140,37 @@ export function runTriage(findings: Finding[], ctx: { scan: ScanResult; profile:
   result.after = countRemaining(ctx.scan, result.profile);
   result.elapsedMs = performance.now() - startedAt;
   return result;
+}
+
+/**
+ * The option Auto takes, or null when the repair could not defend any of them.
+ *
+ * A repair that names no recommendation has nothing to automate, so that case still goes
+ * to the player rather than being settled by picking whichever option came first.
+ */
+function autoResolve(
+  plan: Extract<RepairPlan, { kind: "choice" }>,
+): { choice: (typeof plan.choices)[number]; plan: RepairPlan } | null {
+  const choice = plan.choices.find((c) => c.recommended);
+  return choice ? { choice, plan: choice.plan() } : null;
+}
+
+/**
+ * Re-plan one choice against the pack as it stands now.
+ *
+ * The plan captured when triage ran was built against the pack at that moment. Answering
+ * two decisions in a row would otherwise apply the second against a stale pack and quietly
+ * undo the first, so an answer is re-planned rather than replayed.
+ */
+export function resolveDecision(
+  finding: Finding,
+  choiceIndex: number,
+  ctx: { scan: ScanResult; profile: Profile; workshop?: WorkshopCache | null },
+): { plan: RepairPlan; label: string } | null {
+  const fresh = planRepair({ ...ctx, finding });
+  if (fresh?.kind !== "choice") return null;
+  const choice = fresh.choices[choiceIndex];
+  return choice ? { plan: choice.plan(), label: choice.label } : null;
 }
 
 /** Re-run the rules against the repaired pack, which is the only honest "after" number. */
@@ -152,6 +234,16 @@ export function triageSteps(result: TriageResult, scan: ScanResult, packName: st
     }
   } else {
     steps.push({ tone: "info", label: "repair", text: "nothing safe to apply unattended" });
+  }
+
+  for (const decision of result.autoDecided) {
+    steps.push({
+      tone: decision.caveats.length ? "warn" : "ok",
+      label: "auto",
+      text:
+        `${decision.choice}: ${decision.reasons.join(". ")}` +
+        (decision.caveats.length ? ` (contested: ${decision.caveats[0]})` : ""),
+    });
   }
 
   for (const { finding, plan } of result.decisions) {

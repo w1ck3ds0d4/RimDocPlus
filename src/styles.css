@@ -1650,3 +1650,232 @@ tr.row-off td:not(.toggle-cell) {
 .lib-table td.name .tag {
   margin-left: 6px;
 }
+
+/* Auto toggle ------------------------------------------------------------- */
+
+.triage-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+  padding: 0 15px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.auto-toggle:hover {
+  border-color: var(--accent-soft);
+}
+
+.auto-toggle.on {
+  background: var(--accent-ghost);
+  border-color: var(--accent-soft);
+}
+
+.auto-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.auto-toggle .switch {
+  display: block;
+  flex: none;
+  width: 34px;
+  height: 19px;
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.auto-toggle .switch i {
+  display: block;
+  width: 13px;
+  height: 13px;
+  margin: 2px 0 0 2px;
+  border-radius: 50%;
+  background: var(--dim);
+  transition:
+    transform 0.15s,
+    background 0.15s;
+}
+
+.auto-toggle.on .switch {
+  background: rgba(74, 158, 255, 0.25);
+  border-color: var(--accent);
+}
+
+.auto-toggle.on .switch i {
+  background: var(--accent);
+  transform: translateX(15px);
+}
+
+.auto-toggle input:focus-visible + .switch {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.auto-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.auto-text b {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auto-text small {
+  color: var(--dim);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.auto-toggle.on .auto-text b {
+  color: var(--accent);
+}
+
+/* Decision modal ---------------------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(6, 9, 12, 0.72);
+  animation: fade-in 0.15s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.modal {
+  width: min(560px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.8);
+  animation: triage-in 0.18s ease-out;
+}
+
+.modal-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.modal-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.modal-count {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 10px;
+  background: var(--panel-3);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.modal-body {
+  margin: 0 0 14px;
+  color: var(--text-soft);
+  white-space: pre-wrap;
+}
+
+.modal-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.modal-choice {
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 13px;
+  text-align: left;
+}
+
+.modal-choice .pick {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 9px;
+  background: var(--accent-ghost);
+  border: 1px solid var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.modal-why {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+}
+
+.modal-why p {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.modal-why p:last-child {
+  margin-bottom: 0;
+}
+
+.why-for {
+  color: var(--ok);
+}
+
+.why-against {
+  color: var(--warning);
+}
+
+.modal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal {
+    animation: none !important;
+  }
+}

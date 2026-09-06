@@ -163,3 +163,97 @@ describe("runTriage", () => {
     expect(allFileActions(result)).toHaveLength(2);
   });
 });
+
+describe("auto mode", () => {
+  const incompatible = [
+    mod("a.keep", { dependencies: [] }),
+    mod("b.drop"),
+    mod("c.user", { dependencies: [{ packageId: "a.keep" }] }),
+  ];
+
+  function incompatibleFinding() {
+    return findingWith(
+      { ...manual, kind: "disable-one-of", params: { candidates: ["a.keep", "b.drop"] } },
+      { id: "pair" },
+    );
+  }
+
+  it("leaves the decision to the player when off", () => {
+    const result = runTriage([incompatibleFinding()], {
+      scan: scanOf(incompatible, ["a.keep", "b.drop", "c.user"]),
+      profile: profileOf(["a.keep", "b.drop", "c.user"]),
+    });
+    expect(result.decisions).toHaveLength(1);
+    expect(result.autoDecided).toHaveLength(0);
+  });
+
+  it("resolves it on its own judgement when on", () => {
+    const result = runTriage(
+      [incompatibleFinding()],
+      {
+        scan: scanOf(incompatible, ["a.keep", "b.drop", "c.user"]),
+        profile: profileOf(["a.keep", "b.drop", "c.user"]),
+      },
+      { auto: true },
+    );
+    expect(result.decisions).toHaveLength(0);
+    expect(result.autoDecided).toHaveLength(1);
+    // Keeps the mod something depends on, so it disables the other one.
+    expect(result.profile.activeOrder).toContain("a.keep");
+    expect(result.profile.activeOrder).not.toContain("b.drop");
+  });
+
+  it("records the reasoning it used, so an auto decision is still inspectable", () => {
+    const result = runTriage(
+      [incompatibleFinding()],
+      {
+        scan: scanOf(incompatible, ["a.keep", "b.drop", "c.user"]),
+        profile: profileOf(["a.keep", "b.drop", "c.user"]),
+      },
+      { auto: true },
+    );
+    expect(result.autoDecided[0].reasons.join(" ")).toContain("depend on it");
+  });
+
+  it("still asks when the repair could not defend any option", () => {
+    // No candidates resolve to real mods, so nothing can be recommended.
+    const finding = findingWith(
+      { ...manual, kind: "disable-one-of", params: { candidates: ["ghost.one", "ghost.two"] } },
+      { id: "unknowable" },
+    );
+    const result = runTriage(
+      [finding],
+      {
+        scan: scanOf([mod("a.one")], ["a.one"]),
+        profile: profileOf(["a.one"]),
+      },
+      { auto: true },
+    );
+    expect(result.autoDecided).toHaveLength(0);
+    expect(result.decisions).toHaveLength(1);
+  });
+
+  it("stages a file resolution rather than performing it, even in auto", () => {
+    const copies = [
+      mod("dup.mod", { steamId: "1", folder: "C:/ws/1" }),
+      mod("dup.mod", { steamId: "2", folder: "C:/ws/2" }),
+    ];
+    const finding = findingWith(
+      {
+        ...manual,
+        kind: "pick-duplicate-winner",
+        params: { packageId: "dup.mod", folders: ["C:/ws/1", "C:/ws/2"] },
+      },
+      { id: "dupe" },
+    );
+    const result = runTriage(
+      [finding],
+      { scan: scanOf(copies, ["dup.mod"]), profile: profileOf(["dup.mod"]) },
+      { auto: true },
+    );
+    expect(result.autoDecided).toHaveLength(1);
+    // It lands in the script, which the player still has to download and run.
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0].actions[0].op).toBe("delete-matching");
+  });
+});

@@ -189,6 +189,7 @@ export default function App() {
                 findings={staticFindings}
                 scan={workingScan}
                 profile={active}
+                workshop={workshop}
                 applyProfile={applyProfile}
               />
             )}

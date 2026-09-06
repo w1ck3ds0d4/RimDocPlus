@@ -1,6 +1,6 @@
 import type { Finding, ScanResult, WorkshopCache } from "../types";
 import { sortLoadOrder, toggleMod, toModsConfigXml, type Profile } from "../profiles.ts";
-import { rankDuplicates } from "../analysis/duplicates.ts";
+import { rankDuplicates, rankKeepPreference } from "../analysis/duplicates.ts";
 
 /**
  * A change to a file on disk.
@@ -18,6 +18,10 @@ export type FileAction =
 export interface RepairChoice {
   label: string;
   detail?: string;
+  /** Set when the repair can defend this option over the others. */
+  recommended?: boolean;
+  /** Why this one, and what argues against it. Caveats mean the signals disagree. */
+  rationale?: { reasons: string[]; caveats: string[]; arbitrary: boolean };
   plan: () => RepairPlan;
 }
 
@@ -55,6 +59,20 @@ function list(ctx: RepairContext, key: string): string[] {
 
 function modsById(scan: ScanResult) {
   return new Map(scan.mods.map((m) => [m.packageId, m]));
+}
+
+/** How many enabled mods depend on each mod, for repairs that weigh what breaking costs. */
+function dependentsOf(ctx: RepairContext): Map<string, number> {
+  const active = new Set(ctx.profile.activeOrder);
+  const counts = new Map<string, number>();
+  for (const mod of ctx.scan.mods) {
+    if (!active.has(mod.packageId)) continue;
+    for (const dep of mod.dependencies) {
+      const id = dep.packageId.toLowerCase();
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 /** Config folder holding ModsConfig.xml and per-mod settings files. */
@@ -112,19 +130,32 @@ const REPAIRS: Record<string, RepairFn> = {
     const candidates = list(ctx, "candidates");
     if (candidates.length < 2) return null;
     const byId = modsById(ctx.scan);
+
+    const mods = candidates.map((id) => byId.get(id)).filter((m): m is NonNullable<typeof m> => !!m);
+    const ranking = rankKeepPreference(mods, dependentsOf(ctx), ctx.workshop ?? null);
+    // The ranking names what to keep; the choices are about what to disable.
+    const disable = ranking ? candidates.find((id) => id !== ranking.recommended.packageId) : undefined;
+
     return {
       kind: "choice",
-      summary: "These two declare they cannot coexist. Only you can decide which to keep.",
+      summary:
+        "These two declare they cannot coexist." +
+        (ranking && disable
+          ? ` Keeping ${ranking.recommended.name} costs less: ${ranking.reasons.join(". ")}.` +
+            (ranking.caveats.length ? ` Against that: ${ranking.caveats.join(". ")}.` : "")
+          : " Nothing measurable separates them."),
       choices: candidates.map((id) => ({
         label: `Disable ${byId.get(id)?.name ?? id}`,
         detail: id,
+        recommended: id === disable,
+        rationale: ranking && id === disable ? ranking : undefined,
         plan: (): RepairPlan => ({
           kind: "pack",
           profile: {
             ...ctx.profile,
             activeOrder: ctx.profile.activeOrder.filter((other) => other !== id),
           },
-          summary: `Removes ${id} from the pack.`,
+          summary: `Removes ${byId.get(id)?.name ?? id} from the pack.`,
         }),
       })),
     };
@@ -155,10 +186,10 @@ const REPAIRS: Record<string, RepairFn> = {
         "usually the one to keep." +
         advice,
       choices: folders.map((keep) => ({
-        label:
-          `Keep ${byFolder.get(keep)?.name ?? keep.split(/[\\/]/).pop()}` +
-          (ranking?.recommended.folder === keep ? "  (suggested)" : ""),
+        label: `Keep ${byFolder.get(keep)?.name ?? keep.split(/[\\/]/).pop()}`,
         detail: keep,
+        recommended: ranking?.recommended.folder === keep,
+        rationale: ranking?.recommended.folder === keep ? ranking : undefined,
         plan: (): RepairPlan => ({
           kind: "files",
           summary: `Removes the other ${folders.length - 1} copy(s) of ${packageId}.`,

@@ -111,3 +111,55 @@ function best(candidates: Candidate[], score: (c: Candidate) => number): Candida
   }
   return winner;
 }
+
+/**
+ * Which of two incompatible mods to keep.
+ *
+ * Ordered by what it costs to be wrong: dropping a mod that fifty others depend on breaks
+ * fifty mods, so dependents dominate. Popularity and maintenance only break the tie.
+ */
+export function rankKeepPreference(
+  mods: ModEntry[],
+  dependents: Map<string, number>,
+  workshop: WorkshopCache | null,
+): DuplicateRanking | null {
+  if (mods.length < 2) return null;
+
+  const scored = mods.map((mod) => ({
+    mod,
+    deps: dependents.get(mod.packageId) ?? 0,
+    details: mod.steamId ? workshop?.items[mod.steamId] : undefined,
+  }));
+
+  const ranked = [...scored].sort(
+    (a, b) =>
+      b.deps - a.deps ||
+      (b.details?.subscriptions ?? 0) - (a.details?.subscriptions ?? 0) ||
+      (b.details?.timeUpdated ?? 0) - (a.details?.timeUpdated ?? 0),
+  );
+
+  const [keep, drop] = ranked;
+  const reasons: string[] = [];
+  const caveats: string[] = [];
+
+  if (keep.deps > drop.deps) {
+    reasons.push(
+      `${keep.deps} enabled mod${keep.deps === 1 ? "" : "s"} depend on it, against ${drop.deps} for the other`,
+    );
+  }
+  if (keep.details && drop.details && keep.details.subscriptions > drop.details.subscriptions) {
+    reasons.push(`More subscribed: ${keep.details.subscriptions.toLocaleString()}`);
+  }
+  if (drop.details && keep.details && drop.details.timeUpdated > keep.details.timeUpdated) {
+    const days = Math.round((drop.details.timeUpdated - keep.details.timeUpdated) / 86400);
+    caveats.push(`${drop.mod.name} was updated ${days} days more recently`);
+  }
+  if (!reasons.length) reasons.push("Nothing measurable separates these two");
+
+  return {
+    recommended: keep.mod,
+    reasons,
+    caveats,
+    arbitrary: keep.deps === drop.deps && !keep.details && !drop.details,
+  };
+}
