@@ -272,6 +272,7 @@ export default function App() {
             }}
             onCreate={create}
             onUpdate={upsert}
+            onRestore={(profile) => applyProfile(profile, "restore original")}
             onDelete={remove}
           />
         )}

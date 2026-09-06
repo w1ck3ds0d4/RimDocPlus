@@ -27,6 +27,12 @@ export interface TriageResult {
   external: { finding: Finding; summary: string; url?: string }[];
   /** Findings with no repair implemented yet. */
   unresolved: Finding[];
+  /**
+   * Findings that propose no repair because none is wanted: notes rather than faults.
+   * Bucketed rather than dropped, so every finding is accounted for and a summary cannot
+   * quietly describe a fraction of them.
+   */
+  notes: Finding[];
   before: number;
   after: number;
   /** Wall-clock the analysis and repair planning actually took. */
@@ -74,6 +80,7 @@ export function runTriage(
     files: [],
     external: [],
     unresolved: [],
+    notes: [],
     before: findings.length,
     after: findings.length,
     elapsedMs: 0,
@@ -89,7 +96,9 @@ export function runTriage(
     });
 
     if (!plan) {
-      if (finding.fix) result.unresolved.push(finding);
+      // A finding proposing no fix is a note; one proposing a fix nothing implements is
+      // a gap. Collapsing them lost twelve of fifteen findings from the accounting.
+      (finding.fix ? result.unresolved : result.notes).push(finding);
       continue;
     }
 
@@ -273,13 +282,25 @@ export function triageSteps(result: TriageResult, scan: ScanResult, packName: st
     steps.push({ tone: "warn", label: "skip", text: `${finding.title} (no repair implemented)` });
   }
 
+  // Report every finding against where it went. "Nothing was auto-fixable" was both
+  // wrong and unhelpful when most of the list was notes and the rest had been staged.
+  const fixedNow = result.before - result.after;
+  const stagedFindings = new Set(result.files.map((f) => f.finding.id)).size;
+  const needsYou = result.decisions.length + result.external.length;
+  const parts = [
+    fixedNow > 0 ? `${fixedNow} fixed` : null,
+    stagedFindings > 0 ? `${stagedFindings} staged for the script` : null,
+    needsYou > 0 ? `${needsYou} needs you` : null,
+    result.unresolved.length > 0 ? `${result.unresolved.length} with no repair yet` : null,
+    result.notes.length > 0 ? `${result.notes.length} informational` : null,
+  ].filter(Boolean);
+
   steps.push({
     tone: "done",
     label: "done",
-    text:
-      result.before - result.after > 0
-        ? `${result.before - result.after} of ${result.before} resolved, ${result.after} remaining`
-        : `${result.after} issue${result.after === 1 ? "" : "s"} remaining, none auto-fixable`,
+    text: `${result.before} finding${result.before === 1 ? "" : "s"}: ${
+      parts.length ? parts.join(", ") : "nothing to do"
+    }`,
   });
 
   return steps;

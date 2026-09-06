@@ -8,6 +8,7 @@ import {
   toModsConfigXml,
 } from "../lib/profiles";
 import { download, slug } from "../lib/download";
+import { useConfirm } from "./Confirm";
 
 export function Packs({
   profiles,
@@ -17,6 +18,7 @@ export function Packs({
   onSelect,
   onCreate,
   onUpdate,
+  onRestore,
   onDelete,
 }: {
   profiles: Profile[];
@@ -26,13 +28,34 @@ export function Packs({
   onSelect: (id: string) => void;
   onCreate: (profile: Profile) => void;
   onUpdate: (profile: Profile) => void;
+  onRestore: (profile: Profile) => void;
   onDelete: (id: string) => void;
 }) {
   const byId = new Map(mods.map((m) => [m.packageId, m]));
   const baseline = loadBaseline();
+  const { confirm, dialog } = useConfirm();
+
+  async function confirmDelete(profile: Profile) {
+    const ok = await confirm({
+      title: `Delete "${profile.name}"?`,
+      body: (
+        <>
+          <p>
+            This pack holds {profile.activeOrder.length} mods in a particular order. Deleting it cannot be
+            undone, and it is the only copy unless you exported one.
+          </p>
+          <p className="muted">Nothing on your install changes. Your mods stay exactly where they are.</p>
+        </>
+      ),
+      confirmLabel: "Delete pack",
+      destructive: true,
+    });
+    if (ok) onDelete(profile.id);
+  }
 
   return (
     <>
+      {dialog}
       <div className="toolbar">
         <button
           className="btn"
@@ -61,7 +84,7 @@ export function Packs({
         </button>
       </div>
 
-      {baseline && <RestoreOriginal baseline={baseline} profiles={profiles} onUpdate={onUpdate} />}
+      {baseline && <RestoreOriginal baseline={baseline} profiles={profiles} onRestore={onRestore} />}
 
       {profiles.length === 0 && <p className="muted">No packs yet.</p>}
 
@@ -129,7 +152,7 @@ export function Packs({
               >
                 Export pack
               </button>
-              <button className="btn danger" type="button" onClick={() => onDelete(profile.id)}>
+              <button className="btn danger" type="button" onClick={() => void confirmDelete(profile)}>
                 Delete
               </button>
             </div>
@@ -156,12 +179,35 @@ export function Packs({
 function RestoreOriginal({
   baseline,
   profiles,
-  onUpdate,
+  onRestore,
 }: {
   baseline: Baseline;
   profiles: Profile[];
-  onUpdate: (profile: Profile) => void;
+  onRestore: (profile: Profile) => void;
 }) {
+  const { confirm, dialog } = useConfirm();
+
+  async function confirmRestore(profile: Profile) {
+    const drift = diffProfiles(baseline.activeOrder, profile.activeOrder);
+    const ok = await confirm({
+      title: `Restore "${profile.name}" to the original order?`,
+      body: (
+        <>
+          <p>
+            This replaces the pack's current arrangement with the {baseline.activeOrder.length} mods recorded
+            on {baseline.capturedAt.slice(0, 10)}.
+          </p>
+          <p>
+            Discards: {drift.added.length} added, {drift.removed.length} removed
+            {drift.reordered ? ", and the current ordering" : ""}.
+          </p>
+          <p className="muted">Undoable from the Doctor tab afterwards.</p>
+        </>
+      ),
+      confirmLabel: "Restore",
+    });
+    if (ok) onRestore({ ...profile, activeOrder: [...baseline.activeOrder] });
+  }
   const drifted = profiles.filter((p) => {
     const drift = diffProfiles(baseline.activeOrder, p.activeOrder);
     return drift.added.length > 0 || drift.removed.length > 0 || drift.reordered;
@@ -170,6 +216,7 @@ function RestoreOriginal({
 
   return (
     <div className="restore">
+      {dialog}
       <div className="restore-text">
         <b>Original load order</b>
         <small>
@@ -185,7 +232,7 @@ function RestoreOriginal({
             className="btn"
             type="button"
             title={`+${drift.added.length} -${drift.removed.length}${drift.reordered ? " reordered" : ""}`}
-            onClick={() => onUpdate({ ...profile, activeOrder: [...baseline.activeOrder] })}
+            onClick={() => void confirmRestore(profile)}
           >
             Restore {profile.name}
           </button>

@@ -164,6 +164,10 @@ Auto still cannot touch disk unasked. A decision that resolves to removing files
 
 The run streams into a terminal-style console: what was scanned, how long the analysis took, each repair as it lands, and an estimated wall-clock for the staged file work. That estimate comes from a throughput model calibrated against timed runs on a real install (30 ms per file plus 15 ms per megapixel), validated to within 1% on a 30-file sample.
 
+Every finding is accounted for in the summary, including the ones proposing no repair because none is wanted. Reporting "none auto-fixable" while twelve of fifteen findings were informational notes and three had already been staged was wrong on both counts.
+
+Anything that cannot be undone asks first: deleting a pack, restoring the original order. The dialog says what will be lost and what will not, and Escape cancels while Enter is deliberately unbound so a destructive action always needs a real click.
+
 **Fix all automatic** applies every deterministic pack repair in one go. Each is planned against the result of the previous one, so a batch can never apply two conflicting edits to the same load order, and the whole batch undoes as a unit.
 
 ### Settings and developer mode

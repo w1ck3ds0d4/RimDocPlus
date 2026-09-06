@@ -2183,3 +2183,19 @@ tr.dev-error td {
   text-align: right;
   overflow-wrap: anywhere;
 }
+
+.modal.confirm {
+  width: min(460px, 100%);
+}
+
+.modal.confirm .modal-body p {
+  margin: 0 0 9px;
+}
+
+.modal.confirm .modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.modal.confirm .modal-foot {
+  margin-top: 14px;
+}
