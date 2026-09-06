@@ -1,4 +1,4 @@
-# RimDoc specification
+# RimDoc+ specification
 
 Working spec for the product. Sections marked BUILT exist in the repo today; everything
 else is design intent and can still change.
@@ -18,7 +18,7 @@ RimWorld mod lists routinely pass 200 entries. At that size the failure modes ar
 5. Late-colony TPS collapse with no attribution of which mod is responsible.
 6. A mod targeting an older cycle loads fine and dies three hours later.
 
-RimDoc targets 1, 2, 3, 5, and 6. Load-order sorting is table stakes and is treated as
+RimDoc+ targets 1, 2, 3, 5, and 6. Load-order sorting is table stakes and is treated as
 a supporting feature, not the product.
 
 ## 2. Architecture
@@ -134,6 +134,13 @@ disabled.
 
 ## 6. Repair engine
 
+Tier 1 is BUILT. A repair produces a _plan_ rather than performing an edit, and the plan
+is always shown before it can be run. Plans come in four shapes, split by what the repair
+has to touch: `pack` (app state, instant, undoable), `choice` (needs a human decision),
+`files` (a list of paths plus a script that backs each one up), and `external` (only the
+player can do it). The same plan is what the shell will execute directly once it exists,
+so nothing about the repair layer changes when the shell lands, only its executor.
+
 Every repair is graded by tier. Nothing above Tier 1 is ever silent.
 
 **Tier 1, metadata.** Stamp a missing `supportedVersions` entry, fix a malformed
@@ -166,7 +173,7 @@ known-bad patch's exception so the mod degrades instead of crashing.
 ### Fix registry (planned)
 
 Repairs are shareable as **recipes**, not as mod files: a signed patch keyed on
-`packageId + modVersion + gameVersion`, applied locally to the user's own copy. RimDoc
+`packageId + modVersion + gameVersion`, applied locally to the user's own copy. RimDoc+
 never hosts modified mod files, which keeps redistribution off the table entirely.
 
 Every recipe can be exported as a diff addressed to the mod author, and authors can opt

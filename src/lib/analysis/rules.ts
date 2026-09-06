@@ -45,7 +45,13 @@ function ruleOrphanActive(scan: ScanResult, byId: Map<string, ModEntry>): Findin
         "at load, and any save that used their content reports missing defs.",
       packageIds: orphans,
       count: orphans.length,
-      fix: { kind: "remove-orphan-entries", label: "Remove from load order", tier: 1, auto: true },
+      fix: {
+        kind: "remove-orphan-entries",
+        label: "Remove from load order",
+        tier: 1,
+        auto: true,
+        params: { ids: orphans },
+      },
     },
   ];
 }
@@ -70,7 +76,13 @@ function ruleDuplicatePackageId(scan: ScanResult): Finding[] {
         `rest, so which copy wins is not something you control:\n` +
         mods.map((m) => `  ${m.source}: ${m.folder}`).join("\n"),
       packageIds: [packageId],
-      fix: { kind: "pick-duplicate-winner", label: "Choose which copy to keep", tier: 1, auto: false },
+      fix: {
+        kind: "pick-duplicate-winner",
+        label: "Choose which copy to keep",
+        tier: 1,
+        auto: false,
+        params: { packageId, folders: mods.map((m) => m.folder) },
+      },
     }));
 }
 
@@ -93,7 +105,13 @@ function ruleDlcAfterMods(scan: ScanResult, position: Map<string, number>): Find
         "mods that patch its defs ran before those defs existed, so their patches silently did nothing.",
       packageIds: late,
       count: late.length,
-      fix: { kind: "hoist-official-content", label: "Move expansions to the top", tier: 1, auto: true },
+      fix: {
+        kind: "hoist-official-content",
+        label: "Move expansions to the top",
+        tier: 1,
+        auto: true,
+        params: { ids: late },
+      },
     },
   ];
 }
@@ -121,7 +139,13 @@ function ruleBootstrapPosition(
         "This has to initialise before any mod shipping compiled C#, otherwise those mods patch " +
         "against an unpatched runtime and fail in ways the log cannot attribute.",
       packageIds: [id, ...earlier],
-      fix: { kind: "hoist-bootstrap", label: "Move to the top of the list", tier: 1, auto: true },
+      fix: {
+        kind: "hoist-bootstrap",
+        label: "Move to the top of the list",
+        tier: 1,
+        auto: true,
+        params: { id },
+      },
     });
   }
   return findings;
@@ -145,7 +169,13 @@ function ruleMissingDependency(
         title: `${mod.name} needs ${dep.displayName ?? depId}`,
         detail: `Required dependency "${depId}" is neither enabled nor installed.`,
         packageIds: [mod.packageId, depId],
-        fix: { kind: "install-dependency", label: "Find and install it", tier: 1, auto: false },
+        fix: {
+          kind: "install-dependency",
+          label: "Find on the Workshop",
+          tier: 1,
+          auto: false,
+          params: { dependency: depId, name: dep.displayName ?? depId },
+        },
       });
     }
   }
@@ -170,7 +200,13 @@ function ruleInactiveDependency(
         title: `${mod.name} needs ${byId.get(depId)?.name ?? depId}, which is disabled`,
         detail: "The dependency is installed but not in the active list. Enabling it fixes this.",
         packageIds: [mod.packageId, depId],
-        fix: { kind: "enable-dependency", label: "Enable it", tier: 1, auto: true },
+        fix: {
+          kind: "enable-dependency",
+          label: "Enable it",
+          tier: 1,
+          auto: true,
+          params: { dependency: depId },
+        },
       });
     }
   }
@@ -199,7 +235,13 @@ function ruleIncompatiblePair(
         title: `${mod.name} is incompatible with ${byId.get(other)?.name ?? other}`,
         detail: "Both are enabled. Expect broken content or hard errors wherever they overlap.",
         packageIds: [mod.packageId, other],
-        fix: { kind: "disable-one-of", label: "Disable one of them", tier: 1, auto: false },
+        fix: {
+          kind: "disable-one-of",
+          label: "Disable one of them",
+          tier: 1,
+          auto: false,
+          params: { candidates: [mod.packageId, other] },
+        },
       });
     }
   }
@@ -233,7 +275,13 @@ function orderFinding(mod: ModEntry, other: string, direction: "after" | "before
     title: `${mod.name} should load ${direction} ${other}`,
     detail: `The mod declares ${tag} but the current order does the opposite.`,
     packageIds: [mod.packageId, other],
-    fix: { kind: "reorder", label: "Fix the order", tier: 1, auto: true },
+    fix: {
+      kind: "reorder",
+      label: "Fix the order",
+      tier: 1,
+      auto: true,
+      params: { mod: mod.packageId, other, direction },
+    },
   };
 }
 
@@ -263,6 +311,7 @@ function ruleVersionMismatch(active: ModEntry[], gameCycle: string): Finding[] {
         label: `Stamp ${gameCycle} into About.xml`,
         tier: 1,
         auto: true,
+        params: { ids: stale.map((m) => m.packageId), cycle: gameCycle },
       },
     },
   ];

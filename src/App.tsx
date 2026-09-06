@@ -8,6 +8,8 @@ import { FindingList, SeveritySummary } from "./components/Findings";
 import { PackEditor } from "./components/PackEditor";
 import { Packs } from "./components/Packs";
 import { SessionReport } from "./components/SessionReport";
+import { RepairProvider } from "./components/Repair";
+import { autoPackRepairs } from "./lib/repair/repairs";
 
 type Tab = "doctor" | "session" | "packs" | "order";
 
@@ -18,6 +20,8 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("doctor");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Every repair pushes the pack it replaced, so any applied fix is one click from undone.
+  const [undoStack, setUndoStack] = useState<{ profile: Profile; label: string }[]>([]);
 
   useEffect(() => {
     Promise.all([loadScan(), loadSession()])
@@ -53,6 +57,29 @@ export default function App() {
     setProfiles((current) => [...current, profile]);
     setActiveId(profile.id);
   }, []);
+
+  /**
+   * Commit a repaired pack, remembering the one it replaced.
+   *
+   * Both updates are issued side by side rather than nesting one inside the other's
+   * updater. React re-invokes updaters (twice under StrictMode), so a setState hidden
+   * in one pushed the same undo entry twice per repair.
+   */
+  const applyProfile = useCallback(
+    (profile: Profile, label: string) => {
+      const previous = profiles.find((p) => p.id === profile.id);
+      if (previous) setUndoStack((stack) => [{ profile: previous, label }, ...stack].slice(0, 20));
+      setProfiles((current) => current.map((p) => (p.id === profile.id ? profile : p)));
+    },
+    [profiles],
+  );
+
+  const undo = useCallback(() => {
+    const [last, ...rest] = undoStack;
+    if (!last) return;
+    setProfiles((current) => current.map((p) => (p.id === last.profile.id ? last.profile : p)));
+    setUndoStack(rest);
+  }, [undoStack]);
 
   const remove = useCallback(
     (id: string) => {
@@ -103,11 +130,17 @@ export default function App() {
   if (loading) return <main />;
   if (!scan || !workingScan) return <NoFixtures />;
 
+  // Repairs that need no judgement and touch only the pack, chained so a batch cannot
+  // apply two conflicting edits to one load order.
+  const autoFixes = active ? autoPackRepairs(staticFindings, { scan: workingScan, profile: active }) : [];
+
   const drift = active ? diffProfiles(scan.activeOrder, active.activeOrder) : null;
   const dirty = drift ? drift.added.length > 0 || drift.removed.length > 0 || drift.reordered : false;
 
   return (
-    <>
+    <RepairProvider
+      value={{ scan: workingScan, profile: active ?? profileFromScan(scan, "scratch"), applyProfile }}
+    >
       <header className="hdr">
         <Logo />
         {active && (
@@ -146,6 +179,25 @@ export default function App() {
         {tab === "doctor" && (
           <>
             <SeveritySummary findings={staticFindings} />
+            <div className="toolbar">
+              <button
+                className="btn primary"
+                type="button"
+                disabled={!autoFixes.length}
+                title="Applies every deterministic pack-level repair. Nothing on disk changes."
+                onClick={() => {
+                  const last = autoFixes[autoFixes.length - 1];
+                  if (last) applyProfile(last.plan.profile, `fix all (${autoFixes.length})`);
+                }}
+              >
+                {autoFixes.length ? `Fix all automatic (${autoFixes.length})` : "Nothing to auto-fix"}
+              </button>
+              {undoStack.length > 0 && (
+                <button className="btn" type="button" onClick={undo}>
+                  Undo {undoStack[0].label}
+                </button>
+              )}
+            </div>
             <FindingList
               findings={staticFindings}
               empty="No static problems found. This load order is structurally sound."
@@ -184,14 +236,14 @@ export default function App() {
             <p className="muted">Create a pack first.</p>
           ))}
       </main>
-    </>
+    </RepairProvider>
   );
 }
 
 /** RD with a medical cross: the mark reads as a doctor, not a mod list. */
 function Logo() {
   return (
-    <div className="brand" aria-label="RimDoc" title="RimDoc">
+    <div className="brand" aria-label="RimDoc+" title="RimDoc+">
       <span className="r">R</span>
       <span className="d">D</span>
       <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">

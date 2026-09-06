@@ -1,5 +1,5 @@
 {
-  "name": "rimdoc",
+  "name": "rimdocplus",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -13,10 +13,10 @@
   ],
   "author": "w1ck3ds0d4 <daniel.svs@outlook.com>",
   "license": "AGPL-3.0-or-later",
-  "homepage": "https://github.com/w1ck3ds0d4/RimDoc",
+  "homepage": "https://github.com/w1ck3ds0d4/RimDocPlus",
   "repository": {
     "type": "git",
-    "url": "https://github.com/w1ck3ds0d4/RimDoc"
+    "url": "https://github.com/w1ck3ds0d4/RimDocPlus"
   },
   "scripts": {
     "dev": "vite",

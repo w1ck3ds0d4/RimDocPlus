@@ -1,6 +1,7 @@
 import type { ModEntry, ScanResult } from "../lib/types";
 import type { Profile } from "../lib/profiles";
 import { diffProfiles, duplicateProfile, profileFromScan, toModsConfigXml } from "../lib/profiles";
+import { download, slug } from "../lib/download";
 
 export function Packs({
   profiles,
@@ -143,22 +144,4 @@ function nextName(profiles: Profile[], base: string): string {
   for (let n = 2; ; n++) {
     if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
   }
-}
-
-function slug(name: string): string {
-  return (
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "pack"
-  );
-}
-
-function download(filename: string, contents: string): void {
-  const url = URL.createObjectURL(new Blob([contents], { type: "application/octet-stream" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }

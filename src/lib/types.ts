@@ -63,6 +63,12 @@ export interface ProposedFix {
   tier: FixTier;
   /** True when the repair is deterministic and needs no human judgement. */
   auto: boolean;
+  /**
+   * Arguments the repair needs, supplied by the rule that raised the finding. Repairs
+   * never re-derive their target by parsing a finding id, so a rule can change how it
+   * phrases a finding without silently breaking the repair attached to it.
+   */
+  params?: Record<string, string | string[]>;
 }
 
 export interface Finding {

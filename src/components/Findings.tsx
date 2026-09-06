@@ -1,6 +1,7 @@
 import type { Finding, Severity } from "../lib/types";
 import { SEVERITY_ORDER, sortFindings } from "../lib/types";
 import { frameKind } from "../lib/analysis/logParser";
+import { RepairAction } from "./Repair";
 
 const SEVERITIES: Severity[] = ["critical", "error", "warning", "info"];
 
@@ -71,13 +72,7 @@ function FindingRow({ finding }: { finding: Finding }) {
         {finding.frames && finding.frames.length > 0 && <StackTrace frames={finding.frames} />}
 
         <div className="f-foot">
-          {finding.fix && (
-            <button className="btn" type="button" disabled title="Repair engine lands in the next slice">
-              {finding.fix.label}
-              <span className="tier">T{finding.fix.tier}</span>
-              {finding.fix.auto && <span className="auto">auto</span>}
-            </button>
-          )}
+          <RepairAction finding={finding} />
           {finding.firstLine && <span className="f-line">log line {finding.firstLine}</span>}
         </div>
       </div>

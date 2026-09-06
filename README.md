@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="RimDoc - diagnose, repair, supervise" />
+  <img src="assets/banner.svg" alt="RimDoc+ - diagnose, repair, supervise" />
 </p>
 
 **Diagnose, repair, and supervise a modded RimWorld install**
 
-RimDoc is a desktop companion for large RimWorld mod lists. It reads your install, proves what will break before you press Play, supervises the game while it runs with a structured live log, and turns the wreckage of a crash into a ranked list of causes with repairs attached. Where a mod manager answers "what order do these load in", RimDoc answers "why is my colony throwing 40,000 red errors and which of my 253 mods did it".
+RimDoc+ is a desktop companion for large RimWorld mod lists. It reads your install, proves what will break before you press Play, supervises the game while it runs with a structured live log, and turns the wreckage of a crash into a ranked list of causes with repairs attached. Where a mod manager answers "what order do these load in", RimDoc+ answers "why is my colony throwing 40,000 red errors and which of my 253 mods did it".
 
 Built as a Tauri v2 desktop app (Rust + React + TypeScript), with a .NET sidecar for assembly inspection. The parsing and diagnostic layers are pure TypeScript, so the whole rules engine runs headless under `vitest` against fixtures captured from a real install.
 
-> **Design rule:** RimDoc never edits a mod in place. Every repair is either an overlay mod that loads after the target or a derived copy in the vault with a diff attached, so the original stays pristine and every change is one click from reverted. Fixes are distributed as recipes applied to your own copy, never as redistributed mod files.
+> **Design rule:** RimDoc+ never edits a mod in place. Every repair is either an overlay mod that loads after the target or a derived copy in the vault with a diff attached, so the original stays pristine and every change is one click from reverted. Fixes are distributed as recipes applied to your own copy, never as redistributed mod files.
 
 ---
 
@@ -70,6 +70,19 @@ A pack is a named, saved mod list: the set of package ids you want the game to r
 
 **The doctor analyses the pack you are editing, not the load order the game happens to hold.** Toggling a mod updates the findings immediately. Turning off a framework that 53 mods depend on surfaces 53 findings before you ever launch the game.
 
+### Repairs
+
+Every finding that has a repair explains its plan before anything happens. The button reveals what would change; only the plan carries the action.
+
+Repairs split by what they actually have to touch:
+
+- **Pack repairs** apply instantly and are fully undoable, because a pack is app state: drop orphan entries, enable a disabled dependency, reorder to satisfy constraints. Nothing on disk changes.
+- **Choice repairs** refuse to guess. Two mods declaring mutual incompatibility, or one package id in two folders, is a decision only you can make, so RimDoc+ lays out the options and their consequences.
+- **File repairs** list every path they would touch, then generate a PowerShell script that backs up each file before changing it. Stamping a version into `About.xml`, resetting a mod's settings, restoring `ModsConfig.xml` after the game wiped it.
+- **External repairs** are the ones no tool can do for you, such as resubscribing to a Workshop item, and link straight to the right page.
+
+**Fix all automatic** applies every deterministic pack repair in one go. Each is planned against the result of the previous one, so a batch can never apply two conflicting edits to the same load order, and the whole batch undoes as a unit.
+
 ## Tech Stack
 
 | Layer               | Choice                                | Why                                                                                      |
@@ -121,7 +134,8 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 - **Mod vault**: content-addressed local store so Steam updates land as new versions instead of overwriting a working setup
 - **Supervised launch**: child-process control, live structured log stream, crash and hang detection, case-file capture
 - **Auto-bisect**: binary search across the mod list to isolate a minimal breaking set unattended
-- **Repair engine**: Tiers 1 through 4 are specified and surfaced in the UI as disabled buttons, not yet applied
+- **Applying file repairs directly.** The plan and the backing-up script are real; writing to disk from the app needs the shell.
+- **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
 - **L2 and L3 testing**: headless boot check and scripted soak run with TPS attribution
 - **A/B benchmarking**: same save, two profiles, measured locally
 - **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path
@@ -134,4 +148,4 @@ This project is dual-licensed:
 - [AGPL v3](LICENSE) - free for open-source use. Derivatives and SaaS deployments must release their source under AGPL.
 - [Commercial license](COMMERCIAL.md) - for proprietary / closed-source use or hosted services that do not want to comply with AGPL source-disclosure requirements. Contact for terms.
 
-RimDoc is an unofficial community tool. It is not affiliated with or endorsed by Ludeon Studios.
+RimDoc+ is an unofficial community tool. It is not affiliated with or endorsed by Ludeon Studios.
