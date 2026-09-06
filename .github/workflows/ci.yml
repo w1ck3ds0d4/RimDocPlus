@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Ubuntu for now: the analysis layer is pure TypeScript and the Tauri shell does
+    # not exist yet. Move to windows-latest when the Rust core lands.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Type-checks and builds the frontend. Runs without dev fixtures present,
+      # which is what a fresh clone looks like.
+      - name: Type-check and build
+        run: pnpm build
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Formatting
+        run: pnpm format:check

@@ -1,0 +1,92 @@
+/** Where a mod's files came from. Drives update behaviour and vault provenance. */
+export type ModSource = "official" | "steam" | "local" | "unknown";
+
+export interface ModDependency {
+  packageId: string;
+  displayName?: string;
+}
+
+/** One mod as it exists on disk, independent of whether it is enabled. */
+export interface ModEntry {
+  packageId: string;
+  name: string;
+  author?: string;
+  /** Absolute folder path the mod was read from. */
+  folder: string;
+  source: ModSource;
+  /** Workshop file id, when the mod came from Steam. */
+  steamId?: string;
+  supportedVersions: string[];
+  dependencies: ModDependency[];
+  incompatibleWith: string[];
+  loadAfter: string[];
+  loadBefore: string[];
+  /** Mod ships compiled C#, so it can Harmony-patch and can fail at runtime. */
+  hasAssemblies: boolean;
+  /** Mod ships XML PatchOperations, so it can fail at load time. */
+  hasPatches: boolean;
+  sizeBytes: number;
+  /** Set from ModsConfig.xml, not from the mod folder. */
+  active: boolean;
+  loadIndex: number | null;
+}
+
+export interface ScanPaths {
+  game?: string;
+  workshop?: string;
+  localMods?: string;
+  saveData?: string;
+  playerLog?: string;
+}
+
+export interface ScanResult {
+  scannedAt: string;
+  /** Version string from ModsConfig.xml, e.g. "1.6.4871 rev590". */
+  gameVersion: string;
+  /** Major.minor only, e.g. "1.6". This is what About.xml files match against. */
+  gameCycle: string;
+  paths: ScanPaths;
+  mods: ModEntry[];
+  /** packageIds in ModsConfig load order, lowercased. May include ids with no folder. */
+  activeOrder: string[];
+}
+
+export type Severity = "critical" | "error" | "warning" | "info";
+
+/** How much machinery a repair needs, and how much can go wrong. See docs/SPEC.md. */
+export type FixTier = 1 | 2 | 3 | 4;
+
+export interface ProposedFix {
+  /** Stable identifier for the repair the engine would perform. */
+  kind: string;
+  label: string;
+  tier: FixTier;
+  /** True when the repair is deterministic and needs no human judgement. */
+  auto: boolean;
+}
+
+export interface Finding {
+  id: string;
+  rule: string;
+  severity: Severity;
+  title: string;
+  detail: string;
+  /** Mods implicated, most-responsible first. */
+  packageIds: string[];
+  fix?: ProposedFix;
+  /** Times this was observed. Log findings collapse duplicates into a count. */
+  count?: number;
+}
+
+export const SEVERITY_ORDER: Record<Severity, number> = {
+  critical: 0,
+  error: 1,
+  warning: 2,
+  info: 3,
+};
+
+export function sortFindings(findings: Finding[]): Finding[] {
+  return [...findings].sort(
+    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || (b.count ?? 1) - (a.count ?? 1),
+  );
+}

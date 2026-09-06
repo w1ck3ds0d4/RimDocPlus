@@ -1,0 +1,48 @@
+{
+  "name": "rimdoc",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Diagnose, repair, and supervise a modded RimWorld install.",
+  "keywords": [
+    "rimworld",
+    "mod-manager",
+    "diagnostics",
+    "tauri",
+    "desktop"
+  ],
+  "author": "w1ck3ds0d4 <daniel.svs@outlook.com>",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://github.com/w1ck3ds0d4/RimDoc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/w1ck3ds0d4/RimDoc"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "scan": "node scripts/scan.mjs",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "lucide-react": "^1.11.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "prettier": "^3.9.0",
+    "typescript": "~5.6.3",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.9"
+  }
+}
