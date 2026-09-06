@@ -3,7 +3,14 @@ import type { Finding, ScanResult, WorkshopCache } from "./lib/types";
 import { runStaticRules } from "./lib/analysis/rules";
 import { analyzeLog, findingsFromLog, type SessionAnalysis } from "./lib/analysis/logParser";
 import { loadScan, loadSession, loadWorkshop } from "./lib/devData";
-import { diffProfiles, loadProfiles, profileFromScan, saveProfiles, type Profile } from "./lib/profiles";
+import {
+  diffProfiles,
+  loadProfiles,
+  profileFromScan,
+  saveProfiles,
+  setupName,
+  type Profile,
+} from "./lib/profiles";
 import { FindingList, SeveritySummary, useSeverityFilter } from "./components/Findings";
 import { PackEditor } from "./components/PackEditor";
 import { Packs } from "./components/Packs";
@@ -37,11 +44,10 @@ export default function App() {
         // that nothing can edit, and a working copy to actually change. Any later mistake
         // is then one click from undone, whatever else has happened since.
         const seeded = stored.length
-          ? stored
-          : [
-              { ...profileFromScan(s, "Original version"), locked: true },
-              profileFromScan(s, "Current game setup"),
-            ];
+          ? // Packs saved before the name depended on the install keep working; only
+            // the placeholder name is brought up to date.
+            stored.map((p) => (p.name === "Current game setup" ? { ...p, name: setupName(s) } : p))
+          : [{ ...profileFromScan(s, "Original version"), locked: true }, profileFromScan(s, setupName(s))];
         setProfiles(seeded);
         setActiveId(seeded.find((p) => !p.locked)?.id ?? seeded[0].id);
       })

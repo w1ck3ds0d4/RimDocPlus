@@ -35,6 +35,19 @@ export function newProfileId(): string {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/**
+ * What to call the pack seeded from the install as found.
+ *
+ * Official content is not a mod, so a load order carrying only Ludeon entries is vanilla
+ * however many DLCs are in it. An enabled id with no folder counts as modded: a vanilla
+ * install has nothing to be missing.
+ */
+export function setupName(scan: ScanResult): string {
+  const bySource = new Map(scan.mods.map((m) => [m.packageId, m.source]));
+  const modded = scan.activeOrder.some((id) => (bySource.get(id) ?? "unknown") !== "official");
+  return modded ? "Modded Game Setup" : "Vanilla Game Setup";
+}
+
 /** Snapshot whatever the game is currently set to run. */
 export function profileFromScan(scan: ScanResult, name: string): Profile {
   const now = new Date().toISOString();

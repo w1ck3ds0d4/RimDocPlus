@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { ModEntry } from "./types";
-import { diffProfiles, moveMod, setEnabled, sortLoadOrder, toModsConfigXml, toggleMod } from "./profiles";
+import {
+  diffProfiles,
+  moveMod,
+  setEnabled,
+  setupName,
+  sortLoadOrder,
+  toModsConfigXml,
+  toggleMod,
+} from "./profiles";
 
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
   return {
@@ -166,5 +174,52 @@ describe("toModsConfigXml", () => {
     expect(xml).toContain("<version>1.6.4871 rev590</version>");
     expect(xml).toContain("<li>zetrith.prepatcher</li>");
     expect(xml.indexOf("zetrith.prepatcher")).toBeLessThan(xml.indexOf("ludeon.rimworld"));
+  });
+});
+
+describe("setupName", () => {
+  function scanWith(mods: ModEntry[], activeOrder: string[]) {
+    return {
+      scannedAt: "2026-01-01T00:00:00.000Z",
+      gameVersion: "1.6.4871 rev590",
+      gameCycle: "1.6",
+      paths: {},
+      mods,
+      activeOrder,
+    };
+  }
+
+  it("calls an install with third-party mods modded", () => {
+    const scan = scanWith(
+      [mod("ludeon.rimworld", { source: "official" }), mod("some.mod")],
+      ["ludeon.rimworld", "some.mod"],
+    );
+    expect(setupName(scan)).toBe("Modded Game Setup");
+  });
+
+  it("calls official content alone vanilla, however many DLCs", () => {
+    const official = ["ludeon.rimworld", "ludeon.rimworld.royalty", "ludeon.rimworld.odyssey"];
+    const scan = scanWith(
+      official.map((id) => mod(id, { source: "official" })),
+      official,
+    );
+    expect(setupName(scan)).toBe("Vanilla Game Setup");
+  });
+
+  it("calls an empty load order vanilla", () => {
+    expect(setupName(scanWith([], []))).toBe("Vanilla Game Setup");
+  });
+
+  it("treats an enabled id with no folder as modded, since vanilla cannot be missing one", () => {
+    const scan = scanWith([mod("ludeon.rimworld", { source: "official" })], ["ludeon.rimworld", "gone.mod"]);
+    expect(setupName(scan)).toBe("Modded Game Setup");
+  });
+
+  it("ignores installed-but-disabled mods", () => {
+    const scan = scanWith(
+      [mod("ludeon.rimworld", { source: "official" }), mod("off.mod")],
+      ["ludeon.rimworld"],
+    );
+    expect(setupName(scan)).toBe("Vanilla Game Setup");
   });
 });
