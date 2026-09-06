@@ -1,23 +1,63 @@
+/* RimDoc, slate and blue.
+   Neutral greys carry the structure; blue is reserved for interactive state and the
+   brand mark, so severity colours stay the only other saturated thing on screen. */
+
 :root {
-  --bg: #12140f;
-  --panel: #1a1d16;
-  --panel-2: #212519;
-  --line: #2f3524;
-  --text: #dde3d0;
-  --dim: #8a9377;
-  --accent: #a3b86c;
-  --critical: #e05252;
-  --error: #d97a3a;
-  --warning: #d9b23a;
-  --info: #5a9bd4;
-  --ok: #7ab85a;
+  --bg: #0f1216;
+  --panel: #161b22;
+  --panel-2: #1c232c;
+  --panel-3: #222b36;
+  --line: #27313d;
+  --line-soft: #1f2731;
+
+  --text: #dfe6ee;
+  --text-soft: #b3c0cd;
+  --dim: #7d8b9a;
+
+  --accent: #4a9eff;
+  --accent-soft: #2b6fbf;
+  --accent-ghost: rgba(74, 158, 255, 0.13);
+
+  --critical: #f0616d;
+  --error: #ef8a44;
+  --warning: #d9ab41;
+  --info: #4a9eff;
+  --ok: #4ec98b;
+
   --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+  --radius: 7px;
 
   color-scheme: dark;
+  scrollbar-color: var(--line) transparent;
+  scrollbar-width: thin;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Themed scrollbars, everywhere a scroll can happen. */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border: 2px solid var(--bg);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-soft);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--bg);
 }
 
 body {
@@ -25,45 +65,103 @@ body {
   background: var(--bg);
   color: var(--text);
   font:
-    13px/1.5 system-ui,
+    13px/1.55 system-ui,
     -apple-system,
     "Segoe UI",
     sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow: hidden;
+}
+
+.muted {
+  color: var(--dim);
 }
 
 /* Header ------------------------------------------------------------------ */
 
 .hdr {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 20px;
-  padding: 12px 18px;
+  gap: 10px 18px;
+  padding: 10px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+  flex: none;
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
   font-family: var(--mono);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  flex: none;
+}
+
+.brand .r {
+  color: #ffffff;
+}
+
+.brand .d {
   color: var(--accent);
 }
 
-.brand span {
+.brand svg {
+  display: block;
+  margin-left: 3px;
+}
+
+.pack-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.pack-badge small {
   color: var(--dim);
-  font-weight: 400;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  flex: none;
+}
+
+.pack-badge b {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pack-badge.dirty {
+  border-color: var(--accent-soft);
+}
+
+.pack-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
 }
 
 .facts {
   display: flex;
-  gap: 22px;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-left: auto;
 }
 
@@ -71,19 +169,29 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  padding: 3px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
 }
 
 .fact b {
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .fact small {
   color: var(--dim);
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.7px;
+  white-space: nowrap;
+}
+
+.fact.alert b {
+  color: var(--warning);
 }
 
 /* Tabs -------------------------------------------------------------------- */
@@ -91,18 +199,30 @@ body {
 .tabs {
   display: flex;
   gap: 2px;
-  padding: 0 18px;
+  padding: 0 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: none;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
-  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--dim);
   font: inherit;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -116,29 +236,36 @@ body {
 }
 
 .tab .pill {
-  margin-left: 7px;
   padding: 1px 6px;
   border-radius: 9px;
-  background: var(--panel-2);
+  background: var(--panel-3);
+  color: var(--dim);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
+}
+
+.tab[aria-selected="true"] .pill {
+  background: var(--accent-ghost);
+  color: var(--accent);
 }
 
 /* Layout ------------------------------------------------------------------ */
 
 main {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 18px;
+  overflow-x: hidden;
+  padding: 16px;
 }
 
 .empty {
   max-width: 620px;
-  margin: 60px auto;
+  margin: 56px auto;
   padding: 22px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .empty h2 {
@@ -161,28 +288,95 @@ main {
   color: var(--accent);
 }
 
-/* Findings ---------------------------------------------------------------- */
+.section-title {
+  margin: 20px 0 8px;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+}
+
+/* Buttons ----------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text-soft);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--panel-3);
+  border-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.btn.primary {
+  background: var(--accent-ghost);
+  border-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+.btn.danger:hover:not(:disabled) {
+  border-color: var(--critical);
+  color: var(--critical);
+}
+
+.btn .tier,
+.btn .auto {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.btn .auto {
+  color: var(--ok);
+}
+
+/* Severity summary -------------------------------------------------------- */
 
 .summary {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .chip {
-  flex: 1;
-  padding: 12px 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 9px 13px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--sev, var(--dim));
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .chip b {
-  display: block;
   font-family: var(--mono);
-  font-size: 22px;
-  line-height: 1.1;
+  font-size: 20px;
+  line-height: 1;
   color: var(--sev, var(--text));
 }
 
@@ -190,23 +384,39 @@ main {
   color: var(--dim);
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.7px;
 }
 
+.chip.zero {
+  opacity: 0.42;
+}
+
+.chip.zero b {
+  color: var(--dim);
+}
+
+/* Findings ---------------------------------------------------------------- */
+
+.finding-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* Severity reads from the dot alone. A coloured edge on every card turned the list into
+   a stripe of unrelated hues before the reader got to a single word of it. */
 .finding {
-  margin-bottom: 8px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-left: 3px solid var(--sev);
-  border-radius: 6px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
 .finding > summary {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 9px;
+  padding: 10px 13px;
   cursor: pointer;
   list-style: none;
 }
@@ -229,40 +439,44 @@ main {
 
 .f-title {
   flex: 1;
+  min-width: 0;
   font-weight: 500;
 }
 
 .f-count {
+  flex: none;
   padding: 1px 7px;
   border-radius: 9px;
-  background: var(--panel-2);
-  color: var(--dim);
+  background: var(--panel-3);
+  color: var(--text-soft);
   font-family: var(--mono);
   font-size: 11px;
 }
 
 .f-rule {
+  flex: none;
   color: var(--dim);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .f-body {
-  padding: 4px 14px 14px 31px;
-  border-top: 1px solid var(--line);
+  padding: 12px 13px 13px;
+  border-top: 1px solid var(--line-soft);
 }
 
 .f-detail {
-  margin: 10px 0;
-  color: var(--dim);
+  margin: 0 0 11px;
+  color: var(--text-soft);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .f-mods {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
-  margin-bottom: 10px;
+  margin-bottom: 11px;
 }
 
 .f-mods span {
@@ -272,82 +486,176 @@ main {
   border-radius: 4px;
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--text);
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
 }
 
-.fix {
-  display: inline-flex;
+.f-mods .more {
+  border-style: dashed;
+  color: var(--dim);
+}
+
+.f-foot {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
+  gap: 10px;
 }
 
-.fix:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.f-line {
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
 }
 
-.fix .tier {
-  padding: 1px 6px;
-  border-radius: 3px;
+/* Stack trace ------------------------------------------------------------- */
+
+.trace {
+  margin-bottom: 11px;
   background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.trace > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 11px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.trace > summary::-webkit-details-marker {
+  display: none;
+}
+
+.trace > summary::before {
+  content: "▸";
+  color: var(--dim);
+}
+
+.trace[open] > summary::before {
+  content: "▾";
+}
+
+.trace > summary:hover {
+  background: var(--panel);
+}
+
+.trace-meta {
   color: var(--dim);
   font-family: var(--mono);
   font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-.fix .auto {
-  color: var(--ok);
+.trace-body {
+  margin: 0;
+  padding: 6px 0;
+  border-top: 1px solid var(--line-soft);
+  max-height: 320px;
+  overflow: auto;
+  list-style: none;
+  counter-reset: frame;
 }
 
-/* Console ----------------------------------------------------------------- */
+.trace-body .fr {
+  display: flex;
+  gap: 10px;
+  padding: 1px 11px;
+}
+
+.trace-body .fr::before {
+  counter-increment: frame;
+  content: counter(frame);
+  flex: none;
+  width: 20px;
+  text-align: right;
+  color: var(--line);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  user-select: none;
+}
+
+.trace-body code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  white-space: pre;
+}
+
+/* Engine plumbing recedes; mod frames and patch annotations are the answer. */
+.fr.framework code {
+  color: var(--dim);
+}
+
+.fr.separator code {
+  color: var(--line);
+  font-style: italic;
+}
+
+.fr.mod code {
+  color: var(--text);
+}
+
+.fr.mod {
+  background: rgba(74, 158, 255, 0.06);
+}
+
+.fr.patch code {
+  color: var(--warning);
+}
+
+.fr.patch {
+  background: rgba(217, 171, 65, 0.07);
+}
+
+/* Session environment ----------------------------------------------------- */
 
 .env {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 18px;
   padding: 12px 14px;
   margin-bottom: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .env div {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .env small {
   color: var(--dim);
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.7px;
 }
 
 .env b {
   font-family: var(--mono);
+  font-size: 12px;
   font-weight: 500;
-}
-
-.section-title {
-  margin: 18px 0 8px;
-  color: var(--dim);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  overflow-wrap: anywhere;
 }
 
 .timings {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -355,8 +663,8 @@ main {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 7px 14px;
-  border-bottom: 1px solid var(--line);
+  padding: 7px 13px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .timing:last-child {
@@ -364,19 +672,19 @@ main {
 }
 
 .timing .label {
-  flex: none;
-  width: 300px;
+  flex: 1 1 40%;
+  min-width: 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .timing .bar {
-  flex: 1;
-  height: 6px;
-  background: var(--panel-2);
+  flex: 1 1 40%;
+  height: 5px;
+  background: var(--panel-3);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -384,27 +692,37 @@ main {
 .timing .bar i {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
 }
 
 .timing .ms {
   flex: none;
-  width: 72px;
+  width: 66px;
   text-align: right;
   font-family: var(--mono);
-  color: var(--dim);
+  font-size: 11.5px;
+  color: var(--text-soft);
 }
 
-/* Mod table --------------------------------------------------------------- */
+.source-path {
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* Toolbar ----------------------------------------------------------------- */
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
 
 .toolbar input {
-  flex: 1;
+  flex: 1 1 220px;
+  min-width: 0;
   padding: 7px 11px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -413,36 +731,89 @@ main {
   font: inherit;
 }
 
+.toolbar input::placeholder {
+  color: var(--dim);
+}
+
 .toolbar input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--accent-ghost);
+}
+
+.segmented {
+  display: flex;
+  flex: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: 7px 13px;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--line);
+  color: var(--dim);
+  font: inherit;
+  text-transform: capitalize;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.segmented button:last-child {
+  border-right: none;
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--accent-ghost);
+  color: var(--accent);
+}
+
+/* Tables ------------------------------------------------------------------ */
+
+/* The horizontal scroll lives here, so the page body itself never scrolls sideways. */
+.table-wrap {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-x: auto;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  min-width: 520px;
 }
 
 th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   padding: 8px 12px;
+  background: var(--panel-2);
   border-bottom: 1px solid var(--line);
   color: var(--dim);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 9.5px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.7px;
   text-align: left;
+  white-space: nowrap;
 }
 
 td {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: middle;
 }
 
-tr:last-child td {
+tbody tr:last-child td {
   border-bottom: none;
 }
 
@@ -451,84 +822,54 @@ tbody tr:hover {
 }
 
 td.idx,
-td.pid,
-td.size {
+td.pid {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--dim);
 }
 
-td.size {
-  text-align: right;
+td.name {
+  min-width: 150px;
+}
+
+td.pid {
+  overflow-wrap: anywhere;
 }
 
 .tag {
   display: inline-block;
-  padding: 1px 6px;
+  margin-right: 3px;
+  padding: 1px 5px;
   border-radius: 3px;
-  background: var(--panel-2);
+  background: var(--panel-3);
   border: 1px solid var(--line);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9.5px;
   color: var(--dim);
+  white-space: nowrap;
 }
 
 .tag.official {
   color: var(--accent);
-  border-color: var(--accent);
+  border-color: var(--accent-soft);
 }
 
 .tag.code {
-  color: var(--info);
+  color: var(--ok);
 }
 
-.tag.off {
-  color: var(--dim);
-  opacity: 0.6;
+tr.row-off td:not(.toggle-cell) {
+  opacity: 0.4;
 }
 
-/* Pack badge -------------------------------------------------------------- */
-
-.pack-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-}
-
-.pack-badge small {
-  color: var(--dim);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
-.pack-badge b {
-  font-family: var(--mono);
-  font-weight: 500;
-}
-
-.pack-badge.dirty {
-  border-color: var(--warning);
-}
-
-.pack-badge .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--warning);
-}
-
-/* Toggles ----------------------------------------------------------------- */
+/* Toggle ------------------------------------------------------------------ */
 
 .toggle {
+  display: block;
   width: 30px;
   height: 17px;
   padding: 0;
-  background: var(--panel-2);
+  background: var(--panel-3);
   border: 1px solid var(--line);
   border-radius: 9px;
   cursor: pointer;
@@ -550,8 +891,8 @@ td.size {
 }
 
 .toggle.on {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-color: var(--accent);
+  background: var(--accent-ghost);
+  border-color: var(--accent-soft);
 }
 
 .toggle.on i {
@@ -564,96 +905,59 @@ td.size {
   outline-offset: 2px;
 }
 
-tr.row-off td:not(:first-child) {
-  opacity: 0.45;
-}
-
-/* Order nudge ------------------------------------------------------------- */
-
 .nudge {
   display: inline-flex;
   gap: 3px;
 }
 
 .nudge button {
-  width: 22px;
-  height: 20px;
+  width: 21px;
+  height: 19px;
   padding: 0;
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--dim);
-  font-size: 9px;
+  font-size: 8px;
   line-height: 1;
   cursor: pointer;
 }
 
 .nudge button:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--accent-soft);
   color: var(--accent);
 }
 
 .nudge button:disabled {
-  opacity: 0.3;
+  opacity: 0.25;
   cursor: default;
-}
-
-/* Segmented control ------------------------------------------------------- */
-
-.segmented {
-  display: flex;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.segmented button {
-  padding: 7px 13px;
-  background: none;
-  border: none;
-  border-right: 1px solid var(--line);
-  color: var(--dim);
-  font: inherit;
-  text-transform: capitalize;
-  cursor: pointer;
-}
-
-.segmented button:last-child {
-  border-right: none;
-}
-
-.segmented button:hover {
-  color: var(--text);
-}
-
-.segmented button[aria-pressed="true"] {
-  background: var(--panel-2);
-  color: var(--accent);
 }
 
 /* Pack cards -------------------------------------------------------------- */
 
 .pack {
-  margin-bottom: 10px;
-  padding: 14px;
+  margin-bottom: 9px;
+  padding: 13px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .pack.current {
-  border-color: var(--accent);
+  border-color: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .pack-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
 }
 
 .pack-name {
-  flex: 1;
+  flex: 1 1 200px;
+  min-width: 0;
   padding: 4px 8px;
   background: transparent;
   border: 1px solid transparent;
@@ -669,13 +973,14 @@ tr.row-off td:not(:first-child) {
 .pack-name:focus {
   outline: none;
   background: var(--bg);
-  border-color: var(--accent);
+  border-color: var(--accent-soft);
 }
 
 .pack-count {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--dim);
+  white-space: nowrap;
 }
 
 .pack-drift {
@@ -700,7 +1005,59 @@ tr.row-off td:not(:first-child) {
   gap: 6px;
 }
 
-.fix.danger:hover {
-  border-color: var(--critical);
-  color: var(--critical);
+.note {
+  max-width: 660px;
+  color: var(--dim);
+}
+
+/* Narrow widths ----------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Package id duplicates the name for identification; the name wins when space is tight. */
+  .mod-table :is(th, td):nth-child(4) {
+    display: none;
+  }
+
+  table {
+    min-width: 340px;
+  }
+}
+
+@media (max-width: 620px) {
+  main {
+    padding: 12px;
+  }
+
+  .hdr {
+    padding: 9px 12px;
+  }
+
+  .facts {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .pack-badge {
+    flex: 1 1 100%;
+  }
+
+  .mod-table :is(th, td):nth-child(5) {
+    display: none;
+  }
+
+  .f-rule {
+    display: none;
+  }
+
+  .timing .label {
+    flex-basis: 55%;
+  }
+
+  .timing .bar {
+    display: none;
+  }
 }

@@ -80,6 +80,23 @@ describe("parseAbout", () => {
     expect(parseAbout({ ...base, xml: "<ModMetaData><name>Nameless</name></ModMetaData>" })).toBeNull();
   });
 
+  it("lists a dependency once even when both dependency blocks declare it", () => {
+    const xml = `
+      <ModMetaData>
+        <packageId>a.b</packageId>
+        <modDependencies>
+          <li><packageId>Oskar.VEF</packageId><displayName>Vanilla Expanded Framework</displayName></li>
+        </modDependencies>
+        <modDependenciesByVersion>
+          <li><packageId>oskar.vef</packageId></li>
+        </modDependenciesByVersion>
+      </ModMetaData>`;
+    const deps = parseAbout({ ...base, xml })!.dependencies;
+    expect(deps).toHaveLength(1);
+    // The primary block wins, so the human-readable name survives the dedupe.
+    expect(deps[0].displayName).toBe("Vanilla Expanded Framework");
+  });
+
   it("names official content after its folder, since Ludeon ships no name tag", () => {
     // Verbatim shape of Data/Core/About/About.xml.
     const xml = `<?xml version="1.0" encoding="utf-8"?>

@@ -109,9 +109,7 @@ export default function App() {
   return (
     <>
       <header className="hdr">
-        <div className="brand">
-          Rim<span>Doc</span>
-        </div>
+        <Logo />
         {active && (
           <div className={`pack-badge${dirty ? " dirty" : ""}`}>
             <small>Editing</small>
@@ -123,7 +121,11 @@ export default function App() {
           <Fact label="Game" value={scan.gameVersion} />
           <Fact label="Installed" value={String(scan.mods.length)} />
           <Fact label="In pack" value={String(workingScan.activeOrder.length)} />
-          <Fact label="Issues" value={String(staticFindings.length + sessionFindings.length)} />
+          <Fact
+            label="Issues"
+            value={String(staticFindings.length + sessionFindings.length)}
+            alert={staticFindings.length + sessionFindings.length > 0}
+          />
         </div>
       </header>
 
@@ -158,7 +160,7 @@ export default function App() {
               source={session?.path ?? "unknown"}
             />
           ) : (
-            <p style={{ color: "var(--dim)" }}>No session log loaded.</p>
+            <p className="muted">No session log loaded.</p>
           ))}
         {tab === "packs" && (
           <Packs
@@ -179,16 +181,30 @@ export default function App() {
           (active ? (
             <PackEditor profile={active} mods={scan.mods} onChange={upsert} />
           ) : (
-            <p style={{ color: "var(--dim)" }}>Create a pack first.</p>
+            <p className="muted">Create a pack first.</p>
           ))}
       </main>
     </>
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+/** RD with a medical cross: the mark reads as a doctor, not a mod list. */
+function Logo() {
   return (
-    <div className="fact">
+    <div className="brand" aria-label="RimDoc" title="RimDoc">
+      <span className="r">R</span>
+      <span className="d">D</span>
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <rect x="6.2" y="0.8" width="3.6" height="14.4" rx="1.1" fill="#e5484d" />
+        <rect x="0.8" y="6.2" width="14.4" height="3.6" rx="1.1" fill="#e5484d" />
+      </svg>
+    </div>
+  );
+}
+
+function Fact({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
+  return (
+    <div className={`fact${alert ? " alert" : ""}`}>
       <b>{value}</b>
       <small>{label}</small>
     </div>

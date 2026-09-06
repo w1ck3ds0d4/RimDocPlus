@@ -1,4 +1,4 @@
-import type { ModEntry, ModSource } from "../types";
+import type { ModDependency, ModEntry, ModSource } from "../types";
 import { dependencyList, stripBlocks, tagList, tagText } from "./xml.ts";
 
 /** Container elements whose children shadow the top-level scalar fields we read. */
@@ -63,10 +63,12 @@ export function parseAbout(input: AboutInput): ModEntry | null {
     source: OFFICIAL_PACKAGE_IDS.includes(packageId) ? "official" : input.source,
     steamId: input.steamId,
     supportedVersions: tagList(xml, "supportedVersions"),
-    dependencies: [
+    // The two dependency blocks routinely list the same mod, so a raw concat would make
+    // every rule that walks dependencies fire twice for one relationship.
+    dependencies: dedupeById([
       ...dependencyList(xml, "modDependencies"),
       ...dependencyList(xml, "modDependenciesByVersion"),
-    ],
+    ]),
     incompatibleWith: lower(tagList(xml, "incompatibleWith")),
     // force* is the hard form of the same constraint and Ludeon's Core uses it, so both
     // spellings have to feed the ordering rules or official content sorts wrong.
@@ -78,6 +80,16 @@ export function parseAbout(input: AboutInput): ModEntry | null {
     active: false,
     loadIndex: null,
   };
+}
+
+/** First entry per packageId wins, so the richer displayName from the primary block survives. */
+function dedupeById(deps: ModDependency[]): ModDependency[] {
+  const seen = new Map<string, ModDependency>();
+  for (const dep of deps) {
+    const key = dep.packageId.toLowerCase();
+    if (!seen.has(key)) seen.set(key, dep);
+  }
+  return [...seen.values()];
 }
 
 /** Last path segment, unless it is a Steam Workshop file id, which labels nothing. */

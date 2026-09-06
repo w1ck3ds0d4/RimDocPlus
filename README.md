@@ -41,8 +41,13 @@ Every finding carries a proposed repair tagged with its tier and whether it can 
 
 - Filters Unity's fallback-handler noise, which is most of what makes a RimWorld log unreadable
 - Clusters identical faults by fingerprint so 40,000 repeats of one NullReference become one row with a count
+- **Full stack trace on every fault**, with engine plumbing dimmed and the frames belonging to a mod highlighted. In a 40-frame Mono trace, typically three lines matter and the rest is reflection.
+- Reads the trace across the `[Ref ...]` tag RimWorld interleaves between a message and its stack, which is why traces are captured at all
+- Consumes the whole trace block, so a continuation line such as `(wrapper ...System.Exception&)` is never reported as its own error
+- Reads Harmony patch annotations (`- POSTFIX ModName: ...`) out of the trace, which name the patching mod outright rather than leaving it to be guessed
 - Attributes each fault to a mod by matching stack-frame namespace roots and inline tokens against the scanned mod list
 - Explains recognised conditions in plain language instead of echoing the raw line: ghost Workshop subscriptions, duplicate loads, settings-constructor failures, failed XML patches, unresolved cross-references, broken vsync, refresh-rate drift
+- Detects the mod-config reset, where a failed load makes RimWorld silently rewrite ModsConfig.xml back to Core only
 - Scrapes the environment header: game build, Unity version, GPU, VRAM, driver
 - Ranks startup phase costs, so a slow launch points at the phase responsible
 

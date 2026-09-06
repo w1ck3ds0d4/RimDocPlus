@@ -76,6 +76,13 @@ export interface Finding {
   fix?: ProposedFix;
   /** Times this was observed. Log findings collapse duplicates into a count. */
   count?: number;
+  /**
+   * Stack frames and Harmony patch annotations for a fault read out of a log. Static
+   * findings have no trace, since nothing has executed yet.
+   */
+  frames?: string[];
+  /** Line in the source log where this was first seen. */
+  firstLine?: number;
 }
 
 export const SEVERITY_ORDER: Record<Severity, number> = {

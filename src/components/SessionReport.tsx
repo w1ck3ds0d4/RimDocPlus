@@ -50,7 +50,7 @@ export function SessionReport({
       )}
 
       <p className="section-title">Source</p>
-      <p style={{ color: "var(--dim)", fontFamily: "var(--mono)", fontSize: 12 }}>{source}</p>
+      <p className="source-path">{source}</p>
     </>
   );
 }

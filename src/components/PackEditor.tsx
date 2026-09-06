@@ -56,7 +56,7 @@ export function PackEditor({
           ))}
         </div>
         <button
-          className="fix"
+          className="btn"
           type="button"
           onClick={() => onChange({ ...profile, activeOrder: sortLoadOrder(profile.activeOrder, mods) })}
           title="Bootstrappers first, then Ludeon content, then declared constraints"
@@ -65,7 +65,7 @@ export function PackEditor({
         </button>
         {visibleIds.length > 0 && (query || filter !== "active") && (
           <button
-            className="fix"
+            className="btn"
             type="button"
             onClick={() => onChange(setEnabled(profile, visibleIds, !allVisibleOn, mods))}
           >
@@ -74,77 +74,79 @@ export function PackEditor({
         )}
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th style={{ width: 40 }} />
-            <th style={{ width: 48 }}>#</th>
-            <th>Mod</th>
-            <th style={{ width: 250 }}>Package id</th>
-            <th style={{ width: 130 }}>Tags</th>
-            <th style={{ width: 74 }}>Order</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((mod) => {
-            const index = position.get(mod.packageId);
-            const on = index !== undefined;
-            return (
-              <tr key={`${mod.packageId}:${mod.folder}`} className={on ? undefined : "row-off"}>
-                <td>
-                  <button
-                    className={`toggle${on ? " on" : ""}`}
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-label={`${on ? "Disable" : "Enable"} ${mod.name}`}
-                    onClick={() => onChange(toggleMod(profile, mod.packageId, mods))}
-                  >
-                    <i />
-                  </button>
-                </td>
-                <td className="idx">{on ? index : "-"}</td>
-                <td>{mod.name}</td>
-                <td className="pid">{mod.packageId}</td>
-                <td>
-                  {mod.source === "official" && <span className="tag official">core</span>}
-                  {mod.hasAssemblies && <span className="tag code">C#</span>}
-                  {mod.hasPatches && <span className="tag">xml</span>}
-                </td>
-                <td>
-                  {on && (
-                    <span className="nudge">
-                      <button
-                        type="button"
-                        aria-label={`Move ${mod.name} earlier`}
-                        disabled={index === 0}
-                        onClick={() => onChange(moveMod(profile, mod.packageId, -1))}
-                      >
-                        &#9650;
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Move ${mod.name} later`}
-                        disabled={index === profile.activeOrder.length - 1}
-                        onClick={() => onChange(moveMod(profile, mod.packageId, 1))}
-                      >
-                        &#9660;
-                      </button>
-                    </span>
-                  )}
+      <div className="table-wrap">
+        <table className="mod-table">
+          <thead>
+            <tr>
+              <th style={{ width: 40 }} />
+              <th style={{ width: 48 }}>#</th>
+              <th>Mod</th>
+              <th style={{ width: 250 }}>Package id</th>
+              <th style={{ width: 130 }}>Tags</th>
+              <th style={{ width: 74 }}>Order</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((mod) => {
+              const index = position.get(mod.packageId);
+              const on = index !== undefined;
+              return (
+                <tr key={`${mod.packageId}:${mod.folder}`} className={on ? undefined : "row-off"}>
+                  <td className="toggle-cell">
+                    <button
+                      className={`toggle${on ? " on" : ""}`}
+                      type="button"
+                      role="switch"
+                      aria-checked={on}
+                      aria-label={`${on ? "Disable" : "Enable"} ${mod.name}`}
+                      onClick={() => onChange(toggleMod(profile, mod.packageId, mods))}
+                    >
+                      <i />
+                    </button>
+                  </td>
+                  <td className="idx">{on ? index : "-"}</td>
+                  <td className="name">{mod.name}</td>
+                  <td className="pid">{mod.packageId}</td>
+                  <td>
+                    {mod.source === "official" && <span className="tag official">core</span>}
+                    {mod.hasAssemblies && <span className="tag code">C#</span>}
+                    {mod.hasPatches && <span className="tag">xml</span>}
+                  </td>
+                  <td>
+                    {on && (
+                      <span className="nudge">
+                        <button
+                          type="button"
+                          aria-label={`Move ${mod.name} earlier`}
+                          disabled={index === 0}
+                          onClick={() => onChange(moveMod(profile, mod.packageId, -1))}
+                        >
+                          &#9650;
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Move ${mod.name} later`}
+                          disabled={index === profile.activeOrder.length - 1}
+                          onClick={() => onChange(moveMod(profile, mod.packageId, 1))}
+                        >
+                          &#9660;
+                        </button>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr>
+                <td className="muted" colSpan={6} style={{ padding: "18px 12px" }}>
+                  Nothing matches that filter.
                 </td>
               </tr>
-            );
-          })}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={6} style={{ color: "var(--dim)", padding: "18px 12px" }}>
-                Nothing matches that filter.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            )}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

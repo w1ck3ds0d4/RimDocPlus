@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runStaticRules } from "./rules";
-import { analyzeLog, findingsFromLog } from "./logParser";
+import { analyzeLog, findingsFromLog, frameKind } from "./logParser";
 import type { ModEntry, ScanResult } from "../types";
 
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
@@ -166,6 +166,9 @@ describe("version-mismatch", () => {
 });
 
 describe("log analysis", () => {
+  // Shaped verbatim on a real 1.6 crash log: a [Ref] tag between the message and its
+  // trace, a native wrapper frame carrying "Exception" in its own signature, an
+  // inner-exception separator, and a HugsLib patch annotation.
   const log = [
     "Initialize engine version: 2022.3.35f1 (011206c7a712)",
     "    Renderer: NVIDIA GeForce RTX 4070 Laptop GPU (ID=0x2860)",
@@ -176,8 +179,14 @@ describe("log analysis", () => {
     "Created WorkshopItem for 3092936341 but there is no folder for it.",
     "Tried loading mod with the same packageId multiple times: Orion.Hospitality. Ignoring the duplicates.",
     "Prepatcher: Serializing took 2254.4194ms",
-    "Error while instantiating a mod of type MedievalOverhaul.MedievalOverhaulSettings: System.Exception",
-    "  at MedievalOverhaul.Settings.Init () [0x00000] in <x>:0",
+    "Error while instantiating a mod of type MedievalOverhaul.MedievalOverhaulSettings: System.Reflection.TargetInvocationException: Exception has been thrown",
+    "[Ref 707A92AF]",
+    "(wrapper managed-to-native) System.Reflection.RuntimeMethodInfo.InternalInvoke(System.Reflection.RuntimeMethodInfo,object,object[],System.Exception&)",
+    "  at System.Reflection.Assembly.GetTypes () [0x00000] in <51fded79cd284d4d911c5949aff4cb21>:0 ",
+    "  at MedievalOverhaul.Settings.Init () [0x00021] in <61e4173561894da49d210260257b5097>:0 ",
+    "   --- End of inner exception stack trace ---",
+    "    - POSTFIX UnlimitedHugs.HugsLib: Void HugsLib.Patches.PlayDataLoader_Patch:InitModsHook()",
+    "Caught exception while loading play data but there are active mods other than Core. Resetting mods config and trying again.",
   ].join("\n");
 
   it("scrapes the environment header", () => {
@@ -202,6 +211,29 @@ describe("log analysis", () => {
     expect(analyzeLog(log).timings[0]).toEqual({ label: "Prepatcher: Serializing", ms: 2254.4194 });
   });
 
+  it("captures the trace across the [Ref] tag that separates it from the message", () => {
+    const init = analyzeLog(log).events.find((e) => e.category === "mod-init-failure")!;
+    expect(init.frames).toHaveLength(5);
+    expect(init.frames[0]).toMatch(/^\(wrapper managed-to-native\)/);
+    expect(init.frames.some((f) => f.startsWith("at MedievalOverhaul."))).toBe(true);
+  });
+
+  it("never reports a trace line as its own error", () => {
+    // "(wrapper ...System.Exception&)" matches the generic exception matcher on its own,
+    // which is what produced phantom "Unhandled exception" rows before frames were consumed.
+    const events = analyzeLog(log).events;
+    expect(events.filter((e) => e.category === "exception")).toHaveLength(0);
+    expect(events.some((e) => e.message.startsWith("(wrapper"))).toBe(false);
+    expect(events.some((e) => e.message.startsWith("at "))).toBe(false);
+  });
+
+  it("recognises the mod-config reset, which silently wipes a load order", () => {
+    const findings = findingsFromLog(analyzeLog(log), []);
+    const reset = findings.find((f) => f.rule === "log:playdata-reset");
+    expect(reset?.severity).toBe("critical");
+    expect(reset?.title).toBe("RimWorld reset your mod list after a load failure");
+  });
+
   it("attributes a stack trace back to the mod that owns the namespace", () => {
     const mods = [mod("dankpyon.medieval.overhaul", { name: "Medieval Overhaul" })];
     const findings = findingsFromLog(analyzeLog(log), mods);
@@ -209,9 +241,54 @@ describe("log analysis", () => {
     expect(initFailure?.packageIds).toContain("dankpyon.medieval.overhaul");
   });
 
+  it("attributes via a Harmony patch annotation, which names the mod outright", () => {
+    const init = analyzeLog(log).events.find((e) => e.category === "mod-init-failure")!;
+    expect(init.namespaces).toContain("HugsLib");
+
+    const mods = [mod("unlimitedhugs.hugslib", { name: "HugsLib" })];
+    const findings = findingsFromLog(analyzeLog(log), mods);
+    expect(findings.find((f) => f.rule === "log:mod-init-failure")?.packageIds).toContain(
+      "unlimitedhugs.hugslib",
+    );
+  });
+
+  it("ignores engine namespaces when attributing", () => {
+    const init = analyzeLog(log).events.find((e) => e.category === "mod-init-failure")!;
+    expect(init.namespaces).not.toContain("System");
+    expect(init.namespaces).toContain("MedievalOverhaul");
+  });
+
+  it("carries the trace and its log position onto the finding", () => {
+    const findings = findingsFromLog(analyzeLog(log), []);
+    const initFailure = findings.find((f) => f.rule === "log:mod-init-failure")!;
+    expect(initFailure.frames).toHaveLength(5);
+    expect(initFailure.firstLine).toBe(10);
+  });
+
   it("explains a recognised condition instead of echoing the raw line", () => {
     const findings = findingsFromLog(analyzeLog(log), []);
     const ghost = findings.find((f) => f.rule === "log:ghost-subscription");
     expect(ghost?.title).toBe("Subscribed Workshop items never downloaded");
+  });
+
+  it("titles an unrecognised fault with its exception type and location", () => {
+    const unknown = [
+      "Something went sideways: System.NullReferenceException: Object reference not set",
+      "[Ref ABCD1234]",
+      "  at SomeMod.Thing.Tick () [0x00000] in <x>:0 ",
+    ].join("\n");
+    const findings = findingsFromLog(analyzeLog(unknown), []);
+    expect(findings[0].title).toBe("NullReferenceException in SomeMod");
+  });
+});
+
+describe("frameKind", () => {
+  it("separates mod frames from engine plumbing", () => {
+    expect(frameKind("at MedievalOverhaul.Settings.Init ()")).toBe("mod");
+    expect(frameKind("at Verse.LoadedModManager.CreateModClasses ()")).toBe("framework");
+    expect(frameKind("at HarmonyLib.PatchClassProcessor.Patch ()")).toBe("framework");
+    expect(frameKind("- POSTFIX UnlimitedHugs.HugsLib: Void Hook()")).toBe("patch");
+    expect(frameKind("(wrapper managed-to-native) System.Reflection.Assembly.GetTypes()")).toBe("separator");
+    expect(frameKind("--- End of inner exception stack trace ---")).toBe("separator");
   });
 });

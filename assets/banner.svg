@@ -1,57 +1,63 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="180" viewBox="0 0 880 180" role="img" aria-label="RimDoc">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#12140f" />
-      <stop offset="100%" stop-color="#1f2417" />
+      <stop offset="0%" stop-color="#0f1216" />
+      <stop offset="100%" stop-color="#1b222c" />
     </linearGradient>
     <linearGradient id="pulse" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#a3b86c" stop-opacity="0" />
-      <stop offset="18%" stop-color="#a3b86c" stop-opacity="0.9" />
-      <stop offset="82%" stop-color="#7ab85a" stop-opacity="0.9" />
-      <stop offset="100%" stop-color="#7ab85a" stop-opacity="0" />
+      <stop offset="0%" stop-color="#4a9eff" stop-opacity="0" />
+      <stop offset="20%" stop-color="#4a9eff" stop-opacity="0.85" />
+      <stop offset="78%" stop-color="#2b6fbf" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#2b6fbf" stop-opacity="0" />
     </linearGradient>
   </defs>
 
   <rect width="880" height="180" fill="url(#bg)" />
-  <rect x="0" y="0" width="880" height="2" fill="#2f3524" />
-  <rect x="0" y="178" width="880" height="2" fill="#2f3524" />
+  <rect x="0" y="0" width="880" height="1" fill="#27313d" />
+  <rect x="0" y="179" width="880" height="1" fill="#27313d" />
 
   <!-- Vital sign trace: healthy line, one fault spike, recovery. -->
   <path
-    d="M40 118 H150 l14 -8 14 8 H300 l10 0 8 -46 10 84 9 -38 h12 H520 l16 -10 14 10 H840"
+    d="M40 124 H150 l14 -8 14 8 H300 l10 0 8 -46 10 84 9 -38 h12 H520 l16 -10 14 10 H840"
     fill="none"
     stroke="url(#pulse)"
     stroke-width="2.5"
     stroke-linejoin="round"
     stroke-linecap="round"
-    opacity="0.75"
+    opacity="0.7"
   />
 
-  <text
-    x="40"
-    y="82"
-    font-family="ui-monospace, 'Cascadia Mono', Consolas, monospace"
-    font-size="54"
-    font-weight="600"
-    letter-spacing="1"
-  >
-    <tspan fill="#a3b86c">Rim</tspan><tspan fill="#dde3d0">Doc</tspan>
-  </text>
+  <g transform="translate(40, 44)">
+    <text
+      x="0"
+      y="42"
+      font-family="ui-monospace, 'Cascadia Mono', Consolas, monospace"
+      font-size="56"
+      font-weight="700"
+      letter-spacing="1"
+    >
+      <tspan fill="#ffffff">R</tspan><tspan fill="#4a9eff">D</tspan>
+    </text>
+    <g transform="translate(78, 8)">
+      <rect x="13.6" y="1.8" width="7.8" height="31.4" rx="2.4" fill="#e5484d" />
+      <rect x="1.8" y="13.6" width="31.4" height="7.8" rx="2.4" fill="#e5484d" />
+    </g>
+  </g>
 
   <text
     x="42"
-    y="108"
+    y="112"
     font-family="system-ui, 'Segoe UI', sans-serif"
-    font-size="14"
-    fill="#8a9377"
-    letter-spacing="2.6"
+    font-size="13"
+    fill="#7d8b9a"
+    letter-spacing="2.8"
   >
     DIAGNOSE / REPAIR / SUPERVISE
   </text>
 
-  <g font-family="ui-monospace, Consolas, monospace" font-size="11" fill="#8a9377">
-    <rect x="690" y="42" width="150" height="24" rx="4" fill="#212519" stroke="#2f3524" />
-    <circle cx="704" cy="54" r="3.5" fill="#e05252" />
-    <text x="716" y="58">253 mods scanned</text>
+  <g font-family="ui-monospace, Consolas, monospace" font-size="11" fill="#7d8b9a">
+    <rect x="676" y="42" width="164" height="24" rx="5" fill="#1c232c" stroke="#27313d" />
+    <circle cx="690" cy="54" r="3.5" fill="#f0616d" />
+    <text x="702" y="58">253 mods, 21 frames</text>
   </g>
 </svg>

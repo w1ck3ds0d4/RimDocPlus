@@ -27,14 +27,14 @@ export function Packs({
     <>
       <div className="toolbar">
         <button
-          className="fix"
+          className="btn"
           type="button"
           onClick={() => onCreate(profileFromScan(scan, nextName(profiles, "New pack")))}
         >
           New pack from current game setup
         </button>
         <button
-          className="fix"
+          className="btn"
           type="button"
           onClick={() =>
             onCreate({
@@ -53,7 +53,7 @@ export function Packs({
         </button>
       </div>
 
-      {profiles.length === 0 && <p style={{ color: "var(--dim)" }}>No packs yet.</p>}
+      {profiles.length === 0 && <p className="muted">No packs yet.</p>}
 
       {profiles.map((profile) => {
         const drift = diffProfiles(scan.activeOrder, profile.activeOrder);
@@ -85,11 +85,11 @@ export function Packs({
             </p>
 
             <div className="pack-actions">
-              <button className="fix" type="button" onClick={() => onSelect(profile.id)}>
+              <button className="btn" type="button" onClick={() => onSelect(profile.id)}>
                 Edit
               </button>
               <button
-                className="fix"
+                className="btn"
                 type="button"
                 onClick={() =>
                   onCreate(duplicateProfile(profile, nextName(profiles, `${profile.name} copy`)))
@@ -98,7 +98,7 @@ export function Packs({
                 Duplicate
               </button>
               <button
-                className="fix"
+                className="btn"
                 type="button"
                 onClick={() =>
                   download(
@@ -111,7 +111,7 @@ export function Packs({
                 Export ModsConfig.xml
               </button>
               <button
-                className="fix"
+                className="btn"
                 type="button"
                 onClick={() =>
                   download(`${slug(profile.name)}.rimdoc.json`, JSON.stringify(profile, null, 2))
@@ -119,7 +119,7 @@ export function Packs({
               >
                 Export pack
               </button>
-              <button className="fix danger" type="button" onClick={() => onDelete(profile.id)}>
+              <button className="btn danger" type="button" onClick={() => onDelete(profile.id)}>
                 Delete
               </button>
             </div>
@@ -128,7 +128,7 @@ export function Packs({
       })}
 
       <p className="section-title">Applying a pack</p>
-      <p style={{ color: "var(--dim)", maxWidth: 640 }}>
+      <p className="note">
         Writing the load order straight into the game and launching it belongs to the Tauri shell, which is
         the next slice. Until then, exporting ModsConfig.xml over the file in your save-data Config folder
         does the same job by hand.
