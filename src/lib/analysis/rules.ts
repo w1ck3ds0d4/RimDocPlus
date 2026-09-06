@@ -153,6 +153,36 @@ function ruleBootstrapPosition(
   return findings;
 }
 
+/**
+ * One requirement, and every package id that satisfies it.
+ *
+ * Authors routinely list several ids for the same dependency, because a mod gets
+ * reuploaded or continued under a new author prefix and both versions are in the wild.
+ * They signal it by giving the entries the same displayName, which is the author stating
+ * outright that these are the same thing. Treating each id as separately mandatory
+ * reports a missing dependency for a mod that is installed and working.
+ */
+interface DependencyGroup {
+  label: string;
+  options: string[];
+}
+
+function dependencyGroups(mod: ModEntry): DependencyGroup[] {
+  const groups = new Map<string, DependencyGroup>();
+  for (const dep of mod.dependencies) {
+    const id = dep.packageId.toLowerCase();
+    // With no displayName there is nothing to group on, so the id stands alone.
+    const key = dep.displayName?.trim().toLowerCase() || `id:${id}`;
+    const existing = groups.get(key);
+    if (existing) {
+      if (!existing.options.includes(id)) existing.options.push(id);
+    } else {
+      groups.set(key, { label: dep.displayName?.trim() || id, options: [id] });
+    }
+  }
+  return [...groups.values()];
+}
+
 /** Declared dependency is neither enabled nor installed. The usual cause of red walls. */
 function ruleMissingDependency(
   active: ModEntry[],
@@ -161,22 +191,25 @@ function ruleMissingDependency(
 ): Finding[] {
   const findings: Finding[] = [];
   for (const mod of active) {
-    for (const dep of mod.dependencies) {
-      const depId = dep.packageId.toLowerCase();
-      if (activeSet.has(depId) || byId.has(depId)) continue;
+    for (const group of dependencyGroups(mod)) {
+      // Any one alternative being present satisfies the whole requirement.
+      if (group.options.some((id) => activeSet.has(id) || byId.has(id))) continue;
       findings.push({
-        id: `missing-dep:${mod.packageId}:${depId}`,
+        id: `missing-dep:${mod.packageId}:${group.options[0]}`,
         rule: "missing-dependency",
         severity: "critical",
-        title: `${mod.name} needs ${dep.displayName ?? depId}`,
-        detail: `Required dependency "${depId}" is neither enabled nor installed.`,
-        packageIds: [mod.packageId, depId],
+        title: `${mod.name} needs ${group.label}`,
+        detail:
+          group.options.length > 1
+            ? `None of these is installed: ${group.options.join(", ")}. Any one of them satisfies it.`
+            : `Required dependency "${group.options[0]}" is neither enabled nor installed.`,
+        packageIds: [mod.packageId, ...group.options],
         fix: {
           kind: "install-dependency",
           label: "Find on the Workshop",
           tier: 1,
           auto: false,
-          params: { dependency: depId, name: dep.displayName ?? depId },
+          params: { dependency: group.options[0], name: group.label },
         },
       });
     }
@@ -192,22 +225,23 @@ function ruleInactiveDependency(
 ): Finding[] {
   const findings: Finding[] = [];
   for (const mod of active) {
-    for (const dep of mod.dependencies) {
-      const depId = dep.packageId.toLowerCase();
-      if (activeSet.has(depId) || !byId.has(depId)) continue;
+    for (const group of dependencyGroups(mod)) {
+      if (group.options.some((id) => activeSet.has(id))) continue;
+      const installed = group.options.find((id) => byId.has(id));
+      if (!installed) continue;
       findings.push({
-        id: `inactive-dep:${mod.packageId}:${depId}`,
+        id: `inactive-dep:${mod.packageId}:${installed}`,
         rule: "inactive-dependency",
         severity: "critical",
-        title: `${mod.name} needs ${byId.get(depId)?.name ?? depId}, which is disabled`,
+        title: `${mod.name} needs ${byId.get(installed)?.name ?? group.label}, which is disabled`,
         detail: "The dependency is installed but not in the active list. Enabling it fixes this.",
-        packageIds: [mod.packageId, depId],
+        packageIds: [mod.packageId, installed],
         fix: {
           kind: "enable-dependency",
           label: "Enable it",
           tier: 1,
           auto: true,
-          params: { dependency: depId },
+          params: { dependency: installed },
         },
       });
     }

@@ -115,6 +115,64 @@ describe("dependencies", () => {
   });
 });
 
+describe("dependency alternatives", () => {
+  // MultiFloors declares zetrith.prepatcher and jikulopo.prepatcher, both named
+  // "Prepatcher": the same mod under two package ids after a reupload.
+  const alternatives = [
+    { packageId: "zetrith.prepatcher", displayName: "Prepatcher" },
+    { packageId: "jikulopo.prepatcher", displayName: "Prepatcher" },
+  ];
+
+  it("is satisfied when any one alternative is installed and enabled", () => {
+    const scan = scanOf(
+      [mod("a.needs", { dependencies: alternatives }), mod("zetrith.prepatcher")],
+      ["zetrith.prepatcher", "a.needs"],
+    );
+    expect(rules(scan, "missing-dependency")).toHaveLength(0);
+    expect(rules(scan, "inactive-dependency")).toHaveLength(0);
+  });
+
+  it("reports one finding naming every alternative when none is installed", () => {
+    const scan = scanOf([mod("a.needs", { dependencies: alternatives })], ["a.needs"]);
+    const found = rules(scan, "missing-dependency");
+    expect(found).toHaveLength(1);
+    expect(found[0].detail).toContain("zetrith.prepatcher");
+    expect(found[0].detail).toContain("jikulopo.prepatcher");
+  });
+
+  it("points the enable fix at the alternative that is actually on disk", () => {
+    const scan = scanOf(
+      [mod("a.needs", { dependencies: alternatives }), mod("jikulopo.prepatcher")],
+      ["a.needs"],
+    );
+    const [finding] = rules(scan, "inactive-dependency");
+    expect(finding.fix?.params?.dependency).toBe("jikulopo.prepatcher");
+  });
+
+  it("keeps genuinely separate dependencies separate", () => {
+    const scan = scanOf(
+      [
+        mod("a.needs", {
+          dependencies: [
+            { packageId: "one.lib", displayName: "One" },
+            { packageId: "two.lib", displayName: "Two" },
+          ],
+        }),
+      ],
+      ["a.needs"],
+    );
+    expect(rules(scan, "missing-dependency")).toHaveLength(2);
+  });
+
+  it("does not group entries that carry no display name", () => {
+    const scan = scanOf(
+      [mod("a.needs", { dependencies: [{ packageId: "one.lib" }, { packageId: "two.lib" }] })],
+      ["a.needs"],
+    );
+    expect(rules(scan, "missing-dependency")).toHaveLength(2);
+  });
+});
+
 describe("incompatible-pair", () => {
   it("reports a one-sided declaration exactly once", () => {
     const scan = scanOf(

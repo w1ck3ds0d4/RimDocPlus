@@ -38,13 +38,15 @@ export function Triage({
   return (
     <>
       <div className="triage-bar">
-        <button className="triage-btn" type="button" onClick={run}>
+        <button className={`triage-btn${findings.length === 0 ? " clean" : ""}`} type="button" onClick={run}>
           <span className="cross" aria-hidden="true">
-            +
+            <svg width="30" height="30" viewBox="0 0 16 16" focusable="false">
+              <rect x="6.1" y="0.6" width="3.8" height="14.8" rx="1.2" fill="#ffffff" />
+              <rect x="0.6" y="6.1" width="14.8" height="3.8" rx="1.2" fill="#ffffff" />
+            </svg>
           </span>
           <span className="triage-label">
-            <b>Perform triage</b>
-            <small>Apply every safe fix, stage the rest</small>
+            <b>{findings.length === 0 ? "Nothing to triage" : "Perform triage"}</b>
           </span>
           <span className="triage-count">{findings.length}</span>
         </button>

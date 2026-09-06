@@ -1154,83 +1154,179 @@ tr.row-off td:not(.toggle-cell) {
 }
 
 .triage-btn {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 15px;
   width: 100%;
-  padding: 14px 18px;
-  background: linear-gradient(135deg, var(--panel-2), var(--panel));
-  border: 1px solid var(--accent-soft);
-  border-radius: 9px;
-  color: var(--text);
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #a81f24 0%, #d13a40 45%, #e5484d 100%);
+  border: 1px solid #f0616d;
+  border-radius: 11px;
+  color: #ffffff;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(229, 72, 77, 0.3),
+    0 10px 26px -10px rgba(229, 72, 77, 0.8);
   transition:
-    border-color 0.14s,
-    background 0.14s,
-    transform 0.08s;
+    transform 0.12s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+
+/* A heart trace running behind the label, scrolling the way a monitor does. */
+.triage-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='48' viewBox='0 0 240 48'%3E%3Cpath d='M0 24 H58 l6 -15 5 30 5 -21 5 6 H128 l7 -9 5 18 4 -9 H240' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    repeat-x center;
+  background-size: 240px 100%;
+  opacity: 0.28;
+  animation: triage-ecg 5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes triage-ecg {
+  from {
+    background-position-x: 0;
+  }
+  to {
+    background-position-x: -240px;
+  }
 }
 
 .triage-btn:hover {
-  background: linear-gradient(135deg, var(--panel-3), var(--panel-2));
-  border-color: var(--accent);
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(240, 97, 109, 0.55),
+    0 14px 32px -10px rgba(229, 72, 77, 0.95);
 }
 
 .triage-btn:active {
   transform: translateY(1px);
+  box-shadow:
+    0 0 0 1px rgba(229, 72, 77, 0.35),
+    0 4px 12px -6px rgba(229, 72, 77, 0.7);
 }
 
 .triage-btn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
 
+/* Bare white cross, no plate behind it. */
 .triage-btn .cross {
+  position: relative;
+  z-index: 1;
   flex: none;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: #e5484d;
-  color: #fff;
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35));
+  animation: triage-beat 2.6s ease-in-out infinite;
+}
+
+.triage-btn .cross svg {
+  display: block;
+}
+
+/* Two beats then a rest, which is what the cross is there to suggest. */
+@keyframes triage-beat {
+  0%,
+  62%,
+  100% {
+    transform: scale(1);
+  }
+  12% {
+    transform: scale(1.16);
+  }
+  24% {
+    transform: scale(1);
+  }
+  36% {
+    transform: scale(1.11);
+  }
+  48% {
+    transform: scale(1);
+  }
 }
 
 .triage-label {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
 .triage-label b {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.triage-label small {
-  color: var(--dim);
-  font-size: 11.5px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 .triage-count {
+  position: relative;
+  z-index: 1;
   flex: none;
   margin-left: auto;
-  padding: 3px 11px;
+  padding: 4px 13px;
   border-radius: 12px;
-  background: var(--accent-ghost);
-  color: var(--accent);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
   font-family: var(--mono);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
+}
+
+/* A clean install should feel settled, not shout for a click it does not need. */
+.triage-btn.clean {
+  background: linear-gradient(135deg, var(--panel-2), var(--panel));
+  border-color: var(--line);
+  color: var(--text-soft);
+  box-shadow: none;
+}
+
+.triage-btn.clean::after,
+.triage-btn.clean .cross {
+  animation: none;
+}
+
+.triage-btn.clean::after {
+  opacity: 0.07;
+}
+
+.triage-btn.clean .cross svg rect {
+  fill: var(--ok);
+}
+
+.triage-btn.clean .triage-count {
+  background: var(--panel-3);
+  border-color: var(--line);
+  color: var(--ok);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .triage-btn::after,
+  .triage-btn .cross,
+  .triage-report {
+    animation: none !important;
+  }
+
+  .triage-btn {
+    transition: none;
+  }
 }
 
 .triage-report {
   margin-bottom: 16px;
+  animation: triage-in 0.22s ease-out;
   padding: 14px;
   background: var(--panel);
   border: 1px solid var(--accent-soft);
@@ -1344,4 +1440,15 @@ tr.row-off td:not(.toggle-cell) {
   border-top: 1px solid var(--line-soft);
   color: var(--dim);
   font-size: 11.5px;
+}
+
+@keyframes triage-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
