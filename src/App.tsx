@@ -19,8 +19,9 @@ import { SessionReport } from "./components/SessionReport";
 import { RepairProvider } from "./components/Repair";
 import { Triage } from "./components/Triage";
 import { Library } from "./components/Library";
+import { Settings, loadDevMode } from "./components/Settings";
 
-type Tab = "doctor" | "session" | "packs" | "order" | "library";
+type Tab = "doctor" | "session" | "packs" | "order" | "library" | "settings";
 
 export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
@@ -30,6 +31,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("doctor");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [devMode, setDevMode] = useState(loadDevMode);
   // Every repair pushes the pack it replaced, so any applied fix is one click from undone.
   const [undoStack, setUndoStack] = useState<{ profile: Profile; label: string }[]>([]);
 
@@ -196,6 +198,7 @@ export default function App() {
           count={workingScan.activeOrder.length}
         />
         <TabButton id="library" tab={tab} setTab={setTab} label="Library" count={scan.mods.length} />
+        <TabButton id="settings" tab={tab} setTab={setTab} label="Settings" />
       </nav>
 
       <main>
@@ -254,6 +257,23 @@ export default function App() {
           />
         )}
         {tab === "library" && <Library scan={scan} workshop={workshop} />}
+        {tab === "settings" && (
+          <Settings
+            scan={workingScan}
+            workshop={workshop}
+            profiles={profiles}
+            session={session}
+            devMode={devMode}
+            onDevMode={(on) => {
+              setDevMode(on);
+              try {
+                localStorage.setItem("rimdoc.devMode", on ? "1" : "0");
+              } catch {
+                /* private window; the toggle still works for this session */
+              }
+            }}
+          />
+        )}
         {tab === "order" &&
           (active ? (
             <PackEditor profile={active} mods={scan.mods} onChange={upsert} />
@@ -299,12 +319,12 @@ function TabButton({
   tab: Tab;
   setTab: (t: Tab) => void;
   label: string;
-  count: number;
+  count?: number;
 }) {
   return (
     <button className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
       {label}
-      <span className="pill">{count}</span>
+      {count !== undefined && <span className="pill">{count}</span>}
     </button>
   );
 }

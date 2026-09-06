@@ -3,12 +3,28 @@ import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS } from "./about.ts";
 import { runPerformanceRules } from "./performance.ts";
 import { runPatchRules } from "./patches.ts";
 
+/** What one rule did on one run, for the diagnostics panel. */
+export interface RuleRun {
+  name: string;
+  count: number;
+  ms: number;
+  /** Set when the rule threw. The run continues; one broken rule must not blank the list. */
+  error?: string;
+}
+
 /**
  * L1 static analysis: everything we can prove about a mod list without launching the
  * game. Each rule is independent and returns zero or more findings, so rules can be
  * added without touching the others.
+ *
+ * Rules run isolated and timed. A rule that throws is recorded and skipped rather than
+ * taking the whole analysis with it, and a rule that quietly matches nothing shows up as
+ * a zero in the panel, which is the failure mode that hides best in a passing test suite.
  */
-export function runStaticRules(scan: ScanResult): Finding[] {
+export function runStaticRulesWithDiagnostics(scan: ScanResult): {
+  findings: Finding[];
+  runs: RuleRun[];
+} {
   const byId = new Map<string, ModEntry>();
   for (const mod of scan.mods) {
     // Two folders can declare the same packageId; keep the first and let the duplicate
@@ -19,19 +35,44 @@ export function runStaticRules(scan: ScanResult): Finding[] {
   const position = new Map(scan.activeOrder.map((id, i) => [id, i]));
   const active = scan.activeOrder.map((id) => byId.get(id)).filter((m): m is ModEntry => !!m);
 
-  return [
-    ...ruleOrphanActive(scan, byId),
-    ...ruleDuplicatePackageId(scan),
-    ...ruleDlcAfterMods(scan, position),
-    ...ruleBootstrapPosition(scan, position, byId),
-    ...ruleMissingDependency(active, activeSet, byId),
-    ...ruleInactiveDependency(active, activeSet, byId),
-    ...ruleIncompatiblePair(active, activeSet, byId),
-    ...ruleLoadOrder(active, position),
-    ...ruleVersionMismatch(active, scan.gameCycle),
-    ...runPerformanceRules(scan),
-    ...runPatchRules(scan),
+  const rules: [string, () => Finding[]][] = [
+    ["orphan-active", () => ruleOrphanActive(scan, byId)],
+    ["duplicate-package-id", () => ruleDuplicatePackageId(scan)],
+    ["dlc-after-mods", () => ruleDlcAfterMods(scan, position)],
+    ["bootstrap-position", () => ruleBootstrapPosition(scan, position, byId)],
+    ["missing-dependency", () => ruleMissingDependency(active, activeSet, byId)],
+    ["inactive-dependency", () => ruleInactiveDependency(active, activeSet, byId)],
+    ["incompatible-pair", () => ruleIncompatiblePair(active, activeSet, byId)],
+    ["load-order-violation", () => ruleLoadOrder(active, position)],
+    ["version-mismatch", () => ruleVersionMismatch(active, scan.gameCycle)],
+    ["performance", () => runPerformanceRules(scan)],
+    ["patch-override", () => runPatchRules(scan)],
   ];
+
+  const findings: Finding[] = [];
+  const runs: RuleRun[] = [];
+
+  for (const [name, run] of rules) {
+    const started = performance.now();
+    try {
+      const produced = run();
+      findings.push(...produced);
+      runs.push({ name, count: produced.length, ms: performance.now() - started });
+    } catch (error) {
+      runs.push({
+        name,
+        count: 0,
+        ms: performance.now() - started,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { findings, runs };
+}
+
+export function runStaticRules(scan: ScanResult): Finding[] {
+  return runStaticRulesWithDiagnostics(scan).findings;
 }
 
 /** ModsConfig references a mod that is not on disk. The game drops it and errors. */

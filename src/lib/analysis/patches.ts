@@ -86,9 +86,13 @@ interface Collision {
  * effectively undebuggable from inside the game, which is exactly the class of problem
  * worth catching before launch.
  */
-export function runPatchRules(scan: ScanResult): Finding[] {
+export function runPatchRulesWithIntents(scan: ScanResult): {
+  findings: Finding[];
+  intents: Record<OverrideIntent, number>;
+} {
+  const intents: Record<OverrideIntent, number> = { declared: 0, documented: 0, content: 0, assumed: 0 };
   const active = scan.mods.filter((m) => m.active && m.patches?.length);
-  if (active.length < 2) return [];
+  if (active.length < 2) return { findings: [], intents };
 
   const byXpath = new Map<string, Collision>();
   for (const mod of active) {
@@ -112,7 +116,7 @@ export function runPatchRules(scan: ScanResult): Finding[] {
     .filter((c) => c.touches.length > 1 && c.touches.some((t) => t.destructive))
     .sort((a, b) => b.touches.length - a.touches.length);
 
-  if (!conflicts.length) return [];
+  if (!conflicts.length) return { findings: [], intents };
 
   // One finding per pair of mods rather than per xpath: a framework and an add-on can
   // collide on eighty paths, and eighty identical rows say no more than one does.
@@ -133,7 +137,7 @@ export function runPatchRules(scan: ScanResult): Finding[] {
     }
   }
 
-  return [...byPair.values()]
+  const findings = [...byPair.values()]
     .sort((a, b) => b.paths.length - a.paths.length)
     .slice(0, 15)
     .map(({ mods, paths }) => {
@@ -142,6 +146,7 @@ export function runPatchRules(scan: ScanResult): Finding[] {
         (mods[0].loadIndex ?? 0) <= (mods[1].loadIndex ?? 0) ? mods : [mods[1], mods[0]];
 
       const intent = overrideIntent(later, earlier);
+      intents[intent.kind]++;
 
       return {
         id: `patch-override:${earlier.packageId}|${later.packageId}`,
@@ -166,4 +171,10 @@ export function runPatchRules(scan: ScanResult): Finding[] {
         count: paths.length,
       } satisfies Finding;
     });
+
+  return { findings, intents };
+}
+
+export function runPatchRules(scan: ScanResult): Finding[] {
+  return runPatchRulesWithIntents(scan).findings;
 }

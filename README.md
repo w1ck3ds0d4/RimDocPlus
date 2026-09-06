@@ -166,6 +166,20 @@ The run streams into a terminal-style console: what was scanned, how long the an
 
 **Fix all automatic** applies every deterministic pack repair in one go. Each is planned against the result of the previous one, so a batch can never apply two conflicting edits to the same load order, and the whole batch undoes as a unit.
 
+### Settings and developer mode
+
+A **Developer mode** toggle in Settings opens a diagnostics panel:
+
+- **Rules**: what each rule produced, how long it took, and the error if it threw. Rules run isolated, so one throwing is recorded and skipped rather than blanking the whole list.
+- **Parse counts**: descriptions read, dependencies declared, patch operations extracted, textures measured, Workshop items matched.
+- **Suspicious zeroes**: any count that should never be zero on a real install is flagged red.
+
+That last part is the point. The failure mode worth catching is not a crash, it is a parser or matcher that silently matches nothing: it throws nothing, breaks no test that only asserts "did not crash", and returns a clean empty result that looks like good news. A regex whose word boundaries had become literal backspace characters failed exactly that way and cost an hour. It would now read as a zero on this panel.
+
+The panel found a bug in itself on first run: an intent breakdown that sampled `loadAfter` pairs, which are all "declared" by definition, so the other three categories could only ever read zero however well the classifier worked. It now counts the overrides actually reported.
+
+A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
+
 ## Tech Stack
 
 | Layer               | Choice                                | Why                                                                                      |
