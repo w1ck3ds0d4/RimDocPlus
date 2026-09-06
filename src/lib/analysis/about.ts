@@ -35,6 +35,7 @@ export interface AboutInput {
   hasAssemblies: boolean;
   hasPatches: boolean;
   sizeBytes: number;
+  updatedAt?: string;
 }
 
 /**
@@ -63,6 +64,9 @@ export function parseAbout(input: AboutInput): ModEntry | null {
     source: OFFICIAL_PACKAGE_IDS.includes(packageId) ? "official" : input.source,
     steamId: input.steamId,
     supportedVersions: tagList(xml, "supportedVersions"),
+    // Descriptions run to essays; enough to tell mods apart, not enough to bloat the scan.
+    description: trimDescription(tagText(own, "description")),
+    updatedAt: input.updatedAt,
     // The two dependency blocks routinely list the same mod, so a raw concat would make
     // every rule that walks dependencies fire twice for one relationship.
     dependencies: dedupeById([
@@ -90,6 +94,17 @@ function dedupeById(deps: ModDependency[]): ModDependency[] {
     if (!seen.has(key)) seen.set(key, dep);
   }
   return [...seen.values()];
+}
+
+/** Collapse the markup and whitespace authors put in descriptions, then cap the length. */
+function trimDescription(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const text = raw
+    .replace(/<\/?[a-z][^>]*>/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return undefined;
+  return text.length > 600 ? `${text.slice(0, 600).trimEnd()}...` : text;
 }
 
 /** Last path segment, unless it is a Steam Workshop file id, which labels nothing. */

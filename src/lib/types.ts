@@ -17,6 +17,10 @@ export interface ModEntry {
   /** Workshop file id, when the mod came from Steam. */
   steamId?: string;
   supportedVersions: string[];
+  /** Author's own description from About.xml, trimmed. */
+  description?: string;
+  /** Folder mtime as an ISO string: a proxy for when the mod was last updated. */
+  updatedAt?: string;
   dependencies: ModDependency[];
   incompatibleWith: string[];
   loadAfter: string[];

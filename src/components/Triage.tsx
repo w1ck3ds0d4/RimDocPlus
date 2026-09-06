@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Finding, ScanResult } from "../lib/types";
 import type { Profile } from "../lib/profiles";
 import { toPowerShell } from "../lib/repair/repairs";
-import { allFileActions, runTriage, type TriageResult } from "../lib/repair/triage";
+import {
+  allFileActions,
+  runTriage,
+  triageSteps,
+  type TriageResult,
+  type TriageStep,
+} from "../lib/repair/triage";
 import { download } from "../lib/download";
 
 /**
@@ -24,14 +30,17 @@ export function Triage({
   applyProfile: (profile: Profile, label: string) => void;
 }) {
   const [result, setResult] = useState<TriageResult | null>(null);
+  const [steps, setSteps] = useState<TriageStep[]>([]);
 
   function run() {
     const triage = runTriage(findings, { scan, profile });
-    if (triage.applied.length)
+    if (triage.applied.length) {
       applyProfile(
         triage.profile,
         `triage (${triage.applied.length} fix${triage.applied.length === 1 ? "" : "es"})`,
       );
+    }
+    setSteps(triageSteps(triage, scan, profile.name));
     setResult(triage);
   }
 
@@ -52,8 +61,74 @@ export function Triage({
         </button>
       </div>
 
+      {steps.length > 0 && <TriageConsole steps={steps} />}
       {result && <TriageReport result={result} onDismiss={() => setResult(null)} />}
     </>
+  );
+}
+
+/**
+ * The run, line by line.
+ *
+ * Lines are revealed on a stagger so the transcript can be read as it lands rather than
+ * appearing whole. The work itself is already finished by then: this is a log of what
+ * happened, not a progress bar pretending to measure something.
+ */
+function TriageConsole({ steps }: { steps: TriageStep[] }) {
+  const [shown, setShown] = useState(0);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setShown(0);
+    // Long transcripts speed up so a big staged list never outstays its welcome.
+    const tick = steps.length > 24 ? 22 : 55;
+    const timer = setInterval(() => {
+      setShown((n) => {
+        if (n >= steps.length) {
+          clearInterval(timer);
+          return n;
+        }
+        return n + 1;
+      });
+    }, tick);
+    return () => clearInterval(timer);
+  }, [steps]);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body) body.scrollTop = body.scrollHeight;
+  }, [shown]);
+
+  const running = shown < steps.length;
+
+  return (
+    <div className="console">
+      <div className="console-bar">
+        <span className="dot r" />
+        <span className="dot y" />
+        <span className="dot g" />
+        <span className="console-title">triage</span>
+        {running && <span className="console-status">running</span>}
+      </div>
+      <div className="console-body" ref={bodyRef}>
+        {steps.slice(0, shown).map((step, i) => (
+          <div className={`line ${step.tone}`} key={i}>
+            {step.tone === "cmd" ? (
+              <>
+                <span className="prompt">$</span>
+                <span className="text">{step.text}</span>
+              </>
+            ) : (
+              <>
+                <span className="label">{step.label}</span>
+                <span className="text">{step.text}</span>
+              </>
+            )}
+          </div>
+        ))}
+        {running && <span className="caret-blink" aria-hidden="true" />}
+      </div>
+    </div>
   );
 }
 

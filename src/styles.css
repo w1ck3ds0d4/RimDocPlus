@@ -1452,3 +1452,171 @@ tr.row-off td:not(.toggle-cell) {
     transform: none;
   }
 }
+
+/* Triage console ---------------------------------------------------------- */
+
+.console {
+  margin-bottom: 14px;
+  background: #0a0d11;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  animation: triage-in 0.2s ease-out;
+}
+
+.console-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.console-bar .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.console-bar .dot.r {
+  background: #f0616d;
+}
+
+.console-bar .dot.y {
+  background: #d9ab41;
+}
+
+.console-bar .dot.g {
+  background: #4ec98b;
+}
+
+.console-title {
+  margin-left: 6px;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.4px;
+}
+
+.console-status {
+  margin-left: auto;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.console-body {
+  padding: 11px 13px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.console-body .line {
+  display: flex;
+  gap: 10px;
+  animation: console-line 0.16s ease-out;
+}
+
+@keyframes console-line {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.console-body .prompt {
+  flex: none;
+  color: var(--ok);
+}
+
+.console-body .label {
+  flex: none;
+  width: 62px;
+  text-align: right;
+  color: var(--dim);
+}
+
+.console-body .text {
+  min-width: 0;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.console-body .cmd .text {
+  color: #fff;
+  font-weight: 600;
+}
+
+.console-body .ok .label,
+.console-body .ok .text {
+  color: var(--ok);
+}
+
+.console-body .warn .label,
+.console-body .warn .text {
+  color: var(--warning);
+}
+
+.console-body .work .label,
+.console-body .work .text {
+  color: var(--accent);
+}
+
+.console-body .done {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.console-body .done .label,
+.console-body .done .text {
+  color: #fff;
+  font-weight: 600;
+}
+
+.caret-blink {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  margin-top: 2px;
+  background: var(--accent);
+  animation: caret 1s step-end infinite;
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console,
+  .console-body .line,
+  .caret-blink {
+    animation: none !important;
+  }
+}
+
+.tag.load-bearing {
+  color: var(--warning);
+  border-color: rgba(217, 171, 65, 0.45);
+}
+
+/* A quiet marker that hovering the name will say what the mod does. */
+.has-desc {
+  margin-left: 5px;
+  color: var(--dim);
+  font-size: 9px;
+  vertical-align: super;
+  cursor: help;
+}

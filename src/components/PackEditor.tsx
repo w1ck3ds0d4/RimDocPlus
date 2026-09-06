@@ -19,6 +19,23 @@ export function PackEditor({
 
   const position = useMemo(() => new Map(profile.activeOrder.map((id, i) => [id, i])), [profile.activeOrder]);
 
+  /**
+   * How many enabled mods declare each mod as a dependency. A high count means the list
+   * is built on it, which is the difference between a mod you can drop and one that takes
+   * fifty others down with it.
+   */
+  const dependents = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const mod of mods) {
+      if (!position.has(mod.packageId)) continue;
+      for (const dep of mod.dependencies) {
+        const id = dep.packageId.toLowerCase();
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [mods, position]);
+
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return mods
@@ -105,12 +122,23 @@ export function PackEditor({
                     </button>
                   </td>
                   <td className="idx">{on ? index : "-"}</td>
-                  <td className="name">{mod.name}</td>
+                  <td className="name" title={mod.description ?? undefined}>
+                    {mod.name}
+                    {mod.description && <span className="has-desc">?</span>}
+                  </td>
                   <td className="pid">{mod.packageId}</td>
                   <td>
                     {mod.source === "official" && <span className="tag official">core</span>}
                     {mod.hasAssemblies && <span className="tag code">C#</span>}
                     {mod.hasPatches && <span className="tag">xml</span>}
+                    {(dependents.get(mod.packageId) ?? 0) > 0 && (
+                      <span
+                        className="tag load-bearing"
+                        title={`${dependents.get(mod.packageId)} enabled mods depend on this`}
+                      >
+                        &#8592;{dependents.get(mod.packageId)}
+                      </span>
+                    )}
                   </td>
                   <td>
                     {on && (

@@ -12,7 +12,7 @@ export type FileAction =
   | { op: "add-supported-version"; path: string; cycle: string; reason: string }
   | { op: "write"; path: string; contents: string; reason: string }
   | { op: "delete-matching"; directory: string; pattern: string; reason: string }
-  | { op: "downscale-png"; path: string; maxPx: number; reason: string };
+  | { op: "downscale-png"; path: string; maxPx: number; fromPx: number; reason: string };
 
 export interface RepairChoice {
   label: string;
@@ -202,6 +202,8 @@ const REPAIRS: Record<string, RepairFn> = {
           op: "downscale-png" as const,
           path: texture.path,
           maxPx: target,
+          // Carried so the duration estimate can be per file rather than a flat average.
+          fromPx: texture.width * texture.height,
           reason: `${mod.name}: ${texture.width}x${texture.height}`,
         })),
       );
@@ -413,6 +415,35 @@ export function toPowerShell(actions: FileAction[]): string {
 
   lines.push("Write-Host 'Done. Rescan in RimDoc+ to confirm.'");
   return lines.join("\n");
+}
+
+/**
+ * Decode, resize and re-encode cost, calibrated against two runs on a real install: the
+ * twelve largest textures (2963 ms for ~200 megapixels) and a 30-file spread across the
+ * whole set (1661 ms for 49.7 megapixels).
+ *
+ * The two costs add rather than one dominating: every file pays fixed open, decode-setup
+ * and encode overhead, and then pays again per pixel. Modelling it as a floor instead
+ * underestimated the spread run by 1.6x, because most textures are small enough that the
+ * fixed cost is the larger half.
+ */
+const MS_PER_FILE = 30;
+const MS_PER_MEGAPIXEL = 15;
+
+/** Rough wall-clock for a file plan, so the console can say how long it will take. */
+export function estimateDurationMs(actions: FileAction[]): number {
+  return actions.reduce((total, action) => {
+    if (action.op !== "downscale-png") return total + 10;
+    return total + MS_PER_FILE + (action.fromPx / 1_000_000) * MS_PER_MEGAPIXEL;
+  }, 0);
+}
+
+/** "3m 02s", "12s", "instant". */
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return "instant";
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
 /** Single-quoted PowerShell literal; the only escape inside one is a doubled quote. */

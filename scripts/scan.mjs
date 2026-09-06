@@ -152,6 +152,15 @@ function readAbout(folder) {
   return undefined;
 }
 
+/** Folder mtime, which Steam bumps on update, so it stands in for "last updated". */
+function folderMtime(folder) {
+  try {
+    return statSync(folder).mtime.toISOString();
+  } catch {
+    return undefined;
+  }
+}
+
 function hasSubdir(folder, name) {
   const direct = join(folder, name);
   if (existsSync(direct)) return true;
@@ -187,6 +196,7 @@ function scanModDir(dir, source) {
       hasAssemblies: hasSubdir(folder, "Assemblies"),
       hasPatches: hasSubdir(folder, "Patches"),
       sizeBytes: measured.sizeBytes,
+      updatedAt: folderMtime(folder),
     });
     if (mod) mods.push({ ...mod, textures: measured.textures });
   }
