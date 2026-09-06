@@ -9,22 +9,68 @@ const DESTRUCTIVE = /Replace|Remove|AttributeSet|AttributeRemove|Insert/i;
 /** Xpaths broad enough that a collision on them says nothing useful. */
 const TOO_BROAD = new Set(["/Defs", "/", "/Defs/*"]);
 
+export type OverrideIntent = "declared" | "documented" | "content" | "assumed";
+
+/** The author telling players where to load the mod, which is intent in plain words. */
+const LOAD_INSTRUCTION =
+  /\bload\s+(this\s+|the\s+|it\s+)?(mod\s+)?(by\s+the\s+end|at\s+the\s+end|last|after|below|later|towards?\s+the\s+(end|bottom))/i;
+
+/** Language that marks a mod as content built on top of something else. */
+const CONTENT_LANGUAGE =
+  /\b(expanded|expansion|module\s+in|reimagining|overhaul|retexture|re-texture|replaces?|patch\s+(that|for)|add-?on|adds\s+(new|more))\b/i;
+
 /**
- * Did the winning mod ask to load after the one it overrides?
+ * Why one mod overwrites another's patches.
  *
- * A mod declaring loadAfter, or depending on the mod it overwrites, is its author saying
- * the override is the point. Reordering those would break them: Combat Extended overriding
- * Vanilla Weapons Expanded is not a bug, it is what a combat overhaul is for. Separating
- * declared overrides from accidental ones is the difference between twelve warnings and
- * the four that nobody has actually thought about.
+ * Overwriting is how RimWorld content is layered: an expansion, a retexture or a patch
+ * mod exists precisely to change what a earlier mod set, so an overwrite is the normal
+ * case rather than a fault. The intent is graded by how directly it can be evidenced,
+ * from a declared load order down to assuming it, and the evidence is quoted so the
+ * reader can disagree with the reasoning rather than just the conclusion.
  */
-function overrideWasDeclared(later: ModEntry, earlier: ModEntry): boolean {
-  return (
+export function overrideIntent(
+  later: ModEntry,
+  earlier: ModEntry,
+): { kind: OverrideIntent; evidence?: string } {
+  if (
     later.loadAfter.includes(earlier.packageId) ||
     earlier.loadBefore.includes(later.packageId) ||
     later.dependencies.some((d) => d.packageId.toLowerCase() === earlier.packageId)
-  );
+  ) {
+    return { kind: "declared" };
+  }
+
+  const documented = later.description && LOAD_INSTRUCTION.exec(later.description);
+  if (documented)
+    return { kind: "documented", evidence: sentenceAround(later.description!, documented.index) };
+
+  const content = later.description && CONTENT_LANGUAGE.exec(later.description);
+  if (content) return { kind: "content", evidence: sentenceAround(later.description!, content.index) };
+  if (CONTENT_LANGUAGE.test(later.name)) return { kind: "content", evidence: later.name };
+
+  return { kind: "assumed" };
 }
+
+/** The sentence a match sits in, so the quoted evidence reads as something an author wrote. */
+function sentenceAround(text: string, index: number): string {
+  const start = Math.max(0, text.lastIndexOf(".", index) + 1);
+  const end = text.indexOf(".", index);
+  const sentence = text.slice(start, end === -1 ? text.length : end + 1).trim();
+  return sentence.length > 180 ? `${sentence.slice(0, 180).trimEnd()}...` : sentence;
+}
+
+/** How the finding explains itself, by how directly the intent could be evidenced. */
+const INTENT_NOTE: Record<OverrideIntent, (later: ModEntry, earlier: ModEntry) => string> = {
+  declared: (later, earlier) =>
+    `${later.name} declares that it loads after ${earlier.name}, so this is what its author asked for.`,
+  documented: (later) => `${later.name} documents where it expects to sit in the load order.`,
+  content: (later) =>
+    `${later.name} reads as content layered on top of other mods, which is exactly what overriding is for.`,
+  assumed: (later, earlier) =>
+    `Neither mod says anything about the other, so this was not deliberately arranged. It is still ` +
+    `most likely fine: ${later.name} is the later mod and overriding is how content stacks. Worth a ` +
+    `glance only if ${earlier.name}'s version of these is what you actually wanted.`,
+};
 
 interface Collision {
   xpath: string;
@@ -95,29 +141,21 @@ export function runPatchRules(scan: ScanResult): Finding[] {
       const [earlier, later] =
         (mods[0].loadIndex ?? 0) <= (mods[1].loadIndex ?? 0) ? mods : [mods[1], mods[0]];
 
-      const declared = overrideWasDeclared(later, earlier);
+      const intent = overrideIntent(later, earlier);
 
       return {
-        id: `patch-collision:${earlier.packageId}|${later.packageId}`,
-        rule: declared ? "patch-override" : "patch-collision",
-        // A declared override is the mod working as designed, so it is a note rather than
-        // a problem. Only an unreviewed one is worth anybody's attention.
-        severity: declared ? "info" : paths.length > 5 ? "warning" : ("info" as const),
-        title: declared
-          ? `${later.name} intentionally overrides ${paths.length} patch target${
-              paths.length === 1 ? "" : "s"
-            } from ${earlier.name}`
-          : `${later.name} overwrites ${paths.length} patch target${
-              paths.length === 1 ? "" : "s"
-            } also patched by ${earlier.name}`,
+        id: `patch-override:${earlier.packageId}|${later.packageId}`,
+        rule: "patch-override",
+        // Overwriting is how content layers in RimWorld, so this is always a note. An
+        // expansion changing what the mod it expands set is the system working.
+        severity: "info" as const,
+        title: `${later.name} overrides ${paths.length} patch target${
+          paths.length === 1 ? "" : "s"
+        } from ${earlier.name}`,
         detail:
-          (declared
-            ? `${later.name} declares that it loads after ${earlier.name}, so overriding it is the ` +
-              "author's intent rather than an accident. Listed for visibility, not as a problem."
-            : `Both mods patch the same nodes and at least one overwrites rather than adds. ` +
-              `${later.name} loads later, so its version wins and ${earlier.name}'s change to these ` +
-              "paths is discarded without any log entry. Neither declares a load-order relationship " +
-              "with the other, so nobody decided this: it fell out of where they happen to sit.") +
+          `${later.name} loads later, so where both patch the same node its version is the one that ` +
+          `takes effect. ${INTENT_NOTE[intent.kind](later, earlier)}` +
+          (intent.evidence ? `\n\nFrom its own description: "${intent.evidence}"` : "") +
           "\n\n" +
           paths
             .slice(0, 8)

@@ -115,11 +115,18 @@ The scanner reads every mod's `Patches` folder, including the versioned `1.6/Pat
 
 Collisions are reported per pair of mods rather than per path, and only when at least one side overwrites rather than adds. The finding names which mod wins, since load order decides it.
 
-Collisions are then split by whether anyone chose them. If the winning mod declares `loadAfter` the mod it overrides, or depends on it, the override is the author's intent and is reported as a note rather than a warning. Combat Extended overriding Vanilla Weapons Expanded is not a bug, it is what a combat overhaul is for, and reordering it would break the mod.
+Overrides are then explained rather than flagged. Overwriting is how RimWorld content layers: an expansion, a retexture or a patch mod exists precisely to change what an earlier mod set, so an override is the normal case and every one of these is reported as a note.
 
-Nothing here proposes a reorder. On the install this was built against, the "more specialised mod should win" heuristic was already satisfied in most cases and would have been actively wrong in the rest, so the automatic handling is classification rather than correction.
+What varies is how directly the intent can be evidenced, and the evidence is quoted so the reasoning can be disagreed with rather than just the conclusion:
 
-On that install: 9,809 xpath operations across 130 active mods, producing 12 collisions, of which 8 were declared intent and 4 were unreviewed. Three retexture mods turned out to be fighting over the same meal `texPath` nodes.
+- **declared** - the later mod lists `loadAfter` or depends on the mod it overrides
+- **documented** - its description says where to load it. Rustic Meal Retexture's reads "Load this mod by the end of your mod list."
+- **content** - its description or name reads as layered content. Fantasy Biotech's is "A fantasy reimagining of Biotech."
+- **assumed** - nothing says either way, so it is taken as intended and noted as worth a glance only if the earlier mod's version was what you wanted
+
+Nothing here proposes a reorder. On the install this was built against, the "more specialised mod should win" heuristic was already satisfied in most cases and would have been actively wrong in the rest: Combat Extended overriding Vanilla Weapons Expanded is not a bug, it is what a combat overhaul is for.
+
+On that install: 9,809 xpath operations across 130 active mods, producing 12 overrides, 8 declared and 4 evidenced from the author's own description. None unexplained.
 
 ### Performance analysis
 

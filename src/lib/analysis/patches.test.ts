@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ModEntry, PatchOperation, ScanResult } from "../types";
-import { runPatchRules } from "./patches";
+import { overrideIntent, runPatchRules } from "./patches";
 
 function mod(packageId: string, patches: PatchOperation[], loadIndex: number): ModEntry {
   return {
@@ -45,15 +45,21 @@ describe("runPatchRules", () => {
       scanOf([mod("a.first", [op(TARGET)], 0), mod("b.second", [op(TARGET)], 1)]),
     );
     expect(findings).toHaveLength(1);
-    expect(findings[0].rule).toBe("patch-collision");
+    expect(findings[0].rule).toBe("patch-override");
     expect(findings[0].detail).toContain(TARGET);
   });
 
   it("names the later mod as the winner, since patches apply in load order", () => {
     const findings = runPatchRules(scanOf([mod("a.early", [op(TARGET)], 0), mod("z.late", [op(TARGET)], 5)]));
-    // Most-responsible first: the mod whose version survives.
     expect(findings[0].packageIds[0]).toBe("z.late");
-    expect(findings[0].title).toMatch(/^z\.late overwrites/);
+    expect(findings[0].title).toMatch(/^z\.late overrides/);
+  });
+
+  it("treats every overlap as a note, because overriding is how content layers", () => {
+    const paths = Array.from({ length: 30 }, (_, i) => op(`/Defs/ThingDef[defName="X${i}"]/label`));
+    const findings = runPatchRules(scanOf([mod("a.one", paths, 0), mod("b.two", paths, 1)]));
+    expect(findings[0].severity).toBe("info");
+    expect(findings[0].count).toBe(30);
   });
 
   it("ignores two mods that both only add to the same node", () => {
@@ -86,8 +92,6 @@ describe("runPatchRules", () => {
     const findings = runPatchRules(scanOf([mod("a.one", paths, 0), mod("b.two", paths, 1)]));
     expect(findings).toHaveLength(1);
     expect(findings[0].count).toBe(12);
-    // Enough shared targets stops being a curiosity and starts being a problem.
-    expect(findings[0].severity).toBe("warning");
   });
 
   it("stays quiet when mods patch different nodes", () => {
@@ -103,42 +107,68 @@ describe("runPatchRules", () => {
   it("needs at least two patching mods before it says anything", () => {
     expect(runPatchRules(scanOf([mod("a.one", [op(TARGET)], 0)]))).toHaveLength(0);
   });
+
+  it("never proposes a repair, since the override is the intended behaviour", () => {
+    const findings = runPatchRules(scanOf([mod("a.one", [op(TARGET)], 0), mod("b.two", [op(TARGET)], 1)]));
+    expect(findings[0].fix).toBeUndefined();
+  });
 });
 
-describe("declared overrides", () => {
-  it("treats an override the winner declared as intent, not a conflict", () => {
-    const later = mod("b.overhaul", [op(TARGET)], 1);
-    later.loadAfter = ["a.base"];
-    const findings = runPatchRules(scanOf([mod("a.base", [op(TARGET)], 0), later]));
-    expect(findings[0].rule).toBe("patch-override");
-    expect(findings[0].severity).toBe("info");
-    expect(findings[0].title).toContain("intentionally overrides");
+describe("overrideIntent", () => {
+  const earlier = mod("a.base", [], 0);
+
+  function later(over: Partial<ModEntry> = {}) {
+    return { ...mod("b.later", [], 1), ...over };
+  }
+
+  it("reads a declared loadAfter as the strongest evidence", () => {
+    expect(overrideIntent(later({ loadAfter: ["a.base"] }), earlier).kind).toBe("declared");
   });
 
-  it("counts a dependency as a declaration too", () => {
-    const later = mod("b.addon", [op(TARGET)], 1);
-    later.dependencies = [{ packageId: "A.Base" }];
-    const findings = runPatchRules(scanOf([mod("a.base", [op(TARGET)], 0), later]));
-    expect(findings[0].rule).toBe("patch-override");
+  it("counts a dependency as a declaration", () => {
+    expect(overrideIntent(later({ dependencies: [{ packageId: "A.Base" }] }), earlier).kind).toBe("declared");
   });
 
   it("honours loadBefore declared by the earlier mod", () => {
-    const earlier = mod("a.base", [op(TARGET)], 0);
-    earlier.loadBefore = ["b.other"];
-    const findings = runPatchRules(scanOf([earlier, mod("b.other", [op(TARGET)], 1)]));
-    expect(findings[0].rule).toBe("patch-override");
+    const declared = { ...earlier, loadBefore: ["b.later"] };
+    expect(overrideIntent(later(), declared).kind).toBe("declared");
   });
 
-  it("keeps an undeclared overwrite as a real collision", () => {
-    const findings = runPatchRules(scanOf([mod("a.one", [op(TARGET)], 0), mod("b.two", [op(TARGET)], 1)]));
-    expect(findings[0].rule).toBe("patch-collision");
-    expect(findings[0].detail).toContain("nobody decided this");
+  it("reads a load-order instruction in the description, and quotes it", () => {
+    // Rustic Meal Retexture says exactly this.
+    const result = overrideIntent(
+      later({ description: "A simple patch. Load this mod by the end of your mod list. Safe to remove." }),
+      earlier,
+    );
+    expect(result.kind).toBe("documented");
+    expect(result.evidence).toBe("Load this mod by the end of your mod list.");
   });
 
-  it("never proposes reordering, because a declared override would break if moved", () => {
-    const later = mod("b.overhaul", [op(TARGET)], 1);
-    later.loadAfter = ["a.base"];
-    const findings = runPatchRules(scanOf([mod("a.base", [op(TARGET)], 0), later]));
-    expect(findings[0].fix).toBeUndefined();
+  it("recognises content mods from how their author describes them", () => {
+    const result = overrideIntent(later({ description: "A fantasy reimagining of Biotech" }), earlier);
+    expect(result.kind).toBe("content");
+    expect(result.evidence).toBe("A fantasy reimagining of Biotech");
+  });
+
+  it("falls back to the mod name when the description says nothing", () => {
+    expect(overrideIntent(later({ name: "Vanilla Plants Expanded" }), earlier).kind).toBe("content");
+  });
+
+  it("does not match content language inside a longer word", () => {
+    expect(overrideIntent(later({ name: "Zed", description: "expandedness abounds" }), earlier).kind).toBe(
+      "assumed",
+    );
+  });
+
+  it("prefers a declaration over anything the description says", () => {
+    const result = overrideIntent(
+      later({ loadAfter: ["a.base"], description: "An overhaul. Load this last." }),
+      earlier,
+    );
+    expect(result.kind).toBe("declared");
+  });
+
+  it("assumes intent when nothing at all points either way", () => {
+    expect(overrideIntent(later({ name: "Zed", description: "does things" }), earlier).kind).toBe("assumed");
   });
 });
