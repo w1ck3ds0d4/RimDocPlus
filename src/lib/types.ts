@@ -39,6 +39,25 @@ export interface ModEntry {
   loadIndex: number | null;
 }
 
+/** Public Workshop metadata for one mod, from Steam's anonymous details endpoint. */
+export interface WorkshopDetails {
+  id: string;
+  title: string;
+  subscriptions: number;
+  favorited: number;
+  views: number;
+  /** Unix seconds. */
+  timeUpdated: number;
+  timeCreated: number;
+  fileSize: number;
+  tags: string[];
+}
+
+export interface WorkshopCache {
+  fetchedAt: string;
+  items: Record<string, WorkshopDetails>;
+}
+
 /** One xpath-targeting operation from a mod's Patches folder. */
 export interface PatchOperation {
   /** PatchOperationReplace, PatchOperationAdd, a mod-defined class, or unknown. */

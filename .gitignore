@@ -19,3 +19,4 @@ src-tauri/gen/schemas
 # generated fixtures from a local RimWorld install (machine-specific)
 src/dev-data/scan.json
 src/dev-data/session.json
+src/dev-data/workshop.json

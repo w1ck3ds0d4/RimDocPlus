@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Finding, ScanResult } from "./lib/types";
+import type { Finding, ScanResult, WorkshopCache } from "./lib/types";
 import { runStaticRules } from "./lib/analysis/rules";
 import { analyzeLog, findingsFromLog, type SessionAnalysis } from "./lib/analysis/logParser";
-import { loadScan, loadSession } from "./lib/devData";
+import { loadScan, loadSession, loadWorkshop } from "./lib/devData";
 import { diffProfiles, loadProfiles, profileFromScan, saveProfiles, type Profile } from "./lib/profiles";
 import { FindingList, SeveritySummary } from "./components/Findings";
 import { PackEditor } from "./components/PackEditor";
@@ -10,12 +10,14 @@ import { Packs } from "./components/Packs";
 import { SessionReport } from "./components/SessionReport";
 import { RepairProvider } from "./components/Repair";
 import { Triage } from "./components/Triage";
+import { Library } from "./components/Library";
 
-type Tab = "doctor" | "session" | "packs" | "order";
+type Tab = "doctor" | "session" | "packs" | "order" | "library";
 
 export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [session, setSession] = useState<{ path: string; text: string } | null>(null);
+  const [workshop, setWorkshop] = useState<WorkshopCache | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("doctor");
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -24,10 +26,11 @@ export default function App() {
   const [undoStack, setUndoStack] = useState<{ profile: Profile; label: string }[]>([]);
 
   useEffect(() => {
-    Promise.all([loadScan(), loadSession()])
-      .then(([s, l]) => {
+    Promise.all([loadScan(), loadSession(), loadWorkshop()])
+      .then(([s, l, w]) => {
         setScan(s);
         setSession(l);
+        setWorkshop(w);
         if (!s) return;
         const stored = loadProfiles();
         // First run has nothing saved, so seed a pack from whatever the game is set to
@@ -169,6 +172,7 @@ export default function App() {
           label="Load order"
           count={workingScan.activeOrder.length}
         />
+        <TabButton id="library" tab={tab} setTab={setTab} label="Library" count={scan.mods.length} />
       </nav>
 
       <main>
@@ -221,6 +225,7 @@ export default function App() {
             onDelete={remove}
           />
         )}
+        {tab === "library" && <Library scan={scan} workshop={workshop} />}
         {tab === "order" &&
           (active ? (
             <PackEditor profile={active} mods={scan.mods} onChange={upsert} />

@@ -26,7 +26,8 @@
     "scan": "node scripts/scan.mjs",
     "test": "vitest run",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "workshop": "node scripts/workshop.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

@@ -84,6 +84,29 @@ One button that assesses everything, applies what is provably safe, and stages t
 
 The "resolved" count is produced by re-running the rules against the repaired pack, not by subtracting what it attempted. Triage does not claim the game runs: faults that only appear once the game is executing need the supervised launch and the headless boot check, neither of which is built.
 
+### Library and Workshop data
+
+Every installed mod in one table, sortable by the things that actually differ:
+
+| Signal                           | Source                                  |
+| -------------------------------- | --------------------------------------- |
+| Depended on                      | local: how many enabled mods declare it |
+| Texture cost                     | local: decoded VRAM from PNG headers    |
+| Disk size                        | local                                   |
+| Subscribers, favorites           | Steam Workshop                          |
+| Days since the author updated it | Steam Workshop                          |
+
+**Cleanup candidates** narrows it to mods that are enabled, carrying real texture weight, and that nothing else depends on. Deliberately conservative, and a shortlist to look at rather than a recommendation: "nothing depends on it" and "you do not want it" are different statements, and only one of them is measurable.
+
+Workshop data is the only thing RimDoc+ ever sends off the machine, so it is a separate opt-in command:
+
+```bash
+pnpm workshop          # fetch anything missing or older than a week
+pnpm workshop --force  # refetch everything
+```
+
+What leaves the machine is a list of Workshop file ids, which are public identifiers for public mods. No Steam account, no API key, no credential: `GetPublishedFileDetails` is anonymous. Results cache to a gitignored file with a one-week TTL, and the app works fully without ever running it.
+
 ### XML patch analysis
 
 RimWorld applies patches in load order and says nothing when two of them fight: the later operation just wins. That makes overwrite collisions invisible in the log and effectively undebuggable from inside the game.
@@ -174,6 +197,7 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 - **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
 - **L2 and L3 testing**: headless boot check and scripted soak run with TPS attribution
 - **A/B benchmarking**: same save, two profiles, measured locally
+- **Subscribe and unsubscribe from inside the app.** The Web API is read-only; `ISteamUGC::SubscribeItem` is the Steamworks SDK and needs a native binding plus a running Steam client. The established pattern belongs to the shell.
 - **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path
 - **Texture and def audits**: oversized texture detection with batch downscaling, unreachable def pruning
 

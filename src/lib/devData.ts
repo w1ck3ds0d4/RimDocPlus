@@ -1,4 +1,4 @@
-import type { ScanResult } from "./types";
+import type { ScanResult, WorkshopCache } from "./types";
 
 /**
  * Fixture loading for the browser preview.
@@ -9,6 +9,7 @@ import type { ScanResult } from "./types";
  */
 const scanFixture = import.meta.glob("../dev-data/scan.json", { import: "default" });
 const sessionFixture = import.meta.glob("../dev-data/session.json", { import: "default" });
+const workshopFixture = import.meta.glob("../dev-data/workshop.json", { import: "default" });
 
 async function first<T>(modules: Record<string, () => Promise<unknown>>): Promise<T | null> {
   const loader = Object.values(modules)[0];
@@ -21,4 +22,8 @@ export function loadScan(): Promise<ScanResult | null> {
 
 export function loadSession(): Promise<{ path: string; text: string } | null> {
   return first<{ path: string; text: string }>(sessionFixture);
+}
+
+export function loadWorkshop(): Promise<WorkshopCache | null> {
+  return first<WorkshopCache>(workshopFixture);
 }
