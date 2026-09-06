@@ -80,6 +80,37 @@ describe("parseAbout", () => {
     expect(parseAbout({ ...base, xml: "<ModMetaData><name>Nameless</name></ModMetaData>" })).toBeNull();
   });
 
+  it("names official content after its folder, since Ludeon ships no name tag", () => {
+    // Verbatim shape of Data/Core/About/About.xml.
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
+      <ModMetaData>
+        <packageId>Ludeon.RimWorld</packageId>
+        <author>Ludeon Studios</author>
+        <forceLoadBefore>
+          <li>Ludeon.RimWorld.Ideology</li>
+          <li>Ludeon.RimWorld.Royalty</li>
+        </forceLoadBefore>
+      </ModMetaData>`;
+    const mod = parseAbout({ ...base, xml, folder: "C:/RimWorld/Data/Core" })!;
+    expect(mod.name).toBe("Core");
+    expect(mod.loadBefore).toEqual(["ludeon.rimworld.ideology", "ludeon.rimworld.royalty"]);
+  });
+
+  it("falls back to the package id when the folder is a Workshop file id", () => {
+    const xml = "<ModMetaData><packageId>a.b</packageId></ModMetaData>";
+    expect(parseAbout({ ...base, xml, folder: "C:/workshop/294100/3509486825" })!.name).toBe("a.b");
+  });
+
+  it("merges forceLoadAfter into loadAfter", () => {
+    const xml = `
+      <ModMetaData>
+        <packageId>a.b</packageId>
+        <loadAfter><li>One.Mod</li></loadAfter>
+        <forceLoadAfter><li>Two.Mod</li></forceLoadAfter>
+      </ModMetaData>`;
+    expect(parseAbout({ ...base, xml })!.loadAfter).toEqual(["one.mod", "two.mod"]);
+  });
+
   it("falls back to the authors list when there is no author tag", () => {
     const xml = `
       <ModMetaData>

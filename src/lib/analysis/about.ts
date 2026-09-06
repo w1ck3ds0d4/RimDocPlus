@@ -50,9 +50,14 @@ export function parseAbout(input: AboutInput): ModEntry | null {
   // A mod with no packageId cannot be referenced or ordered, so it is not usable.
   if (!packageId) return null;
 
+  const lower = (ids: string[]) => ids.map((s) => s.toLowerCase());
+
   return {
     packageId,
-    name: tagText(own, "name") ?? packageId,
+    // Ludeon's own About.xml files carry no name tag, and the game falls back to the
+    // folder name for them. A Workshop folder is named after its numeric file id, which
+    // is no use as a label, so that case falls through to the package id instead.
+    name: tagText(own, "name") ?? folderName(input.folder) ?? packageId,
     author: tagText(own, "author") ?? (tagList(own, "authors").join(", ") || undefined),
     folder: input.folder,
     source: OFFICIAL_PACKAGE_IDS.includes(packageId) ? "official" : input.source,
@@ -62,15 +67,23 @@ export function parseAbout(input: AboutInput): ModEntry | null {
       ...dependencyList(xml, "modDependencies"),
       ...dependencyList(xml, "modDependenciesByVersion"),
     ],
-    incompatibleWith: tagList(xml, "incompatibleWith").map((s) => s.toLowerCase()),
-    loadAfter: tagList(xml, "loadAfter").map((s) => s.toLowerCase()),
-    loadBefore: tagList(xml, "loadBefore").map((s) => s.toLowerCase()),
+    incompatibleWith: lower(tagList(xml, "incompatibleWith")),
+    // force* is the hard form of the same constraint and Ludeon's Core uses it, so both
+    // spellings have to feed the ordering rules or official content sorts wrong.
+    loadAfter: lower([...tagList(xml, "loadAfter"), ...tagList(xml, "forceLoadAfter")]),
+    loadBefore: lower([...tagList(xml, "loadBefore"), ...tagList(xml, "forceLoadBefore")]),
     hasAssemblies: input.hasAssemblies,
     hasPatches: input.hasPatches,
     sizeBytes: input.sizeBytes,
     active: false,
     loadIndex: null,
   };
+}
+
+/** Last path segment, unless it is a Steam Workshop file id, which labels nothing. */
+function folderName(folder: string): string | undefined {
+  const segment = folder.split(/[\\/]/).filter(Boolean).pop();
+  return segment && !/^\d+$/.test(segment) ? segment : undefined;
 }
 
 /** Active mod list from ModsConfig.xml, in load order. */

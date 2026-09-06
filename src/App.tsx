@@ -1,30 +1,94 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Finding, ScanResult } from "./lib/types";
 import { runStaticRules } from "./lib/analysis/rules";
 import { analyzeLog, findingsFromLog, type SessionAnalysis } from "./lib/analysis/logParser";
 import { loadScan, loadSession } from "./lib/devData";
+import { diffProfiles, loadProfiles, profileFromScan, saveProfiles, type Profile } from "./lib/profiles";
 import { FindingList, SeveritySummary } from "./components/Findings";
-import { ModTable } from "./components/ModTable";
+import { PackEditor } from "./components/PackEditor";
+import { Packs } from "./components/Packs";
 import { SessionReport } from "./components/SessionReport";
 
-type Tab = "doctor" | "session" | "mods";
+type Tab = "doctor" | "session" | "packs" | "order";
 
 export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [session, setSession] = useState<{ path: string; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("doctor");
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([loadScan(), loadSession()])
       .then(([s, l]) => {
         setScan(s);
         setSession(l);
+        if (!s) return;
+        const stored = loadProfiles();
+        // First run has nothing saved, so seed a pack from whatever the game is set to
+        // run. That gives the editor something real to work against immediately.
+        const seeded = stored.length ? stored : [profileFromScan(s, "Current game setup")];
+        setProfiles(seeded);
+        setActiveId(seeded[0].id);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  const staticFindings = useMemo<Finding[]>(() => (scan ? runStaticRules(scan) : []), [scan]);
+  useEffect(() => {
+    if (profiles.length) saveProfiles(profiles);
+  }, [profiles]);
+
+  const active = profiles.find((p) => p.id === activeId) ?? null;
+
+  const upsert = useCallback((profile: Profile) => {
+    setProfiles((current) =>
+      current.some((p) => p.id === profile.id)
+        ? current.map((p) => (p.id === profile.id ? profile : p))
+        : [...current, profile],
+    );
+  }, []);
+
+  const create = useCallback((profile: Profile) => {
+    setProfiles((current) => [...current, profile]);
+    setActiveId(profile.id);
+  }, []);
+
+  const remove = useCallback(
+    (id: string) => {
+      setProfiles((current) => {
+        const next = current.filter((p) => p.id !== id);
+        if (id === activeId) setActiveId(next[0]?.id ?? null);
+        return next;
+      });
+    },
+    [activeId],
+  );
+
+  /**
+   * The doctor analyses the pack being edited, not the load order the game happens to
+   * hold. Toggling a mod therefore updates the findings immediately, which is the whole
+   * point of building a pack in here rather than in the game's own mod screen.
+   */
+  const workingScan = useMemo<ScanResult | null>(() => {
+    if (!scan) return null;
+    if (!active) return scan;
+    const position = new Map(active.activeOrder.map((id, i) => [id, i]));
+    return {
+      ...scan,
+      activeOrder: active.activeOrder,
+      mods: scan.mods.map((mod) => ({
+        ...mod,
+        active: position.has(mod.packageId),
+        loadIndex: position.get(mod.packageId) ?? null,
+      })),
+    };
+  }, [scan, active]);
+
+  const staticFindings = useMemo<Finding[]>(
+    () => (workingScan ? runStaticRules(workingScan) : []),
+    [workingScan],
+  );
 
   const sessionAnalysis = useMemo<SessionAnalysis | null>(
     () => (session ? analyzeLog(session.text) : null),
@@ -37,9 +101,10 @@ export default function App() {
   );
 
   if (loading) return <main />;
-  if (!scan) return <NoFixtures />;
+  if (!scan || !workingScan) return <NoFixtures />;
 
-  const activeCount = scan.activeOrder.length;
+  const drift = active ? diffProfiles(scan.activeOrder, active.activeOrder) : null;
+  const dirty = drift ? drift.added.length > 0 || drift.removed.length > 0 || drift.reordered : false;
 
   return (
     <>
@@ -47,19 +112,32 @@ export default function App() {
         <div className="brand">
           Rim<span>Doc</span>
         </div>
+        {active && (
+          <div className={`pack-badge${dirty ? " dirty" : ""}`}>
+            <small>Editing</small>
+            <b>{active.name}</b>
+            {dirty && <span className="dot" title="Differs from the game's current load order" />}
+          </div>
+        )}
         <div className="facts">
           <Fact label="Game" value={scan.gameVersion} />
-          <Fact label="Cycle" value={scan.gameCycle} />
           <Fact label="Installed" value={String(scan.mods.length)} />
-          <Fact label="Active" value={String(activeCount)} />
+          <Fact label="In pack" value={String(workingScan.activeOrder.length)} />
           <Fact label="Issues" value={String(staticFindings.length + sessionFindings.length)} />
         </div>
       </header>
 
       <nav className="tabs" role="tablist">
-        <Tab id="doctor" tab={tab} setTab={setTab} label="Doctor" count={staticFindings.length} />
-        <Tab id="session" tab={tab} setTab={setTab} label="Session" count={sessionFindings.length} />
-        <Tab id="mods" tab={tab} setTab={setTab} label="Mods" count={scan.mods.length} />
+        <TabButton id="doctor" tab={tab} setTab={setTab} label="Doctor" count={staticFindings.length} />
+        <TabButton id="session" tab={tab} setTab={setTab} label="Session" count={sessionFindings.length} />
+        <TabButton id="packs" tab={tab} setTab={setTab} label="Packs" count={profiles.length} />
+        <TabButton
+          id="order"
+          tab={tab}
+          setTab={setTab}
+          label="Load order"
+          count={workingScan.activeOrder.length}
+        />
       </nav>
 
       <main>
@@ -82,7 +160,27 @@ export default function App() {
           ) : (
             <p style={{ color: "var(--dim)" }}>No session log loaded.</p>
           ))}
-        {tab === "mods" && <ModTable mods={scan.mods} />}
+        {tab === "packs" && (
+          <Packs
+            profiles={profiles}
+            activeId={activeId}
+            scan={scan}
+            mods={scan.mods}
+            onSelect={(id) => {
+              setActiveId(id);
+              setTab("order");
+            }}
+            onCreate={create}
+            onUpdate={upsert}
+            onDelete={remove}
+          />
+        )}
+        {tab === "order" &&
+          (active ? (
+            <PackEditor profile={active} mods={scan.mods} onChange={upsert} />
+          ) : (
+            <p style={{ color: "var(--dim)" }}>Create a pack first.</p>
+          ))}
       </main>
     </>
   );
@@ -97,7 +195,7 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Tab({
+function TabButton({
   id,
   tab,
   setTab,

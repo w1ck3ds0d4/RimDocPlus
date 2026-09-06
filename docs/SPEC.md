@@ -53,6 +53,23 @@ A **profile** is a named, immutable snapshot: mod versions, load order, mod conf
 DLC set, game build, and the hash of the save it belongs to. Rollback is restoring a
 profile, which is cheap because the content is already on disk.
 
+### Packs (BUILT, partially)
+
+A **pack** is the profile's editable half, and it exists today: a named list of package
+ids in load order, with enable/disable, reordering, a stable topological auto-sort, drift
+against the game's current setup, and export to `ModsConfig.xml`.
+
+Two things separate a pack from a full profile, and both wait on the vault:
+
+- A pack records ids, not mod versions, so it is repeatable but not reproducible. Two
+  people running the same pack can be running different builds of the same mod.
+- Applying a pack means exporting the file by hand. Writing it into the save-data folder
+  and launching the game is the shell's job.
+
+The doctor runs against the pack being edited rather than the game's own load order, so
+findings update as mods are toggled. That turns rule output into a live constraint solver
+the player edits against, instead of a report they read once.
+
 ## 4. Diagnostics
 
 ### L1 static (BUILT)

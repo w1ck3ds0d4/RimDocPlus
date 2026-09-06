@@ -46,9 +46,24 @@ Every finding carries a proposed repair tagged with its tier and whether it can 
 - Scrapes the environment header: game build, Unity version, GPU, VRAM, driver
 - Ranks startup phase costs, so a slow launch points at the phase responsible
 
-### Mod browser
+### Packs
 
-Load-order view across all installed mods, filterable by name or package id, tagged by source, whether the mod ships C#, whether it ships XML patches, and on-disk size.
+A pack is a named, saved mod list: the set of package ids you want the game to run, in load order. Build as many as you like and switch between them.
+
+- Create from the game's current setup, or start minimal with Ludeon content and the bootstrappers only
+- Duplicate, rename, and delete
+- Drift indicator per pack showing what it adds, removes, and reorders relative to what the game is currently set to run
+- Export as `ModsConfig.xml`, which is the file RimWorld reads on launch, or as a portable `.rimdoc.json`
+
+### Load order editor
+
+- Enable and disable any installed mod, individually or in bulk across a filtered set
+- Enabling inserts at a defensible position rather than appending, so a framework lands ahead of the mods that depend on it instead of behind them
+- Move a mod up or down the order
+- **Auto-sort**: stable topological sort putting bootstrappers first, then Ludeon content in canonical order, then everything else resolved against declared `loadAfter`, `loadBefore`, `forceLoadAfter`, `forceLoadBefore`, and dependency constraints. Ties keep their current position so a mostly-correct list barely moves and the diff stays reviewable. Constraint cycles are emitted in existing order rather than dropped.
+- Filterable by name or package id, tagged by source and by whether the mod ships C# or XML patches
+
+**The doctor analyses the pack you are editing, not the load order the game happens to hold.** Toggling a mod updates the findings immediately. Turning off a framework that 53 mods depend on surfaces 53 findings before you ever launch the game.
 
 ## Tech Stack
 
@@ -95,7 +110,9 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 
 ## What's Not Yet Built
 
-- The Tauri shell itself. The analysis engine, scanner, and UI are real; the desktop packaging is the next slice.
+- The Tauri shell itself. The analysis engine, scanner, packs, and UI are real; the desktop packaging is the next slice.
+- **Writing a pack back to the game and launching it**. Packs export as `ModsConfig.xml` today, which you copy into your save-data `Config` folder by hand. Writing it directly and launching from the app needs the shell.
+- **Version pinning in packs**: a pack records package ids, not exact mod versions, so it is repeatable but not yet reproducible. Pinning arrives with the vault.
 - **Mod vault**: content-addressed local store so Steam updates land as new versions instead of overwriting a working setup
 - **Supervised launch**: child-process control, live structured log stream, crash and hang detection, case-file capture
 - **Auto-bisect**: binary search across the mod list to isolate a minimal breaking set unattended
@@ -107,6 +124,9 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 
 ## License
 
-AGPL-3.0-or-later. See [LICENSE](LICENSE).
+This project is dual-licensed:
+
+- [AGPL v3](LICENSE) - free for open-source use. Derivatives and SaaS deployments must release their source under AGPL.
+- [Commercial license](COMMERCIAL.md) - for proprietary / closed-source use or hosted services that do not want to comply with AGPL source-disclosure requirements. Contact for terms.
 
 RimDoc is an unofficial community tool. It is not affiliated with or endorsed by Ludeon Studios.
