@@ -1,7 +1,14 @@
 import { createContext, useContext, useState } from "react";
 import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
-import { configDir, planRepair, toPowerShell, type FileAction, type RepairPlan } from "../lib/repair/repairs";
+import {
+  configDir,
+  planRepair,
+  toPowerShell,
+  toRollbackPowerShell,
+  type FileAction,
+  type RepairPlan,
+} from "../lib/repair/repairs";
 import { download } from "../lib/download";
 
 export interface RepairApi {
@@ -132,6 +139,14 @@ function FilePlan({ actions, config }: { actions: FileAction[]; config: string |
       <div className="repair-actions">
         <button className="btn primary" type="button" onClick={() => download("rimdoc-repair.ps1", script)}>
           Download .ps1
+        </button>
+        <button
+          className="btn"
+          type="button"
+          title="Restores every file this repair backed up"
+          onClick={() => download("rimdoc-rollback.ps1", toRollbackPowerShell(actions))}
+        >
+          Download rollback
         </button>
         <button
           className="btn"

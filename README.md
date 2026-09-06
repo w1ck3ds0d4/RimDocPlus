@@ -146,6 +146,7 @@ Nothing is changed before a copy exists.
 - Every generated script opens with a backup phase: it copies the save-data `Config` folder to `~/RimDoc-Backups/original-version` once and never overwrites it, so that copy stays the install as it was before RimDoc+ first touched anything rather than before the latest run.
 - Each run additionally copies every file it will change into a timestamped `run-*` folder, so one run can be undone as a unit.
 - Individual files still get a `.rimdocbak` alongside them, so a single change can be reverted on its own.
+- Every repair plan also generates a **rollback script**, which restores from those backups and reports what it restored and what it skipped. It lists the paths explicitly rather than searching for backups, since the plan already knows exactly what it touched, and it is safe to run twice.
 
 ### Repairs
 

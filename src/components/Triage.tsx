@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Finding, ScanResult } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
-import { configDir, toPowerShell } from "../lib/repair/repairs";
+import { configDir, toPowerShell, toRollbackPowerShell } from "../lib/repair/repairs";
 import {
   allFileActions,
   resolveDecision,
@@ -299,7 +299,18 @@ function TriageReport({
             >
               Download all {actions.length} as one script
             </button>
-            <span className="repair-note">Saves an original-version backup before touching anything.</span>
+            <button
+              className="btn"
+              type="button"
+              title="Restores every file the repair script backed up"
+              onClick={() => download("rimdoc-rollback.ps1", toRollbackPowerShell(actions))}
+            >
+              Download rollback
+            </button>
+            <span className="repair-note">
+              A browser cannot write to disk, so these wait for the script. It backs everything up first, and
+              the rollback undoes the whole run.
+            </span>
           </li>
         )}
       </Section>
