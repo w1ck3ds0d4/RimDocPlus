@@ -16,11 +16,20 @@ export interface Profile {
   gameCycle: string;
   activeOrder: string[];
   note?: string;
-  /**
-   * A restore point. Locked packs cannot be edited, renamed or deleted, so there is
-   * always one record of what the install looked like before RimDoc+ touched anything.
-   */
-  locked?: boolean;
+}
+
+/**
+ * The load order as the install was first found.
+ *
+ * Kept apart from the pack list rather than as a locked pack in it: two identical entries
+ * on a first run is noise, and there is nothing to restore to until something diverges.
+ * It still exists from the very first scan, so the moment something does change there is
+ * already a record of what came before.
+ */
+export interface Baseline {
+  capturedAt: string;
+  gameVersion: string;
+  activeOrder: string[];
 }
 
 export interface ProfileDiff {
@@ -30,6 +39,7 @@ export interface ProfileDiff {
 }
 
 const STORAGE_KEY = "rimdoc.profiles.v1";
+const BASELINE_KEY = "rimdoc.baseline.v1";
 
 export function newProfileId(): string {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -63,12 +73,10 @@ export function profileFromScan(scan: ScanResult, name: string): Profile {
 
 export function duplicateProfile(profile: Profile, name: string): Profile {
   const now = new Date().toISOString();
-  // A copy of a restore point is a working pack, not another restore point.
-  return { ...profile, id: newProfileId(), name, createdAt: now, updatedAt: now, locked: false };
+  return { ...profile, id: newProfileId(), name, createdAt: now, updatedAt: now };
 }
 
 function touch(profile: Profile, activeOrder: string[]): Profile {
-  if (profile.locked) return profile;
   return { ...profile, activeOrder, updatedAt: new Date().toISOString() };
 }
 
@@ -105,7 +113,6 @@ export function setEnabled(
 
 /** Move one mod up or down the load order by `delta` positions. */
 export function moveMod(profile: Profile, packageId: string, delta: number): Profile {
-  if (profile.locked) return profile;
   const from = profile.activeOrder.indexOf(packageId);
   if (from === -1) return profile;
   const to = Math.max(0, Math.min(profile.activeOrder.length - 1, from + delta));
@@ -270,4 +277,34 @@ export function saveProfiles(profiles: Profile[]): void {
     // Private windows and blocked site data both throw here. Losing persistence is
     // survivable; losing the editor is not.
   }
+}
+
+/** The recorded original order, or null before the first scan has stored one. */
+export function loadBaseline(): Baseline | null {
+  try {
+    const raw = localStorage.getItem(BASELINE_KEY);
+    return raw ? (JSON.parse(raw) as Baseline) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record the original order, once. Later scans never overwrite it, so it stays the
+ * install as first found rather than sliding forward with every change.
+ */
+export function saveBaselineOnce(scan: ScanResult): Baseline | null {
+  const existing = loadBaseline();
+  if (existing) return existing;
+  const baseline: Baseline = {
+    capturedAt: new Date().toISOString(),
+    gameVersion: scan.gameVersion,
+    activeOrder: [...scan.activeOrder],
+  };
+  try {
+    localStorage.setItem(BASELINE_KEY, JSON.stringify(baseline));
+  } catch {
+    return null;
+  }
+  return baseline;
 }

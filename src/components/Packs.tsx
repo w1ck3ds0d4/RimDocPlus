@@ -1,6 +1,12 @@
 import type { ModEntry, ScanResult } from "../lib/types";
-import type { Profile } from "../lib/profiles";
-import { diffProfiles, duplicateProfile, profileFromScan, toModsConfigXml } from "../lib/profiles";
+import type { Baseline, Profile } from "../lib/profiles";
+import {
+  diffProfiles,
+  duplicateProfile,
+  loadBaseline,
+  profileFromScan,
+  toModsConfigXml,
+} from "../lib/profiles";
 import { download, slug } from "../lib/download";
 
 export function Packs({
@@ -23,6 +29,7 @@ export function Packs({
   onDelete: (id: string) => void;
 }) {
   const byId = new Map(mods.map((m) => [m.packageId, m]));
+  const baseline = loadBaseline();
 
   return (
     <>
@@ -54,6 +61,8 @@ export function Packs({
         </button>
       </div>
 
+      {baseline && <RestoreOriginal baseline={baseline} profiles={profiles} onUpdate={onUpdate} />}
+
       {profiles.length === 0 && <p className="muted">No packs yet.</p>}
 
       {profiles.map((profile) => {
@@ -66,15 +75,8 @@ export function Packs({
                 className="pack-name"
                 value={profile.name}
                 aria-label="Pack name"
-                readOnly={profile.locked}
-                title={profile.locked ? "Restore points cannot be renamed" : undefined}
-                onChange={(e) => !profile.locked && onUpdate({ ...profile, name: e.target.value })}
+                onChange={(e) => onUpdate({ ...profile, name: e.target.value })}
               />
-              {profile.locked && (
-                <span className="tag official" title="A restore point: never edited, never deleted">
-                  restore point
-                </span>
-              )}
               <span className="pack-count">{profile.activeOrder.length} mods</span>
               {profile.id === activeId && <span className="tag official">editing</span>}
             </div>
@@ -93,11 +95,9 @@ export function Packs({
             </p>
 
             <div className="pack-actions">
-              {!profile.locked && (
-                <button className="btn" type="button" onClick={() => onSelect(profile.id)}>
-                  Edit
-                </button>
-              )}
+              <button className="btn" type="button" onClick={() => onSelect(profile.id)}>
+                Edit
+              </button>
               <button
                 className="btn"
                 type="button"
@@ -129,11 +129,9 @@ export function Packs({
               >
                 Export pack
               </button>
-              {!profile.locked && (
-                <button className="btn danger" type="button" onClick={() => onDelete(profile.id)}>
-                  Delete
-                </button>
-              )}
+              <button className="btn danger" type="button" onClick={() => onDelete(profile.id)}>
+                Delete
+              </button>
             </div>
           </div>
         );
@@ -146,6 +144,54 @@ export function Packs({
         does the same job by hand.
       </p>
     </>
+  );
+}
+
+/**
+ * Put a pack back to the order the install started with.
+ *
+ * Only shown once something has actually diverged: before that it would restore a pack
+ * to what it already is, which is a button that does nothing dressed as a safety net.
+ */
+function RestoreOriginal({
+  baseline,
+  profiles,
+  onUpdate,
+}: {
+  baseline: Baseline;
+  profiles: Profile[];
+  onUpdate: (profile: Profile) => void;
+}) {
+  const drifted = profiles.filter((p) => {
+    const drift = diffProfiles(baseline.activeOrder, p.activeOrder);
+    return drift.added.length > 0 || drift.removed.length > 0 || drift.reordered;
+  });
+  if (!drifted.length) return null;
+
+  return (
+    <div className="restore">
+      <div className="restore-text">
+        <b>Original load order</b>
+        <small>
+          {baseline.activeOrder.length} mods, recorded {baseline.capturedAt.slice(0, 10)} on{" "}
+          {baseline.gameVersion}
+        </small>
+      </div>
+      {drifted.map((profile) => {
+        const drift = diffProfiles(baseline.activeOrder, profile.activeOrder);
+        return (
+          <button
+            key={profile.id}
+            className="btn"
+            type="button"
+            title={`+${drift.added.length} -${drift.removed.length}${drift.reordered ? " reordered" : ""}`}
+            onClick={() => onUpdate({ ...profile, activeOrder: [...baseline.activeOrder] })}
+          >
+            Restore {profile.name}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

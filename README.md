@@ -142,7 +142,7 @@ On the 253-mod install this was built against: 20.4 GB of decoded texture data, 
 
 Nothing is changed before a copy exists.
 
-- On first scan RimDoc+ creates a locked pack called **Original version**, capturing the load order as it was found. It cannot be renamed, edited or deleted, so a mistake later is always one restore away.
+- On first scan RimDoc+ records the load order as it was found, and never overwrites that record. It is kept apart from the pack list rather than sitting in it as a second identical entry, and a **Restore original load order** control appears only once a pack has actually diverged from it, since before that there is nothing to restore to.
 - Every generated script opens with a backup phase: it copies the save-data `Config` folder to `~/RimDoc-Backups/original-version` once and never overwrites it, so that copy stays the install as it was before RimDoc+ first touched anything rather than before the latest run.
 - Each run additionally copies every file it will change into a timestamped `run-*` folder, so one run can be undone as a unit.
 - Individual files still get a `.rimdocbak` alongside them, so a single change can be reverted on its own.

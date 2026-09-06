@@ -7,6 +7,7 @@ import {
   diffProfiles,
   loadProfiles,
   profileFromScan,
+  saveBaselineOnce,
   saveProfiles,
   setupName,
   type Profile,
@@ -40,16 +41,19 @@ export default function App() {
         setWorkshop(w);
         if (!s) return;
         const stored = loadProfiles();
-        // First run captures the install as it was found, twice: a locked restore point
-        // that nothing can edit, and a working copy to actually change. Any later mistake
-        // is then one click from undone, whatever else has happened since.
+        // One pack to work in. The order the install started with is recorded separately
+        // as a baseline, because a second identical pack is noise until something
+        // diverges, and there is nothing to restore to before then.
         const seeded = stored.length
           ? // Packs saved before the name depended on the install keep working; only
             // the placeholder name is brought up to date.
             stored.map((p) => (p.name === "Current game setup" ? { ...p, name: setupName(s) } : p))
-          : [{ ...profileFromScan(s, "Original version"), locked: true }, profileFromScan(s, setupName(s))];
+          : [profileFromScan(s, setupName(s))];
+        // Recorded on the very first scan and never overwritten, so there is always a
+        // record of the order the install started with.
+        saveBaselineOnce(s);
         setProfiles(seeded);
-        setActiveId(seeded.find((p) => !p.locked)?.id ?? seeded[0].id);
+        setActiveId(seeded[0].id);
       })
       .finally(() => setLoading(false));
   }, []);
