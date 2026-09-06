@@ -1,5 +1,6 @@
-import type { Finding, ScanResult } from "../types";
+import type { Finding, ScanResult, WorkshopCache } from "../types";
 import { sortLoadOrder, toggleMod, toModsConfigXml, type Profile } from "../profiles.ts";
+import { rankDuplicates } from "../analysis/duplicates.ts";
 
 /**
  * A change to a file on disk.
@@ -35,6 +36,8 @@ export interface RepairContext {
   scan: ScanResult;
   profile: Profile;
   finding: Finding;
+  /** Optional: lets a repair reason about popularity and maintenance, not just files. */
+  workshop?: WorkshopCache | null;
 }
 
 type RepairFn = (ctx: RepairContext) => RepairPlan | null;
@@ -131,14 +134,30 @@ const REPAIRS: Record<string, RepairFn> = {
     const folders = list(ctx, "folders");
     const packageId = str(ctx, "packageId");
     if (folders.length < 2 || !packageId) return null;
+
+    const copies = ctx.scan.mods.filter((m) => m.packageId === packageId);
+    const ranking = rankDuplicates(copies, ctx.scan.gameCycle, ctx.workshop ?? null);
+    const byFolder = new Map(copies.map((m) => [m.folder, m]));
+
+    const advice = ranking
+      ? `\n\nSuggested: keep ${ranking.recommended.name}. ${ranking.reasons.join(". ")}.` +
+        (ranking.caveats.length
+          ? `\n\nAgainst that: ${ranking.caveats.join(". ")}. The evidence points both ways, so this is a ` +
+            "judgement rather than an answer."
+          : "")
+      : "";
+
     return {
       kind: "choice",
       summary:
         "Two folders provide this mod and RimWorld silently picks one. Keep the copy you want and " +
         "remove the other. A Workshop copy comes back on the next Steam sync, so a local copy is " +
-        "usually the one to keep.",
+        "usually the one to keep." +
+        advice,
       choices: folders.map((keep) => ({
-        label: `Keep ${keep.split(/[\\/]/).pop()}`,
+        label:
+          `Keep ${byFolder.get(keep)?.name ?? keep.split(/[\\/]/).pop()}` +
+          (ranking?.recommended.folder === keep ? "  (suggested)" : ""),
         detail: keep,
         plan: (): RepairPlan => ({
           kind: "files",

@@ -134,7 +134,7 @@ Every finding that has a repair explains its plan before anything happens. The b
 Repairs split by what they actually have to touch:
 
 - **Pack repairs** apply instantly and are fully undoable, because a pack is app state: drop orphan entries, enable a disabled dependency, reorder to satisfy constraints. Nothing on disk changes.
-- **Choice repairs** refuse to guess. Two mods declaring mutual incompatibility, or one package id in two folders, is a decision only you can make, so RimDoc+ lays out the options and their consequences.
+- **Choice repairs** refuse to guess, but they do not refuse to reason. A duplicate install is ranked on version support, whether a copy is a deliberate local pin, update recency and subscriber count, and the suggested copy is labelled with why. When the signals disagree the disagreement is printed rather than buried: the real case this was built against recommends a fork updated 398 days more recently while stating that the original has four times the subscribers. Two mods declaring mutual incompatibility, or one package id in two folders, is a decision only you can make, so RimDoc+ lays out the options and their consequences.
 - **File repairs** list every path they would touch, then generate a PowerShell script that backs up each file before changing it. Stamping a version into `About.xml`, resetting a mod's settings, restoring `ModsConfig.xml` after the game wiped it.
 - **External repairs** are the ones no tool can do for you, such as resubscribing to a Workshop item, and link straight to the right page.
 

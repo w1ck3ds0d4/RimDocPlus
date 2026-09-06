@@ -138,7 +138,12 @@ export default function App() {
 
   return (
     <RepairProvider
-      value={{ scan: workingScan, profile: active ?? profileFromScan(scan, "scratch"), applyProfile }}
+      value={{
+        scan: workingScan,
+        profile: active ?? profileFromScan(scan, "scratch"),
+        workshop,
+        applyProfile,
+      }}
     >
       <header className="hdr">
         <Logo />

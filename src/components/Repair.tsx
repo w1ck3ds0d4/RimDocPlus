@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react";
-import type { Finding, ScanResult } from "../lib/types";
+import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
 import type { Profile } from "../lib/profiles";
 import { planRepair, toPowerShell, type FileAction, type RepairPlan } from "../lib/repair/repairs";
 import { download } from "../lib/download";
@@ -7,6 +7,7 @@ import { download } from "../lib/download";
 export interface RepairApi {
   scan: ScanResult;
   profile: Profile;
+  workshop?: WorkshopCache | null;
   /** Commit a repaired pack. The caller records the previous one so this can be undone. */
   applyProfile: (profile: Profile, label: string) => void;
 }
@@ -29,7 +30,7 @@ export function RepairAction({ finding }: { finding: Finding }) {
   const [open, setOpen] = useState(false);
   if (!api || !finding.fix) return null;
 
-  const plan = planRepair({ scan: api.scan, profile: api.profile, finding });
+  const plan = planRepair({ scan: api.scan, profile: api.profile, workshop: api.workshop, finding });
 
   if (!plan) {
     return (
