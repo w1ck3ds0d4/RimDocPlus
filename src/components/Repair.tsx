@@ -154,6 +154,7 @@ function FilePlan({ actions }: { actions: FileAction[] }) {
 
 function opLabel(action: FileAction): string {
   if (action.op === "add-supported-version") return `stamp ${action.cycle}`;
+  if (action.op === "downscale-png") return `${action.maxPx}px`;
   if (action.op === "write") return "write";
   return "remove";
 }

@@ -26,9 +26,34 @@ export interface ModEntry {
   /** Mod ships XML PatchOperations, so it can fail at load time. */
   hasPatches: boolean;
   sizeBytes: number;
+  /** Texture footprint, when the scan read image headers. */
+  textures?: TextureStats;
   /** Set from ModsConfig.xml, not from the mod folder. */
   active: boolean;
   loadIndex: number | null;
+}
+
+/** One texture large enough to be worth naming. */
+export interface OversizedTexture {
+  path: string;
+  width: number;
+  height: number;
+}
+
+export interface TextureStats {
+  count: number;
+  /**
+   * Sum of width x height x 4 across every texture read.
+   *
+   * Unity uploads decoded textures, so on-disk PNG compression buys nothing at runtime:
+   * a 2048px texture costs 16 MB of VRAM whether it compresses to 4 KB or 4 MB. This is
+   * why the estimate is computed from dimensions and not from file size.
+   */
+  estimatedVramBytes: number;
+  /** Textures at or above the oversize threshold, largest first. */
+  oversized: OversizedTexture[];
+  /** True when the walk hit its cap, so the numbers are a floor rather than a total. */
+  truncated: boolean;
 }
 
 export interface ScanPaths {

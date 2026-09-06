@@ -70,6 +70,28 @@ A pack is a named, saved mod list: the set of package ids you want the game to r
 
 **The doctor analyses the pack you are editing, not the load order the game happens to hold.** Toggling a mod updates the findings immediately. Turning off a framework that 53 mods depend on surfaces 53 findings before you ever launch the game.
 
+### Triage
+
+One button that assesses everything, applies what is provably safe, and stages the rest as a worklist:
+
+- **Applied to the pack** - every deterministic repair, chained and committed as one undoable step
+- **Needs your decision** - the ambiguous ones, with the options spelled out
+- **Needs a script** - every disk change gathered into a single PowerShell script that backs up each file first, deduplicated so no file is touched twice
+- **Needs you** - Workshop subscriptions and OS settings, with links
+- **No repair yet** - findings the engine cannot act on
+
+The "resolved" count is produced by re-running the rules against the repaired pack, not by subtracting what it attempted. Triage does not claim the game runs: faults that only appear once the game is executing need the supervised launch and the headless boot check, neither of which is built.
+
+### Performance analysis
+
+Measured from the files on disk, not estimated from heuristics.
+
+- **Texture footprint**: the scanner reads PNG headers for every texture and sums width x height x 4. Unity uploads textures decoded, so on-disk compression buys nothing at runtime: a 2048px texture costs 16 MB resident whether it compresses to 4 KB or 4 MB.
+- **Oversized textures**: everything at 1024px or larger, named per mod. RimWorld draws at roughly 64px per tile, so past 512px is detail the camera never resolves.
+- **Downscale repair** (Tier 3): resizes to a maximum dimension preserving aspect ratio, with a real before/after figure computed per texture from its own dimensions. Backs up every file, and never runs automatically because it changes mod content.
+
+On the 253-mod install this was built against: 20.4 GB of decoded texture data, 729 textures at 1024px or larger, costing 4.20 GB between them. Resizing those to 512px brings it to 0.60 GB, a 3.6 GB saving.
+
 ### Repairs
 
 Every finding that has a repair explains its plan before anything happens. The button reveals what would change; only the plan carries the action.

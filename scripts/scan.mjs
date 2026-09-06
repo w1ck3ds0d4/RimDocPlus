@@ -8,7 +8,17 @@
  *   pnpm scan            scan the auto-detected install
  *   pnpm scan --log path use a specific Player.log
  */
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -51,11 +61,46 @@ function discover() {
   };
 }
 
-function dirSize(dir, budget = 4000) {
+/** Textures at or above this in either dimension are worth naming individually. */
+const OVERSIZE_PX = 1024;
+
+/**
+ * Read a PNG's dimensions from its header.
+ *
+ * Only the first 24 bytes are needed: signature, IHDR length, the IHDR tag, then width
+ * and height as big-endian uint32. Reading the whole file would be thousands of times
+ * more IO for the two numbers that determine VRAM cost.
+ */
+function pngSize(path) {
+  let fd;
+  try {
+    fd = openSync(path, "r");
+    const head = Buffer.alloc(24);
+    if (readSync(fd, head, 0, 24, 0) < 24) return null;
+    if (head.toString("ascii", 12, 16) !== "IHDR") return null;
+    return { width: head.readUInt32BE(16), height: head.readUInt32BE(20) };
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/**
+ * One pass over a mod folder producing both its on-disk size and its texture footprint.
+ * Walking twice would double the IO on a 253-mod install for no extra information.
+ */
+function measureMod(dir, budget = 6000) {
   let total = 0;
   let seen = 0;
+  const textures = { count: 0, estimatedVramBytes: 0, oversized: [], truncated: false };
   const stack = [dir];
-  while (stack.length && seen < budget) {
+
+  while (stack.length) {
+    if (seen >= budget) {
+      textures.truncated = true;
+      break;
+    }
     const current = stack.pop();
     let entries;
     try {
@@ -66,17 +111,30 @@ function dirSize(dir, budget = 4000) {
     for (const entry of entries) {
       seen++;
       const full = join(current, entry.name);
-      if (entry.isDirectory()) stack.push(full);
-      else {
-        try {
-          total += statSync(full).size;
-        } catch {
-          /* unreadable file, skip */
-        }
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      try {
+        total += statSync(full).size;
+      } catch {
+        continue;
+      }
+      if (!entry.name.toLowerCase().endsWith(".png")) continue;
+      const size = pngSize(full);
+      if (!size) continue;
+      textures.count++;
+      textures.estimatedVramBytes += size.width * size.height * 4;
+      if (size.width >= OVERSIZE_PX || size.height >= OVERSIZE_PX) {
+        textures.oversized.push({ path: full, width: size.width, height: size.height });
       }
     }
   }
-  return total;
+
+  textures.oversized.sort((a, b) => b.width * b.height - a.width * a.height);
+  // A mod with hundreds of oversized textures needs the count, not every path.
+  textures.oversized = textures.oversized.slice(0, 25);
+  return { sizeBytes: total, textures };
 }
 
 /** RimWorld accepts About/About.xml with any casing, and some mods ship it uppercased. */
@@ -120,6 +178,7 @@ function scanModDir(dir, source) {
     const folder = join(dir, entry.name);
     const xml = readAbout(folder);
     if (!xml) continue;
+    const measured = measureMod(folder);
     const mod = parseAbout({
       xml,
       folder,
@@ -127,9 +186,9 @@ function scanModDir(dir, source) {
       steamId: source === "steam" ? entry.name : undefined,
       hasAssemblies: hasSubdir(folder, "Assemblies"),
       hasPatches: hasSubdir(folder, "Patches"),
-      sizeBytes: dirSize(folder),
+      sizeBytes: measured.sizeBytes,
     });
-    if (mod) mods.push(mod);
+    if (mod) mods.push({ ...mod, textures: measured.textures });
   }
   return mods;
 }
@@ -183,9 +242,16 @@ function main() {
   }
 
   const active = mods.filter((m) => m.active).length;
+  const vram = mods
+    .filter((m) => m.active)
+    .reduce((sum, m) => sum + (m.textures?.estimatedVramBytes ?? 0), 0);
+  const oversized = mods
+    .filter((m) => m.active)
+    .reduce((sum, m) => sum + (m.textures?.oversized.length ?? 0), 0);
   console.log(`game     ${paths.game}`);
   console.log(`version  ${gameVersion} (cycle ${scan.gameCycle})`);
   console.log(`mods     ${mods.length} on disk, ${active} active, ${activeOrder.length} in load order`);
+  console.log(`textures ${(vram / 1024 ** 3).toFixed(2)} GB estimated VRAM, ${oversized}+ oversized`);
   console.log(`wrote    ${join(OUT, "scan.json")}`);
 }
 

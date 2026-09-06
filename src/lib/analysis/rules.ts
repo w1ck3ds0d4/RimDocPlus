@@ -1,5 +1,6 @@
 import type { Finding, ModEntry, ScanResult } from "../types";
 import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS } from "./about.ts";
+import { runPerformanceRules } from "./performance.ts";
 
 /**
  * L1 static analysis: everything we can prove about a mod list without launching the
@@ -27,6 +28,7 @@ export function runStaticRules(scan: ScanResult): Finding[] {
     ...ruleIncompatiblePair(active, activeSet, byId),
     ...ruleLoadOrder(active, position),
     ...ruleVersionMismatch(active, scan.gameCycle),
+    ...runPerformanceRules(scan),
   ];
 }
 

@@ -9,7 +9,7 @@ import { PackEditor } from "./components/PackEditor";
 import { Packs } from "./components/Packs";
 import { SessionReport } from "./components/SessionReport";
 import { RepairProvider } from "./components/Repair";
-import { autoPackRepairs } from "./lib/repair/repairs";
+import { Triage } from "./components/Triage";
 
 type Tab = "doctor" | "session" | "packs" | "order";
 
@@ -130,10 +130,6 @@ export default function App() {
   if (loading) return <main />;
   if (!scan || !workingScan) return <NoFixtures />;
 
-  // Repairs that need no judgement and touch only the pack, chained so a batch cannot
-  // apply two conflicting edits to one load order.
-  const autoFixes = active ? autoPackRepairs(staticFindings, { scan: workingScan, profile: active }) : [];
-
   const drift = active ? diffProfiles(scan.activeOrder, active.activeOrder) : null;
   const dirty = drift ? drift.added.length > 0 || drift.removed.length > 0 || drift.reordered : false;
 
@@ -179,25 +175,21 @@ export default function App() {
         {tab === "doctor" && (
           <>
             <SeveritySummary findings={staticFindings} />
-            <div className="toolbar">
-              <button
-                className="btn primary"
-                type="button"
-                disabled={!autoFixes.length}
-                title="Applies every deterministic pack-level repair. Nothing on disk changes."
-                onClick={() => {
-                  const last = autoFixes[autoFixes.length - 1];
-                  if (last) applyProfile(last.plan.profile, `fix all (${autoFixes.length})`);
-                }}
-              >
-                {autoFixes.length ? `Fix all automatic (${autoFixes.length})` : "Nothing to auto-fix"}
-              </button>
-              {undoStack.length > 0 && (
+            {active && (
+              <Triage
+                findings={staticFindings}
+                scan={workingScan}
+                profile={active}
+                applyProfile={applyProfile}
+              />
+            )}
+            {undoStack.length > 0 && (
+              <div className="toolbar">
                 <button className="btn" type="button" onClick={undo}>
                   Undo {undoStack[0].label}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
             <FindingList
               findings={staticFindings}
               empty="No static problems found. This load order is structurally sound."
