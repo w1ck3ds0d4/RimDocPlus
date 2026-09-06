@@ -67,7 +67,7 @@ function ConfirmDialog({ request, onClose }: { request: Request; onClose: (ok: b
         <div className="modal-body">{request.body}</div>
         <div className="modal-foot">
           <button
-            className={`btn${request.destructive ? " danger" : " primary"}`}
+            className={`btn${request.destructive ? " danger solid" : " primary"}`}
             type="button"
             autoFocus
             onClick={() => onClose(true)}

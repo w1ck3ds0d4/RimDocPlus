@@ -335,9 +335,36 @@ main {
   color: var(--accent);
 }
 
+/* Destructive at rest, not only on hover: an action that cannot be undone should not
+   look identical to Cancel until the pointer happens to be over it. */
+.btn.danger {
+  border-color: rgba(240, 97, 109, 0.45);
+  color: var(--critical);
+}
+
 .btn.danger:hover:not(:disabled) {
+  background: rgba(240, 97, 109, 0.12);
   border-color: var(--critical);
   color: var(--critical);
+}
+
+/* The committing button in a confirm dialog, where it is the primary action. */
+.btn.danger.solid {
+  background: linear-gradient(135deg, #c0272d, #e5484d);
+  border-color: #f0616d;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.btn.danger.solid:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d02c33, #f0616d);
+  border-color: #ff8088;
+  color: #ffffff;
+}
+
+.btn.danger.solid:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
 }
 
 .btn .tier,

@@ -41,13 +41,13 @@ export function Packs({
       body: (
         <>
           <p>
-            This pack holds {profile.activeOrder.length} mods in a particular order. Deleting it cannot be
+            This modpack holds {profile.activeOrder.length} mods in a particular order. Deleting it cannot be
             undone, and it is the only copy unless you exported one.
           </p>
           <p className="muted">Nothing on your install changes. Your mods stay exactly where they are.</p>
         </>
       ),
-      confirmLabel: "Delete pack",
+      confirmLabel: "Delete Modpack",
       destructive: true,
     });
     if (ok) onDelete(profile.id);
