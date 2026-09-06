@@ -2255,3 +2255,7 @@ tr.dev-error td {
   color: var(--critical);
   font-size: 12px;
 }
+
+.triage-section li .against {
+  color: var(--warning);
+}

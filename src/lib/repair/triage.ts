@@ -242,7 +242,7 @@ export function triageSteps(result: TriageResult, scan: ScanResult, packName: st
       steps.push({ tone: "ok", label: "fixed", text: `${finding.title} - ${summary}` });
     }
   } else {
-    steps.push({ tone: "info", label: "repair", text: "nothing safe to apply unattended" });
+    steps.push({ tone: "info", label: "repair", text: "no modpack change needed" });
   }
 
   for (const decision of result.autoDecided) {
@@ -265,12 +265,20 @@ export function triageSteps(result: TriageResult, scan: ScanResult, packName: st
 
   const actions = allFileActions(result);
   if (actions.length) {
+    for (const file of result.files) {
+      steps.push({
+        tone: "work",
+        label: "stage",
+        text: `${file.finding.title} - ${file.actions.length} action${file.actions.length === 1 ? "" : "s"}`,
+      });
+    }
     steps.push({
       tone: "work",
-      label: "staged",
-      text: `${actions.length} file action${actions.length === 1 ? "" : "s"}, est. ${formatDuration(
-        estimateDurationMs(actions),
-      )} to run`,
+      label: "script",
+      text:
+        `${actions.length} action${actions.length === 1 ? "" : "s"} written to a script, est. ` +
+        `${formatDuration(estimateDurationMs(actions))} to run. A browser cannot write to disk, so ` +
+        "these wait for the script or the desktop shell.",
     });
   }
 
@@ -282,6 +290,15 @@ export function triageSteps(result: TriageResult, scan: ScanResult, packName: st
     steps.push({ tone: "warn", label: "skip", text: `${finding.title} (no repair implemented)` });
   }
 
+  // Notes are listed rather than summed, because "12 informational" tells a reader
+  // nothing about whether any of them is worth their attention.
+  for (const note of result.notes.slice(0, 8)) {
+    steps.push({ tone: "info", label: "note", text: note.title });
+  }
+  if (result.notes.length > 8) {
+    steps.push({ tone: "info", label: "note", text: `and ${result.notes.length - 8} more` });
+  }
+
   // Report every finding against where it went. "Nothing was auto-fixable" was both
   // wrong and unhelpful when most of the list was notes and the rest had been staged.
   const fixedNow = result.before - result.after;
@@ -289,6 +306,7 @@ export function triageSteps(result: TriageResult, scan: ScanResult, packName: st
   const needsYou = result.decisions.length + result.external.length;
   const parts = [
     fixedNow > 0 ? `${fixedNow} fixed` : null,
+    result.autoDecided.length > 0 ? `${result.autoDecided.length} decided automatically` : null,
     stagedFindings > 0 ? `${stagedFindings} staged for the script` : null,
     needsYou > 0 ? `${needsYou} needs you` : null,
     result.unresolved.length > 0 ? `${result.unresolved.length} with no repair yet` : null,

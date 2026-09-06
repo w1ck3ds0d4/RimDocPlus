@@ -230,11 +230,7 @@ function TriageReport({
   return (
     <div className="triage-report">
       <div className="triage-head">
-        <h2>
-          {resolved > 0
-            ? `${resolved} of ${result.before} issues resolved`
-            : "Nothing to apply automatically"}
-        </h2>
+        <h2>{headline(result, resolved)}</h2>
         <button className="btn" type="button" onClick={onDismiss}>
           Dismiss
         </button>
@@ -250,6 +246,23 @@ function TriageReport({
           <li key={finding.id}>
             <b>{finding.title}</b>
             <span>{summary}</span>
+          </li>
+        ))}
+      </Section>
+
+      <Section
+        title="Decided automatically"
+        count={result.autoDecided.length}
+        tone="ok"
+        empty="Nothing needed deciding."
+      >
+        {result.autoDecided.map((decision) => (
+          <li key={decision.finding.id}>
+            <b>{decision.choice}</b>
+            <span>{decision.reasons.join(". ")}</span>
+            {decision.caveats.length > 0 && (
+              <span className="against">Against: {decision.caveats.join(". ")}</span>
+            )}
           </li>
         ))}
       </Section>
@@ -319,6 +332,20 @@ function TriageReport({
         ))}
       </Section>
 
+      <Section title="Informational" count={result.notes.length} tone="dim" empty="No notes.">
+        {result.notes.slice(0, 10).map((note) => (
+          <li key={note.id}>
+            <b>{note.title}</b>
+            <span className="muted">{note.rule}</span>
+          </li>
+        ))}
+        {result.notes.length > 10 && (
+          <li>
+            <span className="muted">and {result.notes.length - 10} more</span>
+          </li>
+        )}
+      </Section>
+
       <p className="triage-foot">
         Triage applies what is provably safe and stages what is not. It does not guarantee the game runs:
         problems that only appear once the game is executing need the supervised launch and the headless boot
@@ -326,6 +353,17 @@ function TriageReport({
       </p>
     </div>
   );
+}
+
+/** Say what actually happened, rather than reporting only the modpack-level repairs. */
+function headline(result: TriageResult, resolved: number): string {
+  if (resolved > 0) return `${resolved} of ${result.before} issues resolved`;
+  if (result.autoDecided.length > 0 || result.files.length > 0) {
+    const staged = allFileActions(result).length;
+    return `Decided and staged ${staged} action${staged === 1 ? "" : "s"}, nothing left to change here`;
+  }
+  if (result.before === 0) return "Nothing to triage";
+  return "Nothing could be applied automatically";
 }
 
 function Section({
