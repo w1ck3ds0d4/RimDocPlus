@@ -1153,32 +1153,8 @@ tr.row-off td:not(.toggle-cell) {
   margin-bottom: 14px;
 }
 
-.triage-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  width: 100%;
-  padding: 16px 18px;
-  background: linear-gradient(135deg, #a81f24 0%, #d13a40 45%, #e5484d 100%);
-  border: 1px solid #f0616d;
-  border-radius: 11px;
-  color: #ffffff;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  box-shadow:
-    0 0 0 1px rgba(229, 72, 77, 0.3),
-    0 10px 26px -10px rgba(229, 72, 77, 0.8);
-  transition:
-    transform 0.12s ease,
-    box-shadow 0.18s ease,
-    filter 0.18s ease;
-}
-
-/* A heart trace running behind the label, scrolling the way a monitor does. */
-.triage-btn::after {
+/* A heart trace running behind the whole control, scrolling the way a monitor does. */
+.triage-bar::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1199,24 +1175,35 @@ tr.row-off td:not(.toggle-cell) {
   }
 }
 
+.triage-btn {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px;
+  background: none;
+  border: none;
+  color: #ffffff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
 .triage-btn:hover {
-  filter: brightness(1.07);
-  transform: translateY(-1px);
-  box-shadow:
-    0 0 0 1px rgba(240, 97, 109, 0.55),
-    0 14px 32px -10px rgba(229, 72, 77, 0.95);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .triage-btn:active {
-  transform: translateY(1px);
-  box-shadow:
-    0 0 0 1px rgba(229, 72, 77, 0.35),
-    0 4px 12px -6px rgba(229, 72, 77, 0.7);
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .triage-btn:focus-visible {
   outline: 2px solid #ffffff;
-  outline-offset: 2px;
+  outline-offset: -3px;
 }
 
 /* Bare white cross, no plate behind it. */
@@ -1286,24 +1273,37 @@ tr.row-off td:not(.toggle-cell) {
 }
 
 /* A clean install should feel settled, not shout for a click it does not need. */
-.triage-btn.clean {
+.triage-bar:has(.triage-btn.clean) {
   background: linear-gradient(135deg, var(--panel-2), var(--panel));
   border-color: var(--line);
-  color: var(--text-soft);
   box-shadow: none;
 }
 
-.triage-btn.clean::after,
+.triage-bar:has(.triage-btn.clean)::after {
+  animation: none;
+  opacity: 0.07;
+}
+
+.triage-btn.clean {
+  color: var(--text-soft);
+}
+
 .triage-btn.clean .cross {
   animation: none;
 }
 
-.triage-btn.clean::after {
-  opacity: 0.07;
-}
-
 .triage-btn.clean .cross svg rect {
   fill: var(--ok);
+}
+
+.triage-bar:has(.triage-btn.clean) .auto-toggle {
+  border-right-color: var(--line);
+  color: var(--text-soft);
+}
+
+.triage-bar:has(.triage-btn.clean) .auto-toggle .switch {
+  background: var(--panel-3);
+  border-color: var(--line);
 }
 
 .triage-btn.clean .triage-count {
@@ -1313,7 +1313,7 @@ tr.row-off td:not(.toggle-cell) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .triage-btn::after,
+  .triage-bar::after,
   .triage-btn .cross,
   .triage-report {
     animation: none !important;
@@ -1654,34 +1654,40 @@ tr.row-off td:not(.toggle-cell) {
 /* Auto toggle ------------------------------------------------------------- */
 
 .triage-bar {
+  position: relative;
   display: flex;
   align-items: stretch;
-  gap: 10px;
+  margin-bottom: 14px;
+  background: linear-gradient(135deg, #a81f24 0%, #d13a40 45%, #e5484d 100%);
+  border: 1px solid #f0616d;
+  border-radius: 11px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(229, 72, 77, 0.3),
+    0 10px 26px -10px rgba(229, 72, 77, 0.8);
 }
 
 .auto-toggle {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 9px;
   flex: none;
-  padding: 0 15px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 11px;
+  padding: 0 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
   cursor: pointer;
   user-select: none;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
+  transition: background 0.14s ease;
 }
 
 .auto-toggle:hover {
-  border-color: var(--accent-soft);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .auto-toggle.on {
-  background: var(--accent-ghost);
-  border-color: var(--accent-soft);
+  background: rgba(0, 0, 0, 0.16);
 }
 
 .auto-toggle input {
@@ -1696,8 +1702,8 @@ tr.row-off td:not(.toggle-cell) {
   flex: none;
   width: 34px;
   height: 19px;
-  background: var(--panel-3);
-  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 10px;
   transition:
     background 0.15s,
@@ -1710,24 +1716,24 @@ tr.row-off td:not(.toggle-cell) {
   height: 13px;
   margin: 2px 0 0 2px;
   border-radius: 50%;
-  background: var(--dim);
+  background: rgba(255, 255, 255, 0.65);
   transition:
     transform 0.15s,
     background 0.15s;
 }
 
 .auto-toggle.on .switch {
-  background: rgba(74, 158, 255, 0.25);
-  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.32);
+  border-color: #ffffff;
 }
 
 .auto-toggle.on .switch i {
-  background: var(--accent);
+  background: #ffffff;
   transform: translateX(15px);
 }
 
 .auto-toggle input:focus-visible + .switch {
-  outline: 2px solid var(--accent);
+  outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
 
@@ -1741,8 +1747,12 @@ tr.row-off td:not(.toggle-cell) {
   font-weight: 600;
 }
 
+.auto-text b {
+  opacity: 0.8;
+}
+
 .auto-toggle.on .auto-text b {
-  color: var(--accent);
+  opacity: 1;
 }
 
 /* Decision modal ---------------------------------------------------------- */
