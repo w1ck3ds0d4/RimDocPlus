@@ -20,6 +20,7 @@ import { RepairProvider } from "./components/Repair";
 import { Triage } from "./components/Triage";
 import { Library } from "./components/Library";
 import { Settings, loadDevMode } from "./components/Settings";
+import { GameControls } from "./components/GameControls";
 
 type Tab = "doctor" | "session" | "packs" | "order" | "library" | "settings";
 
@@ -193,6 +194,7 @@ export default function App() {
             {dirty && <span className="dot" title="Differs from the game's current load order" />}
           </div>
         )}
+        {active && <GameControls scan={scan} modpack={active} />}
         <div className="facts">
           <Fact label="Game" value={scan.gameVersion} />
           <Fact label="Installed" value={String(scan.mods.length)} />

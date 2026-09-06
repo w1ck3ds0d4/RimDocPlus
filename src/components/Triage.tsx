@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Finding, ScanResult } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
-import { configDir, toPowerShell, toRollbackPowerShell } from "../lib/repair/repairs";
+import { configDir, toPowerShell, toRollbackPowerShell, type FileAction } from "../lib/repair/repairs";
 import {
   allFileActions,
   resolveDecision,
@@ -12,6 +12,7 @@ import {
 } from "../lib/repair/triage";
 import type { WorkshopCache } from "../lib/types";
 import { download } from "../lib/download";
+import { inShell, rollback, runFileActions, targetsOf, type RunReport } from "../lib/shell";
 
 const AUTO_KEY = "rimdoc.triage.auto";
 
@@ -292,12 +293,13 @@ function TriageReport({
         ))}
         {actions.length > 0 && (
           <li className="triage-cta">
+            <ApplyActions actions={actions} config={configDir(scan)} />
             <button
-              className="btn primary"
+              className="btn"
               type="button"
               onClick={() => download("rimdoc-triage.ps1", toPowerShell(actions, configDir(scan)))}
             >
-              Download all {actions.length} as one script
+              Download script
             </button>
             <button
               className="btn"
@@ -375,6 +377,72 @@ function headline(result: TriageResult, resolved: number): string {
   }
   if (result.before === 0) return "Nothing to triage";
   return "Nothing could be applied automatically";
+}
+
+/**
+ * Run a plan, or explain why it cannot run here.
+ *
+ * In the shell this is the whole repair: apply, then undo, with the outcome reported
+ * against what was actually written. In a browser the button says what is missing rather
+ * than being hidden, because a disabled control with a reason is more use than an absence.
+ */
+function ApplyActions({ actions, config }: { actions: FileAction[]; config: string | null }) {
+  const [state, setState] = useState<"idle" | "running" | "done" | "undone">("idle");
+  const [report, setReport] = useState<RunReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function apply() {
+    setState("running");
+    setError(null);
+    try {
+      setReport(await runFileActions(actions, config));
+      setState("done");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setState("idle");
+    }
+  }
+
+  async function undo() {
+    setState("running");
+    try {
+      setReport(await rollback(targetsOf(actions)));
+      setState("undone");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setState("done");
+    }
+  }
+
+  if (!inShell()) {
+    return (
+      <button className="btn" type="button" disabled title="Needs the desktop app">
+        Apply {actions.length} directly
+      </button>
+    );
+  }
+
+  return (
+    <>
+      {state !== "done" && state !== "undone" && (
+        <button className="btn primary" type="button" disabled={state === "running"} onClick={apply}>
+          {state === "running" ? "Applying..." : `Apply ${actions.length} directly`}
+        </button>
+      )}
+      {(state === "done" || state === "undone") && (
+        <button className="btn" type="button" onClick={undo} disabled={state === "undone"}>
+          {state === "undone" ? "Undone" : "Undo this run"}
+        </button>
+      )}
+      {report && (
+        <span className="repair-note">
+          {report.applied} applied, {report.skipped} skipped
+          {report.failed > 0 ? `, ${report.failed} failed` : ""}. Backups in {report.backup_dir}.
+        </span>
+      )}
+      {error && <span className="prompt-error">{error}</span>}
+    </>
+  );
 }
 
 function Section({

@@ -189,6 +189,24 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Desktop shell
+
+In the browser, RimDoc+ analyses and plans; the desktop build also carries plans out.
+
+- **Apply to game** writes the modpack's load order into `ModsConfig.xml`, backing up the current file first
+- **Play** starts RimWorld from its install folder
+- **Apply directly** runs a repair plan natively: metadata stamps, config writes, folder removals and texture downscaling, with an original-version backup taken before anything is touched
+- **Undo this run** restores every backup the run made, reporting what it restored and what had none
+
+The same plan object drives all three executors, so nothing about the analysis or repair layers changes between browser and desktop. Only who carries a plan out does. Shell-only actions render disabled with the reason rather than being hidden, so the browser build still shows what the desktop build adds.
+
+```bash
+pnpm tauri:dev     # run the desktop app against the dev server
+pnpm tauri:build   # produce a release binary
+```
+
+One failing action does not abort a run: the remaining actions still apply and the failure is reported against its own target, because a plan of 730 texture resizes should not be abandoned because one file is locked.
+
 ## Tech Stack
 
 | Layer               | Choice                                | Why                                                                                      |
@@ -234,13 +252,10 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 
 ## What's Not Yet Built
 
-- The Tauri shell itself. The analysis engine, scanner, modpacks, and UI are real; the desktop packaging is the next slice.
-- **Writing a modpack back to the game and launching it**. Modpacks export as `ModsConfig.xml` today, which you copy into your save-data `Config` folder by hand. Writing it directly and launching from the app needs the shell.
 - **Version pinning in modpacks**: a modpack records package ids, not exact mod versions, so it is repeatable but not yet reproducible. Pinning arrives with the vault.
 - **Mod vault**: content-addressed local store so Steam updates land as new versions instead of overwriting a working setup
-- **Supervised launch**: child-process control, live structured log stream, crash and hang detection, case-file capture
+- **Supervised launch**: the shell starts the game, but does not yet watch it. Live log streaming, crash and hang detection and case-file capture are still to come
 - **Auto-bisect**: binary search across the mod list to isolate a minimal breaking set unattended
-- **Applying file repairs directly.** The plan and the backing-up script are real; writing to disk from the app needs the shell.
 - **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
 - **L2 and L3 testing**: headless boot check and scripted soak run with TPS attribution
 - **A/B benchmarking**: same save, two profiles, measured locally

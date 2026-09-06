@@ -28,7 +28,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "workshop": "node scripts/workshop.mjs",
-    "verify": "tsc --noEmit && vitest run && prettier --check ."
+    "verify": "tsc --noEmit && vitest run && prettier --check .",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
