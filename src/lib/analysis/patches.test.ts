@@ -104,3 +104,41 @@ describe("runPatchRules", () => {
     expect(runPatchRules(scanOf([mod("a.one", [op(TARGET)], 0)]))).toHaveLength(0);
   });
 });
+
+describe("declared overrides", () => {
+  it("treats an override the winner declared as intent, not a conflict", () => {
+    const later = mod("b.overhaul", [op(TARGET)], 1);
+    later.loadAfter = ["a.base"];
+    const findings = runPatchRules(scanOf([mod("a.base", [op(TARGET)], 0), later]));
+    expect(findings[0].rule).toBe("patch-override");
+    expect(findings[0].severity).toBe("info");
+    expect(findings[0].title).toContain("intentionally overrides");
+  });
+
+  it("counts a dependency as a declaration too", () => {
+    const later = mod("b.addon", [op(TARGET)], 1);
+    later.dependencies = [{ packageId: "A.Base" }];
+    const findings = runPatchRules(scanOf([mod("a.base", [op(TARGET)], 0), later]));
+    expect(findings[0].rule).toBe("patch-override");
+  });
+
+  it("honours loadBefore declared by the earlier mod", () => {
+    const earlier = mod("a.base", [op(TARGET)], 0);
+    earlier.loadBefore = ["b.other"];
+    const findings = runPatchRules(scanOf([earlier, mod("b.other", [op(TARGET)], 1)]));
+    expect(findings[0].rule).toBe("patch-override");
+  });
+
+  it("keeps an undeclared overwrite as a real collision", () => {
+    const findings = runPatchRules(scanOf([mod("a.one", [op(TARGET)], 0), mod("b.two", [op(TARGET)], 1)]));
+    expect(findings[0].rule).toBe("patch-collision");
+    expect(findings[0].detail).toContain("nobody decided this");
+  });
+
+  it("never proposes reordering, because a declared override would break if moved", () => {
+    const later = mod("b.overhaul", [op(TARGET)], 1);
+    later.loadAfter = ["a.base"];
+    const findings = runPatchRules(scanOf([mod("a.base", [op(TARGET)], 0), later]));
+    expect(findings[0].fix).toBeUndefined();
+  });
+});

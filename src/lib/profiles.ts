@@ -16,6 +16,11 @@ export interface Profile {
   gameCycle: string;
   activeOrder: string[];
   note?: string;
+  /**
+   * A restore point. Locked packs cannot be edited, renamed or deleted, so there is
+   * always one record of what the install looked like before RimDoc+ touched anything.
+   */
+  locked?: boolean;
 }
 
 export interface ProfileDiff {
@@ -45,10 +50,12 @@ export function profileFromScan(scan: ScanResult, name: string): Profile {
 
 export function duplicateProfile(profile: Profile, name: string): Profile {
   const now = new Date().toISOString();
-  return { ...profile, id: newProfileId(), name, createdAt: now, updatedAt: now };
+  // A copy of a restore point is a working pack, not another restore point.
+  return { ...profile, id: newProfileId(), name, createdAt: now, updatedAt: now, locked: false };
 }
 
 function touch(profile: Profile, activeOrder: string[]): Profile {
+  if (profile.locked) return profile;
   return { ...profile, activeOrder, updatedAt: new Date().toISOString() };
 }
 
@@ -85,6 +92,7 @@ export function setEnabled(
 
 /** Move one mod up or down the load order by `delta` positions. */
 export function moveMod(profile: Profile, packageId: string, delta: number): Profile {
+  if (profile.locked) return profile;
   const from = profile.activeOrder.indexOf(packageId);
   if (from === -1) return profile;
   const to = Math.max(0, Math.min(profile.activeOrder.length - 1, from + delta));

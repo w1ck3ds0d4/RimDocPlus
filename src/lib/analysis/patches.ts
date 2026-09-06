@@ -9,6 +9,23 @@ const DESTRUCTIVE = /Replace|Remove|AttributeSet|AttributeRemove|Insert/i;
 /** Xpaths broad enough that a collision on them says nothing useful. */
 const TOO_BROAD = new Set(["/Defs", "/", "/Defs/*"]);
 
+/**
+ * Did the winning mod ask to load after the one it overrides?
+ *
+ * A mod declaring loadAfter, or depending on the mod it overwrites, is its author saying
+ * the override is the point. Reordering those would break them: Combat Extended overriding
+ * Vanilla Weapons Expanded is not a bug, it is what a combat overhaul is for. Separating
+ * declared overrides from accidental ones is the difference between twelve warnings and
+ * the four that nobody has actually thought about.
+ */
+function overrideWasDeclared(later: ModEntry, earlier: ModEntry): boolean {
+  return (
+    later.loadAfter.includes(earlier.packageId) ||
+    earlier.loadBefore.includes(later.packageId) ||
+    later.dependencies.some((d) => d.packageId.toLowerCase() === earlier.packageId)
+  );
+}
+
 interface Collision {
   xpath: string;
   /** Load-order position and operation for each mod touching this path. */
@@ -78,17 +95,30 @@ export function runPatchRules(scan: ScanResult): Finding[] {
       const [earlier, later] =
         (mods[0].loadIndex ?? 0) <= (mods[1].loadIndex ?? 0) ? mods : [mods[1], mods[0]];
 
+      const declared = overrideWasDeclared(later, earlier);
+
       return {
         id: `patch-collision:${earlier.packageId}|${later.packageId}`,
-        rule: "patch-collision",
-        severity: paths.length > 5 ? "warning" : ("info" as const),
-        title: `${later.name} overwrites ${paths.length} patch target${
-          paths.length === 1 ? "" : "s"
-        } also patched by ${earlier.name}`,
+        rule: declared ? "patch-override" : "patch-collision",
+        // A declared override is the mod working as designed, so it is a note rather than
+        // a problem. Only an unreviewed one is worth anybody's attention.
+        severity: declared ? "info" : paths.length > 5 ? "warning" : ("info" as const),
+        title: declared
+          ? `${later.name} intentionally overrides ${paths.length} patch target${
+              paths.length === 1 ? "" : "s"
+            } from ${earlier.name}`
+          : `${later.name} overwrites ${paths.length} patch target${
+              paths.length === 1 ? "" : "s"
+            } also patched by ${earlier.name}`,
         detail:
-          `Both mods patch the same nodes and at least one overwrites rather than adds. ` +
-          `${later.name} loads later, so its version wins and ${earlier.name}'s change to these ` +
-          "paths is discarded without any log entry.\n\n" +
+          (declared
+            ? `${later.name} declares that it loads after ${earlier.name}, so overriding it is the ` +
+              "author's intent rather than an accident. Listed for visibility, not as a problem."
+            : `Both mods patch the same nodes and at least one overwrites rather than adds. ` +
+              `${later.name} loads later, so its version wins and ${earlier.name}'s change to these ` +
+              "paths is discarded without any log entry. Neither declares a load-order relationship " +
+              "with the other, so nobody decided this: it fell out of where they happen to sit.") +
+          "\n\n" +
           paths
             .slice(0, 8)
             .map((p) => `  ${p.xpath}`)

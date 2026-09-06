@@ -33,11 +33,17 @@ export default function App() {
         setWorkshop(w);
         if (!s) return;
         const stored = loadProfiles();
-        // First run has nothing saved, so seed a pack from whatever the game is set to
-        // run. That gives the editor something real to work against immediately.
-        const seeded = stored.length ? stored : [profileFromScan(s, "Current game setup")];
+        // First run captures the install as it was found, twice: a locked restore point
+        // that nothing can edit, and a working copy to actually change. Any later mistake
+        // is then one click from undone, whatever else has happened since.
+        const seeded = stored.length
+          ? stored
+          : [
+              { ...profileFromScan(s, "Original version"), locked: true },
+              profileFromScan(s, "Current game setup"),
+            ];
         setProfiles(seeded);
-        setActiveId(seeded[0].id);
+        setActiveId(seeded.find((p) => !p.locked)?.id ?? seeded[0].id);
       })
       .finally(() => setLoading(false));
   }, []);

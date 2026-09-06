@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Finding, ScanResult } from "../lib/types";
 import type { Profile } from "../lib/profiles";
-import { toPowerShell } from "../lib/repair/repairs";
+import { configDir, toPowerShell } from "../lib/repair/repairs";
 import {
   allFileActions,
   resolveDecision,
@@ -146,7 +146,7 @@ export function Triage({
         />
       )}
       {steps.length > 0 && <TriageConsole steps={steps} />}
-      {result && <TriageReport result={result} onDismiss={() => setResult(null)} />}
+      {result && <TriageReport result={result} scan={scan} onDismiss={() => setResult(null)} />}
     </>
   );
 }
@@ -216,7 +216,15 @@ function TriageConsole({ steps }: { steps: TriageStep[] }) {
   );
 }
 
-function TriageReport({ result, onDismiss }: { result: TriageResult; onDismiss: () => void }) {
+function TriageReport({
+  result,
+  scan,
+  onDismiss,
+}: {
+  result: TriageResult;
+  scan: ScanResult;
+  onDismiss: () => void;
+}) {
   const actions = allFileActions(result);
   const resolved = result.before - result.after;
 
@@ -275,11 +283,11 @@ function TriageReport({ result, onDismiss }: { result: TriageResult; onDismiss: 
             <button
               className="btn primary"
               type="button"
-              onClick={() => download("rimdoc-triage.ps1", toPowerShell(actions))}
+              onClick={() => download("rimdoc-triage.ps1", toPowerShell(actions, configDir(scan)))}
             >
               Download all {actions.length} as one script
             </button>
-            <span className="repair-note">Backs up every file before touching it.</span>
+            <span className="repair-note">Saves an original-version backup before touching anything.</span>
           </li>
         )}
       </Section>

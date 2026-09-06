@@ -115,7 +115,11 @@ The scanner reads every mod's `Patches` folder, including the versioned `1.6/Pat
 
 Collisions are reported per pair of mods rather than per path, and only when at least one side overwrites rather than adds. The finding names which mod wins, since load order decides it.
 
-On the install this was built against: 9,809 xpath operations across 130 active mods, producing 12 collisions. Three retexture mods turned out to be fighting over the same meal `texPath` nodes.
+Collisions are then split by whether anyone chose them. If the winning mod declares `loadAfter` the mod it overrides, or depends on it, the override is the author's intent and is reported as a note rather than a warning. Combat Extended overriding Vanilla Weapons Expanded is not a bug, it is what a combat overhaul is for, and reordering it would break the mod.
+
+Nothing here proposes a reorder. On the install this was built against, the "more specialised mod should win" heuristic was already satisfied in most cases and would have been actively wrong in the rest, so the automatic handling is classification rather than correction.
+
+On that install: 9,809 xpath operations across 130 active mods, producing 12 collisions, of which 8 were declared intent and 4 were unreviewed. Three retexture mods turned out to be fighting over the same meal `texPath` nodes.
 
 ### Performance analysis
 
@@ -126,6 +130,15 @@ Measured from the files on disk, not estimated from heuristics.
 - **Downscale repair** (Tier 3): resizes to a maximum dimension preserving aspect ratio, with a real before/after figure computed per texture from its own dimensions. Backs up every file, and never runs automatically because it changes mod content.
 
 On the 253-mod install this was built against: 20.4 GB of decoded texture data, 729 textures at 1024px or larger, costing 4.20 GB between them. Resizing those to 512px brings it to 0.60 GB, a 3.6 GB saving.
+
+### Backups
+
+Nothing is changed before a copy exists.
+
+- On first scan RimDoc+ creates a locked pack called **Original version**, capturing the load order as it was found. It cannot be renamed, edited or deleted, so a mistake later is always one restore away.
+- Every generated script opens with a backup phase: it copies the save-data `Config` folder to `~/RimDoc-Backups/original-version` once and never overwrites it, so that copy stays the install as it was before RimDoc+ first touched anything rather than before the latest run.
+- Each run additionally copies every file it will change into a timestamped `run-*` folder, so one run can be undone as a unit.
+- Individual files still get a `.rimdocbak` alongside them, so a single change can be reverted on its own.
 
 ### Repairs
 

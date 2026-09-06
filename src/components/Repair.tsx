@@ -1,7 +1,7 @@
 import { createContext, useContext, useState } from "react";
 import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
 import type { Profile } from "../lib/profiles";
-import { planRepair, toPowerShell, type FileAction, type RepairPlan } from "../lib/repair/repairs";
+import { configDir, planRepair, toPowerShell, type FileAction, type RepairPlan } from "../lib/repair/repairs";
 import { download } from "../lib/download";
 
 export interface RepairApi {
@@ -77,7 +77,7 @@ function RepairPanel({ plan, api, onDone }: { plan: RepairPlan; api: RepairApi; 
         </div>
       )}
 
-      {active.kind === "files" && <FilePlan actions={active.actions} />}
+      {active.kind === "files" && <FilePlan actions={active.actions} config={configDir(api.scan)} />}
 
       {active.kind === "external" && (
         <div className="repair-actions">
@@ -114,9 +114,9 @@ function RepairPanel({ plan, api, onDone }: { plan: RepairPlan; api: RepairApi; 
  * a script. Every path is listed before anything is generated, because this is the only
  * class of repair that touches the player's install.
  */
-function FilePlan({ actions }: { actions: FileAction[] }) {
+function FilePlan({ actions, config }: { actions: FileAction[]; config: string | null }) {
   const [copied, setCopied] = useState(false);
-  const script = toPowerShell(actions);
+  const script = toPowerShell(actions, config);
 
   return (
     <>
@@ -146,7 +146,8 @@ function FilePlan({ actions }: { actions: FileAction[] }) {
           {copied ? "Copied" : "Copy script"}
         </button>
         <span className="repair-note">
-          Backs up every file first. Writing this directly arrives with the desktop shell.
+          Saves an original-version backup before touching anything. Writing this directly arrives with the
+          desktop shell.
         </span>
       </div>
     </>

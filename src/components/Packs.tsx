@@ -66,8 +66,15 @@ export function Packs({
                 className="pack-name"
                 value={profile.name}
                 aria-label="Pack name"
-                onChange={(e) => onUpdate({ ...profile, name: e.target.value })}
+                readOnly={profile.locked}
+                title={profile.locked ? "Restore points cannot be renamed" : undefined}
+                onChange={(e) => !profile.locked && onUpdate({ ...profile, name: e.target.value })}
               />
+              {profile.locked && (
+                <span className="tag official" title="A restore point: never edited, never deleted">
+                  restore point
+                </span>
+              )}
               <span className="pack-count">{profile.activeOrder.length} mods</span>
               {profile.id === activeId && <span className="tag official">editing</span>}
             </div>
@@ -86,9 +93,11 @@ export function Packs({
             </p>
 
             <div className="pack-actions">
-              <button className="btn" type="button" onClick={() => onSelect(profile.id)}>
-                Edit
-              </button>
+              {!profile.locked && (
+                <button className="btn" type="button" onClick={() => onSelect(profile.id)}>
+                  Edit
+                </button>
+              )}
               <button
                 className="btn"
                 type="button"
@@ -120,9 +129,11 @@ export function Packs({
               >
                 Export pack
               </button>
-              <button className="btn danger" type="button" onClick={() => onDelete(profile.id)}>
-                Delete
-              </button>
+              {!profile.locked && (
+                <button className="btn danger" type="button" onClick={() => onDelete(profile.id)}>
+                  Delete
+                </button>
+              )}
             </div>
           </div>
         );
