@@ -152,6 +152,84 @@ function readAbout(folder) {
   return undefined;
 }
 
+/** Operations we store per mod. Past this a mod is patching too much to list usefully. */
+const MAX_PATCH_OPS = 1500;
+
+/**
+ * Pull xpath-targeting operations out of a mod's Patches folder.
+ *
+ * Anchoring on the xpath rather than on the Operation element is what makes this work:
+ * operations nest inside PatchOperationSequence and PatchOperationConditional, and the
+ * Class attribute also appears on def elements inside a <value> block, so matching
+ * Class= alone picks up things that are not operations at all. Every xpath belongs to
+ * the nearest Class above it, whatever the nesting.
+ */
+function readPatches(modFolder) {
+  // Versioned mods nest their payload under a cycle folder, so Patches lives at either
+  // <mod>/Patches or <mod>/1.6/Patches. Looking only at the top level missed three
+  // quarters of the mods that ship patches at all.
+  const roots = [join(modFolder, "Patches")];
+  try {
+    for (const entry of readdirSync(modFolder, { withFileTypes: true })) {
+      if (entry.isDirectory() && /^\d+\.\d+$/.test(entry.name)) {
+        roots.push(join(modFolder, entry.name, "Patches"));
+      }
+    }
+  } catch {
+    /* unreadable mod folder */
+  }
+
+  const stack = roots.filter((r) => existsSync(r));
+  if (!stack.length) return [];
+
+  const files = [];
+  while (stack.length && files.length < 400) {
+    const dir = stack.pop();
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.name.toLowerCase().endsWith(".xml")) files.push(full);
+    }
+  }
+
+  const ops = [];
+  for (const file of files) {
+    if (ops.length >= MAX_PATCH_OPS) break;
+    let text;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    for (const match of text.matchAll(/<xpath>([\s\S]*?)<\/xpath>/gi)) {
+      if (ops.length >= MAX_PATCH_OPS) break;
+      const preceding = text.slice(0, match.index);
+      const classes = [...preceding.matchAll(/Class\s*=\s*"([^"]+)"/g)];
+      ops.push({
+        op: classes.length ? classes[classes.length - 1][1] : "unknown",
+        xpath: normaliseXpath(match[1]),
+        file: file
+          .slice(modFolder.length + 1)
+          .split("\\")
+          .join("/"),
+      });
+    }
+  }
+  return ops;
+}
+
+/** Same target written two ways must compare equal, or collisions go unnoticed. */
+function normaliseXpath(raw) {
+  const text = raw.replace(/\s+/g, " ").trim();
+  return text.startsWith("/") ? text : `/${text}`;
+}
+
 /** Folder mtime, which Steam bumps on update, so it stands in for "last updated". */
 function folderMtime(folder) {
   try {
@@ -198,7 +276,7 @@ function scanModDir(dir, source) {
       sizeBytes: measured.sizeBytes,
       updatedAt: folderMtime(folder),
     });
-    if (mod) mods.push({ ...mod, textures: measured.textures });
+    if (mod) mods.push({ ...mod, textures: measured.textures, patches: readPatches(folder) });
   }
   return mods;
 }
@@ -261,7 +339,9 @@ function main() {
   console.log(`game     ${paths.game}`);
   console.log(`version  ${gameVersion} (cycle ${scan.gameCycle})`);
   console.log(`mods     ${mods.length} on disk, ${active} active, ${activeOrder.length} in load order`);
+  const patchOps = mods.filter((m) => m.active).reduce((sum, m) => sum + (m.patches?.length ?? 0), 0);
   console.log(`textures ${(vram / 1024 ** 3).toFixed(2)} GB estimated VRAM, ${oversized}+ oversized`);
+  console.log(`patches  ${patchOps} xpath operations across active mods`);
   console.log(`wrote    ${join(OUT, "scan.json")}`);
 }
 

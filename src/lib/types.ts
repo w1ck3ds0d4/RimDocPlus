@@ -32,9 +32,21 @@ export interface ModEntry {
   sizeBytes: number;
   /** Texture footprint, when the scan read image headers. */
   textures?: TextureStats;
+  /** XML patch operations that target an xpath, when the scan read the Patches folder. */
+  patches?: PatchOperation[];
   /** Set from ModsConfig.xml, not from the mod folder. */
   active: boolean;
   loadIndex: number | null;
+}
+
+/** One xpath-targeting operation from a mod's Patches folder. */
+export interface PatchOperation {
+  /** PatchOperationReplace, PatchOperationAdd, a mod-defined class, or unknown. */
+  op: string;
+  /** Normalised xpath the operation targets. */
+  xpath: string;
+  /** Patch file, relative to the mod folder. */
+  file: string;
 }
 
 /** One texture large enough to be worth naming. */

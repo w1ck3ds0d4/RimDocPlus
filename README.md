@@ -84,6 +84,16 @@ One button that assesses everything, applies what is provably safe, and stages t
 
 The "resolved" count is produced by re-running the rules against the repaired pack, not by subtracting what it attempted. Triage does not claim the game runs: faults that only appear once the game is executing need the supervised launch and the headless boot check, neither of which is built.
 
+### XML patch analysis
+
+RimWorld applies patches in load order and says nothing when two of them fight: the later operation just wins. That makes overwrite collisions invisible in the log and effectively undebuggable from inside the game.
+
+The scanner reads every mod's `Patches` folder, including the versioned `1.6/Patches` layout, and extracts each xpath-targeting operation. Extraction anchors on the xpath rather than the `Operation` element, because operations nest inside `PatchOperationSequence` and `PatchOperationConditional`, and the `Class` attribute also appears on def elements inside a `<value>` block. Every xpath belongs to the nearest `Class` above it, whatever the nesting.
+
+Collisions are reported per pair of mods rather than per path, and only when at least one side overwrites rather than adds. The finding names which mod wins, since load order decides it.
+
+On the install this was built against: 9,809 xpath operations across 130 active mods, producing 12 collisions. Three retexture mods turned out to be fighting over the same meal `texPath` nodes.
+
 ### Performance analysis
 
 Measured from the files on disk, not estimated from heuristics.
