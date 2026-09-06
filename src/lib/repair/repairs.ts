@@ -350,6 +350,12 @@ const REPAIRS: Record<string, RepairFn> = {
   }),
 };
 
+/**
+ * Every repair kind that exists. Exported so a self-check can catch a rule proposing a
+ * fix nobody implemented, which otherwise renders as a button that can never do anything.
+ */
+export const REPAIR_KINDS: ReadonlySet<string> = new Set(Object.keys(REPAIRS));
+
 /** Build the plan for a finding, or null when nothing can be carried out yet. */
 export function planRepair(ctx: RepairContext): RepairPlan | null {
   const kind = ctx.finding.fix?.kind;

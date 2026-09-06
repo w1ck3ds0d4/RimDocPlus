@@ -32,6 +32,15 @@ export default function App() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [devMode, setDevMode] = useState(loadDevMode);
+
+  const setDevModePersisted = useCallback((on: boolean) => {
+    setDevMode(on);
+    try {
+      localStorage.setItem("rimdoc.devMode", on ? "1" : "0");
+    } catch {
+      /* private window; the toggle still works for this session */
+    }
+  }, []);
   // Every repair pushes the pack it replaced, so any applied fix is one click from undone.
   const [undoStack, setUndoStack] = useState<{ profile: Profile; label: string }[]>([]);
 
@@ -165,6 +174,16 @@ export default function App() {
         applyProfile,
       }}
     >
+      {devMode && (
+        <div className="dev-strip" role="status">
+          <b>Dev mode</b>
+          <span>Diagnostics, self-checks and captured console are in Settings</span>
+          <button className="dev-strip-off" type="button" onClick={() => setDevModePersisted(false)}>
+            Turn off
+          </button>
+        </div>
+      )}
+
       <header className="hdr">
         <Logo />
         {active && (
@@ -264,14 +283,7 @@ export default function App() {
             profiles={profiles}
             session={session}
             devMode={devMode}
-            onDevMode={(on) => {
-              setDevMode(on);
-              try {
-                localStorage.setItem("rimdoc.devMode", on ? "1" : "0");
-              } catch {
-                /* private window; the toggle still works for this session */
-              }
-            }}
+            onDevMode={setDevModePersisted}
           />
         )}
         {tab === "order" &&

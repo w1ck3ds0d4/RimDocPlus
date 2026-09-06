@@ -2088,3 +2088,98 @@ tr.row-off td:not(.toggle-cell) {
 tr.dev-error td {
   color: var(--critical);
 }
+
+/* Dev mode strip ---------------------------------------------------------- */
+
+.dev-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 6px 16px;
+  background: linear-gradient(90deg, #b4620d, #e08c1a);
+  color: #fff5e8;
+  font-size: 12px;
+}
+
+.dev-strip b {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.dev-strip span {
+  flex: 1;
+  min-width: 0;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dev-strip-off {
+  flex: none;
+  padding: 2px 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.dev-strip-off:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* Self-checks ------------------------------------------------------------- */
+
+.checks {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.check {
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+  padding: 7px 13px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.check:last-child {
+  border-bottom: none;
+}
+
+.check .mark {
+  flex: none;
+  width: 38px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ok);
+}
+
+.check.bad .mark {
+  color: var(--critical);
+}
+
+.check-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.check.bad .check-name {
+  color: var(--critical);
+}
+
+.check-detail {
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
