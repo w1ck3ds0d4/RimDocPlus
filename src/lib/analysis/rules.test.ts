@@ -261,6 +261,51 @@ describe("log analysis", () => {
     expect(analyzeLog(log).events.some((e) => e.message.includes("Fallback handler"))).toBe(false);
   });
 
+  // Verbatim from a real 225-mod session, which is the only place this shape shows up:
+  // RimWorld writes where it happened and what was thrown on two lines, tags the pair with
+  // its own id, and writes "see ref for original" instead of the trace on every repeat.
+  const refLog = [
+    "Error in PostExposeData of Verse.BackCompatibilityConverter_Universal",
+    "System.NullReferenceException: Object reference not set to an instance of an object",
+    "[Ref F049DDD8]",
+    "  at Verse.Find.get_FactionManager () [0x00005] in <61e4> :0 ",
+    "  at RimWorld.Faction.get_OfPlayerSilentFail () [0x00020] in <61e4> :0 ",
+    "Error while determining if VGE_Hunter1482798 should have Need MechEnergy: System.NullReferenceException: Object reference not set to an instance of an object",
+    "[Ref 32B12C5D]",
+    "  at RimWorld.Pawn_NeedsTracker.ShouldHaveNeed (RimWorld.NeedDef nd) [0x000d1] in <61e4> :0 ",
+    "    - PREFIX Orion.Hospitality: Boolean Hospitality.Patches.Pawn_NeedsTracker_Patch+ShouldHaveNeed:Prefix()",
+    "Error in PostExposeData of Verse.BackCompatibilityConverter_Universal",
+    "System.NullReferenceException: Object reference not set to an instance of an object",
+    "[Ref F049DDD8] Duplicate stacktrace, see ref for original",
+    "Error while determining if VGE_Astropede1482801 should have Need MechEnergy: System.NullReferenceException: Object reference not set to an instance of an object",
+    "[Ref 32B12C5D] Duplicate stacktrace, see ref for original",
+  ].join(NEWLINE);
+
+  it("takes RimWorld's word for which faults are the same one", () => {
+    // Two faults, four occurrences. Read from the text alone this was five rows: the two
+    // header lines and the two exception lines counted separately, and the second VGE pawn
+    // splitting off because its message names a different creature.
+    const events = analyzeLog(refLog).events;
+    expect(events).toHaveLength(2);
+    expect(events.map((e) => e.count).sort()).toEqual([2, 2]);
+  });
+
+  it("keeps where it happened and what was thrown as one fault", () => {
+    const first = analyzeLog(refLog).events[0];
+    expect(first.message).toContain("PostExposeData");
+    expect(first.message).toContain("NullReferenceException");
+    expect(first.exceptionType).toBe("NullReferenceException");
+  });
+
+  it("gives a repeat that arrived without a trace the one its original had", () => {
+    // The repeats carry "see ref for original" and no frames at all. Grouping them with the
+    // original is what puts the blame on all of them: it was on one occurrence in three.
+    const vge = analyzeLog(refLog).events.find((e) => e.message.includes("MechEnergy"));
+    expect(vge?.count).toBe(2);
+    expect(vge?.frames.length).toBeGreaterThan(0);
+    expect(vge?.namespaces).toContain("Orion");
+  });
+
   it("collapses repeats of the same fault into one counted event", () => {
     const spam = Array(50).fill("Created WorkshopItem for 123 but there is no folder for it.").join("\n");
     const events = analyzeLog(spam).events;
