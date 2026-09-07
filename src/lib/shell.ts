@@ -161,6 +161,20 @@ export function probePatches(folders: string[], cycle: string): Promise<ProbeRep
   return invoke<ProbeReport>("probe_patches", { folders, cycle });
 }
 
+/**
+ * Ask Steam to subscribe to a Workshop item.
+ *
+ * The only call that presents this app to Steam as RimWorld, because the Steamworks API
+ * authenticates by app id and no steam:// URL subscribes. While it runs, Steam shows the
+ * player as playing RimWorld. Refused while a game is running.
+ *
+ * Takes the game directory because the library it calls is Valve's own, loaded out of the
+ * player's install rather than shipped here.
+ */
+export function steamSubscribe(gameDir: string, workshopId: string): Promise<string> {
+  return invoke<string>("steam_subscribe", { gameDir, workshopId });
+}
+
 export interface ProbeModState {
   installed: boolean;
   /** Where it is, or would go. */

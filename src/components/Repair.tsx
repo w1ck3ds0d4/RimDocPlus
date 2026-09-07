@@ -12,6 +12,7 @@ import {
 } from "../lib/repair/repairs";
 import { download } from "../lib/download";
 import { ApplyActions } from "./ApplyActions";
+import { Subscribe, workshopIdOf } from "./Subscribe";
 
 export interface RepairApi {
   scan: ScanResult;
@@ -131,12 +132,21 @@ function RepairPanel({
 
       {active.kind === "external" && (
         <div className="repair-actions">
+          {/*
+            Only offered when the game directory is known, since that is where the Steamworks
+            library is read from. Without it there is still the link.
+          */}
+          {api.scan.paths.game && workshopIdOf(active.url) && (
+            <Subscribe gameDir={api.scan.paths.game} workshopId={workshopIdOf(active.url)!} />
+          )}
           {active.url && (
             <a className="btn" href={active.url} target="_blank" rel="noreferrer noopener">
-              Open
+              Open the page
             </a>
           )}
-          <span className="repair-note">RimDoc+ cannot do this one for you.</span>
+          {!workshopIdOf(active.url) && (
+            <span className="repair-note">RimDoc+ cannot do this one for you.</span>
+          )}
         </div>
       )}
 
