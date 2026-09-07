@@ -44,7 +44,8 @@ import {
   type ScanProgress,
 } from "./lib/shell";
 
-type Tab = "home" | "doctor" | "session" | "saves" | "packs" | "order" | "library" | "settings";
+type Tab =
+  "home" | "doctor" | "session" | "performance" | "saves" | "packs" | "order" | "library" | "settings";
 
 export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
@@ -380,7 +381,7 @@ export default function App() {
             onPlayAndWatch={() => {
               // The watched run lives on the Session tab, so the menu takes you there and
               // starts it rather than starting something you cannot see.
-              setTab("session");
+              setTab("performance");
               setWatchRequest((n) => n + 1);
             }}
           />
@@ -425,6 +426,9 @@ export default function App() {
         {/* Only counts that mean "something needs attention" are shown. Modpack, load order
             and library sizes are inventory, they are on Home and in the header already, and
             three extra pills were most of what pushed the tab bar off a narrow window. */}
+        {/* Watching a run, comparing runs and per-mod tick cost are one subject, and it is
+            not the subject the Session pill counts. */}
+        <TabButton id="performance" tab={tab} setTab={setTab} label="Performance" />
         <TabButton id="saves" tab={tab} setTab={setTab} label="Saves" />
         <TabButton id="packs" tab={tab} setTab={setTab} label="Modpacks" />
         <TabButton id="order" tab={tab} setTab={setTab} label="Load order" />
@@ -506,11 +510,11 @@ export default function App() {
           launched a second copy of the game.
         */}
         {active && (
-          <div hidden={tab !== "session"}>
+          <div hidden={tab !== "performance"}>
             <GameWatch scan={workingScan} modpack={active} startSignal={watchRequest} />
           </div>
         )}
-        {tab === "session" && <TickCost scan={workingScan} />}
+        {tab === "performance" && <TickCost scan={workingScan} />}
         {tab === "session" && (
           <>
             <LogSourcePicker

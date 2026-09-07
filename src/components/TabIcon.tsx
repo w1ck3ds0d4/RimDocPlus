@@ -8,7 +8,8 @@
  * The label is what the tab means; the icon is what makes it findable once the label has to
  * go. So each one is drawn for recognition at a glance rather than for detail.
  */
-export type TabName = "home" | "doctor" | "session" | "saves" | "packs" | "order" | "library" | "settings";
+export type TabName =
+  "home" | "doctor" | "session" | "performance" | "saves" | "packs" | "order" | "library" | "settings";
 
 const PATHS: Record<TabName, React.ReactNode> = {
   // A roof over a door.
@@ -20,6 +21,13 @@ const PATHS: Record<TabName, React.ReactNode> = {
     <>
       <path d="M3.6 2.4h8.8v11.2H3.6Z" />
       <path d="M5.8 5.6h4.4M5.8 8h4.4M5.8 10.4h2.6" />
+    </>
+  ),
+  // A rising trace: what a run cost, over time.
+  performance: (
+    <>
+      <path d="M2.2 12.4 6 8.2l2.6 2.4 4.9-5.6" />
+      <path d="M10.4 5h3.3v3.3" />
     </>
   ),
   // A floppy disk, which is still what a save looks like.
