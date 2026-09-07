@@ -410,6 +410,39 @@ describe("log analysis", () => {
     expect(finding.observation).toBeUndefined();
   });
 
+  // Verbatim from a real run that died. The app read this log and reported the same routine
+  // def errors it reports for a run someone quit on purpose.
+  const crashedRun = [
+    "Could not allocate memory: System out of memory!",
+    "Trying to allocate: 715653120B with 16 alignment. MemoryLabel: Texture",
+    "Allocation happened at: Line:72 in ",
+    "Memory overview",
+    "[ ALLOC_DEFAULT ] used: 788190644B | peak: 0B | reserved: 838057984B ",
+    "  ERROR: SymGetSymFromAddr64, GetLastError: 'Attempt to access invalid address.' (Address: 00007FFEB0CAAE2D)",
+    "0x00007FFEB0CAAE2D (UnityPlayer) (function-name not available)",
+    "========== END OF STACKTRACE ===========",
+    "A crash has been intercepted by the crash handler. For call stack and other details, see the latest crash report generated in:",
+  ].join(NEWLINE);
+
+  it("says when a run ended in a crash rather than in someone quitting", () => {
+    const titles = findingsFromLog(analyzeLog(crashedRun), []).map((f) => f.title);
+    expect(titles).toContain("This run ended in a crash");
+  });
+
+  it("names how much memory was wanted and what for", () => {
+    // The size is the story. 683 MB for one texture is a different problem from 683 MB for
+    // a save file, and each line alone carries only half of it.
+    const found = findingsFromLog(analyzeLog(crashedRun), []).find((f) => f.title.includes("Out of memory"));
+    expect(found?.title).toBe("Out of memory asking for 683 MB of texture");
+    expect(found?.severity).toBe("critical");
+  });
+
+  it("does not turn a native stack dump into findings", () => {
+    // Hundreds of module and address lines follow a crash. None of them is a fault.
+    const found = findingsFromLog(analyzeLog(crashedRun), []);
+    expect(found).toHaveLength(2);
+  });
+
   it("collapses repeats of the same fault into one counted event", () => {
     const spam = Array(50).fill("Created WorkshopItem for 123 but there is no folder for it.").join("\n");
     const events = analyzeLog(spam).events;

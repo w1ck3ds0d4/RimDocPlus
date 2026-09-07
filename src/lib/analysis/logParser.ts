@@ -78,6 +78,16 @@ const NOISE = [
   /^\s*$/,
   // Logs truncated mid-write leave a run of NUL bytes behind.
   /^[\u0000\uFFFD]+$/,
+  // Unity's crash handler dumps every loaded module, then walks the native stack address by
+  // address. Hundreds of lines, none of them about the install: the fault is the line above
+  // the dump, and this is the machinery that recorded it.
+  /^\s*ERROR: SymGetSymFromAddr\d+,/,
+  /^0x[0-9A-Fa-f]+ \(/,
+  /^[A-Za-z]:[\\/].*\.dll:.*SymType:/,
+  /^=+ END OF STACKTRACE =+/,
+  /^\[ ALLOC_\w+ \]/,
+  /^\s*\d+B: \d+ Subsections/,
+  /^Failed Allocations\. Bucket layout/,
 ];
 
 /**
@@ -106,6 +116,16 @@ const REF_ID = /^\[Ref ([0-9A-Fa-f]+)\]/;
  * reported twice, once with the stack trace and once without it.
  */
 const BARE_EXCEPTION = /^[A-Za-z_][\w.]*(?:Exception|Error):\s/;
+
+/**
+ * A line that finishes the one above it.
+ *
+ * Unity says it could not allocate memory, then says on the next line how much it wanted and
+ * what for. Read alone the first line is a fact with no size and the second is a number with
+ * no reason, and the size is the whole story: 683 MB for one texture is a different problem
+ * from 683 MB for a save file.
+ */
+const CONTINUATION = /^Trying to allocate: \d+B with \d+ alignment/;
 
 /** Namespace roots that belong to the engine or the patch library, not to a mod. */
 const FRAMEWORK_ROOTS = new Set([
@@ -218,6 +238,22 @@ const MATCHERS: Matcher[] = [
     severity: "warning",
     test: /^Direct3D: detected that using refresh rate/,
   },
+  // The run did not end, it stopped. Unity's crash handler writes this last, after the
+  // native stack dump, and it is the only line in the file that says the process died
+  // rather than exited. A log ending in a crash reported the same routine def errors as a
+  // log ending in someone pressing quit.
+  {
+    category: "crashed",
+    severity: "critical",
+    test: /^A crash has been intercepted by the crash handler/,
+  },
+  // Ran out of address space asking for one allocation. On a modded install this is almost
+  // always a texture, and it is the failure the texture footprint measurement predicts.
+  {
+    category: "out-of-memory",
+    severity: "critical",
+    test: /^Could not allocate memory: System out of memory/,
+  },
   // A mod announcing that its own compatibility patch did not attach. Nothing else
   // matched this: it is not XML-shaped, does not start with "Error", and has no
   // "Exception" in it, so Combat Extended saying its Vanilla Events patch failed produced
@@ -268,7 +304,10 @@ export function analyzeLog(text: string): SessionAnalysis {
     // into one message, in the shape RimWorld itself uses when it writes both on one line.
     let message = line.trim();
     const under = lines[i + 1]?.trim();
-    if (under && !BARE_EXCEPTION.test(message) && BARE_EXCEPTION.test(under)) {
+    if (under && CONTINUATION.test(under)) {
+      message = `${message} ${under}`;
+      i++;
+    } else if (under && !BARE_EXCEPTION.test(message) && BARE_EXCEPTION.test(under)) {
       message = `${message}: ${under}`;
       i++;
     }
@@ -598,6 +637,30 @@ const EXPLANATIONS: Record<string, Explanation> = {
       "Loading threw with mods active, so the game rewrote ModsConfig.xml back to Core only and " +
       "retried. Any load order you had is gone. Restore it from a modpack before launching again.",
     fixKind: "restore-mods-config",
+  },
+  crashed: {
+    title: () => "This run ended in a crash",
+    detail:
+      "The game did not exit, it died. Unity's crash handler wrote a native stack dump and stopped. " +
+      "Whatever is above this in the log is the last thing that happened, and RimWorld keeps its own " +
+      "report under Temp/Ludeon Studios/RimWorld by Ludeon Studios/Crashes.",
+  },
+  "out-of-memory": {
+    title: (e) => {
+      const bytes = Number(/Trying to allocate: (\d+)B/.exec(e.message)?.[1] ?? 0);
+      const what = /MemoryLabel: (\w+)/.exec(e.message)?.[1];
+      if (!bytes) return "The game ran out of memory";
+      const mb = Math.round(bytes / (1024 * 1024));
+      return what
+        ? `Out of memory asking for ${mb} MB of ${what.toLowerCase()}`
+        : `Out of memory asking for ${mb} MB`;
+    },
+    detail:
+      "RimWorld is a 64-bit process, so this is the machine running out, not the game hitting a " +
+      "ceiling of its own. One allocation this large in a modded install is almost always a texture " +
+      "atlas being built, which is what the texture footprint on the Doctor tab measures: the more " +
+      "decoded texture data the active mods carry, the larger the atlases the game has to build at " +
+      "once. Fewer or smaller textures is the lever, and downscaling is the one that keeps the mods.",
   },
   "patch-injection-failed": {
     title: (e) => {
