@@ -627,10 +627,11 @@ const EXPLANATIONS: Record<string, Explanation> = {
     fixKind: "repair-xpath",
   },
   "cross-reference": {
-    title: (e) =>
-      e.defs?.missing
-        ? `Missing ${e.defs.missing}, wanted by ${e.count} def${e.count === 1 ? "" : "s"}`
-        : "Unresolved cross-reference",
+    title: (e) => {
+      if (!e.defs?.missing) return "Unresolved cross-reference";
+      const n = affectedCount(e);
+      return `Missing ${e.defs.missing}, wanted by ${n} def${n === 1 ? "" : "s"}`;
+    },
     detail: (e) => {
       const said =
         "A def points at another def that does not exist, usually because the mod defining it " +
@@ -641,20 +642,27 @@ const EXPLANATIONS: Record<string, Explanation> = {
     },
   },
   "missing-type": {
-    title: () => "Missing type",
+    title: (e) => {
+      const named = /^Could not find a type named (\S+?)[\s.]*$/.exec(e.message)?.[1];
+      return named ? `Missing type ${named}` : "Missing type";
+    },
     detail:
       "A def references a C# type that no assembly provides. Either the mod supplying it is disabled, or " +
       "the type was renamed in a newer version of the game.",
   },
   "def-not-found": {
-    title: () => "Def not found",
+    title: (e) => {
+      const named = /^(?:Could not|Failed to) find (\S+) named (\S+?)[\s.]*$/.exec(e.message);
+      return named ? `Missing ${named[1]} ${named[2]}` : "Def not found";
+    },
     detail: "Referenced content does not exist in this load.",
   },
   "config-error": {
-    title: (e) =>
-      e.defs?.reason
-        ? `${e.count} def${e.count === 1 ? "" : "s"} rejected: ${e.defs.reason.slice(0, 70)}`
-        : "Def config error",
+    title: (e) => {
+      if (!e.defs?.reason) return "Def config error";
+      const n = affectedCount(e);
+      return `${n} def${n === 1 ? "" : "s"} rejected: ${truncate(e.defs.reason, 70)}`;
+    },
     detail: (e) => {
       const said =
         "The game validated these defs and refused them, so whatever they describe is not in " +
@@ -694,7 +702,10 @@ export function findingsFromLog(
           ? explanation.detail(event)
           : (explanation?.detail ?? event.message),
       packageIds,
-      count: event.count,
+      // The same number the title counts. A row reading "7 defs rejected" beside a badge
+      // reading 14 asks a question it does not answer; the 14 is log lines, which RimWorld
+      // wrote twice per def and which nobody acts on.
+      count: event.defs ? affectedCount(event) : event.count,
       frames: event.frames,
       firstLine: event.firstLine,
       stale: settledSince(event, mods, activeOrder),
@@ -814,6 +825,29 @@ function inlineAttribution(message: string, index: Map<string, string>): string[
   return found;
 }
 
+/**
+ * How many defs a def-error row is actually about.
+ *
+ * `count` is occurrences of a log line, and RimWorld writes some of them twice: seven
+ * rejected defs produced fourteen lines, and the headline said "14 defs rejected" over a
+ * body listing seven. The deduplicated names are already collected for that body, so they
+ * are what the headline counts. Falls back to occurrences only when nothing was collected,
+ * which is the case where the two agree anyway.
+ */
+function affectedCount(event: LogEvent): number {
+  return event.defs?.affected.length || event.count;
+}
+
+/**
+ * Cut at a word, not at a character.
+ *
+ * A hard slice produced "explosive projectiles and o", which reads as a broken screen
+ * rather than as a summary. Backs up to the last space when one is close enough to the
+ * limit to be the right place to stop.
+ */
 function truncate(s: string, n: number): string {
-  return s.length > n ? `${s.slice(0, n)}...` : s;
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > n * 0.6 ? cut.slice(0, space) : cut).trimEnd()}...`;
 }
