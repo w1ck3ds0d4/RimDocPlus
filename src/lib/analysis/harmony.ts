@@ -111,6 +111,7 @@ export function findingsFromProbe(report: ProbeReport, mods: ModEntry[], gameCyc
       id: `harmony-guarded:${mod.packageId}`,
       rule: "harmony-guarded-target",
       severity: "info",
+      observation: true as const,
       // Not a fault: the mod ships patches for several game versions and picks at runtime.
       // Reported because it looks identical to breakage from outside, and someone reading a
       // list of dead targets deserves to know which ones the mod already knows about.
@@ -131,6 +132,8 @@ export function findingsFromProbe(report: ProbeReport, mods: ModEntry[], gameCyc
       id: "harmony-coverage",
       rule: "harmony-coverage",
       severity: "info",
+      // What the check could and could not see, which is a fact about the check.
+      observation: true as const,
       title: `${unchecked} Harmony patches decide their target while the game runs`,
       detail:
         `Read from ${report.assembliesRead} assemblies against ${report.gameTypes} game types. ` +

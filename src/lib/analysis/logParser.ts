@@ -583,6 +583,8 @@ interface Explanation {
   fixKind?: string;
   /** Arguments the repair needs, read back out of the log line that raised it. */
   params?: (e: LogEvent) => Record<string, string | string[]>;
+  /** Set where the category describes the run rather than reporting a fault with it. */
+  observation?: true;
 }
 
 /** A real newline, spelled so no escaping layer between here and the file can eat it. */
@@ -608,6 +610,7 @@ const EXPLANATIONS: Record<string, Explanation> = {
       "it was patching changed, or updated, or is not the version this patch was written against.",
   },
   "thread-teardown": {
+    observation: true,
     title: (e) => {
       const where = e.namespaces[0];
       return where ? `${where} thread stopped when the game closed` : "Worker thread stopped at shutdown";
@@ -618,6 +621,7 @@ const EXPLANATIONS: Record<string, Explanation> = {
       "that anything went wrong while you were playing.",
   },
   "reflection-probe": {
+    observation: true,
     title: () => "An assembly scan could not preload a dependency",
     detail:
       "Something scanned types without loading the assemblies they refer to, which is what the " +
@@ -773,6 +777,7 @@ export function findingsFromLog(
       count: event.defs ? affectedCount(event) : event.count,
       frames: event.frames,
       firstLine: event.firstLine,
+      observation: explanation?.observation,
       stale: settledSince(event, mods, activeOrder),
       fix: explanation?.fixKind
         ? {

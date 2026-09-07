@@ -78,10 +78,12 @@ export function SeveritySummary({
  */
 export function FindingList({ findings, empty }: { findings: Finding[]; empty: string }) {
   const settled = findings.filter((f) => f.stale);
-  // An observation with a repair is still an observation. Sorting on `fix` alone put every
-  // patch override above the list of actual faults.
-  const actionable = findings.filter((f) => !f.stale && f.fix && !f.observation);
-  const notes = findings.filter((f) => !f.stale && (!f.fix || f.observation));
+  // Split on what a finding is, not on whether the app happens to have a button for it.
+  // Keying on `fix` put every patch override above the real faults, and then put a
+  // NullReferenceException the game threw six times under "Observations", because no button
+  // can repair a crash. A fault nobody can automate is still a fault.
+  const actionable = findings.filter((f) => !f.stale && !f.observation);
+  const notes = findings.filter((f) => !f.stale && f.observation);
 
   if (!findings.length) return <p className="muted">{empty}</p>;
 
@@ -125,8 +127,9 @@ export function FindingList({ findings, empty }: { findings: Finding[]; empty: s
             Observations <span className="count">{notes.length}</span>
           </p>
           <p className="note">
-            Read rather than fixed. A patch override is how one mod layers content over another, so it is
-            reported and left alone; a total measurement is a fact about the list, not a defect.
+            Read rather than fixed. Each of these describes the install rather than reporting a fault with it:
+            a measurement, a mod layering content over another, or the game doing something that looks like
+            breakage from outside and is not.
           </p>
           <div className="finding-list notes">
             {sortFindings(notes).map((finding) => (

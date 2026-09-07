@@ -90,6 +90,9 @@ function ruleTextureFootprint(active: ModEntry[]): Finding[] {
     {
       id: "texture-footprint",
       rule: "texture-footprint",
+      // A number about the install, not a fault in it. Whether it is high enough to worry
+      // about is what the severity says.
+      observation: true as const,
       severity: gb >= FOOTPRINT_HIGH_GB ? "warning" : "info",
       title: `${gb.toFixed(1)} GB of decoded texture data across ${active.length} mods`,
       detail:
