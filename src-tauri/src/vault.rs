@@ -32,10 +32,7 @@ pub struct VaultEntry {
 }
 
 fn vault_root() -> Result<PathBuf, String> {
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .map_err(|_| "No home directory to keep a vault in".to_string())?;
-    Ok(PathBuf::from(home).join("RimDoc-Vault"))
+    Ok(crate::files::home_dir_for("keep a vault in")?.join("RimDoc-Vault"))
 }
 
 /// Files that say nothing about the mod, and would otherwise change its identity.
@@ -111,22 +108,10 @@ pub fn hash_folder(dir: &Path) -> Result<(String, u64, usize), String> {
     Ok((hex, total, files.len()))
 }
 
+/// A vault copy leaves out what `is_ignored` names, so a build's identity does not depend
+/// on what has happened to it since it was last captured.
 fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
-    fs::create_dir_all(to).map_err(|e| e.to_string())?;
-    for entry in fs::read_dir(from).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if is_ignored(&name) {
-            continue;
-        }
-        let target = to.join(entry.file_name());
-        if entry.path().is_dir() {
-            copy_dir(&entry.path(), &target)?;
-        } else {
-            fs::copy(entry.path(), &target).map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
+    crate::files::copy_dir(from, to, &is_ignored)
 }
 
 /// Take a build into the vault, or recognise that it is already there.

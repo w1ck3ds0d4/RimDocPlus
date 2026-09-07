@@ -1,3 +1,4 @@
+mod files;
 mod scan;
 mod vault;
 
@@ -5,6 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -44,7 +46,7 @@ enum FileAction {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ActionOutcome {
+struct ActionOutcome {
     target: String,
     ok: bool,
     /// What happened, in the same words the console uses.
@@ -68,7 +70,7 @@ struct RepairProgress {
 }
 
 #[derive(Debug, Serialize)]
-pub struct RunReport {
+struct RunReport {
     applied: usize,
     failed: usize,
     skipped: usize,
@@ -83,10 +85,7 @@ fn now_iso() -> String {
 }
 
 fn backups_root() -> Result<PathBuf, String> {
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .map_err(|_| "No home directory to write backups into".to_string())?;
-    Ok(PathBuf::from(home).join("RimDoc-Backups"))
+    Ok(files::home_dir_for("write backups into")?.join("RimDoc-Backups"))
 }
 
 /// Copy a file or directory beside itself as `.rimdocbak`, once.
@@ -102,24 +101,10 @@ fn backup_once(path: &Path) -> Result<(), String> {
         return Ok(());
     }
     if path.is_dir() {
-        copy_dir(path, &bak)
+        files::copy_dir_all(path, &bak)
     } else {
         fs::copy(path, &bak).map(|_| ()).map_err(|e| e.to_string())
     }
-}
-
-fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
-    fs::create_dir_all(to).map_err(|e| e.to_string())?;
-    for entry in fs::read_dir(from).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let target = to.join(entry.file_name());
-        if entry.path().is_dir() {
-            copy_dir(&entry.path(), &target)?;
-        } else {
-            fs::copy(entry.path(), &target).map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
 }
 
 /// Take the original-version copy once, and never again.
@@ -141,7 +126,7 @@ fn save_original(config_dir: Option<&str>) -> Result<PathBuf, String> {
     if let Some(config) = config_dir {
         let source = Path::new(config);
         if source.exists() {
-            copy_dir(source, &original.join("Config"))?;
+            files::copy_dir_all(source, &original.join("Config"))?;
         }
     }
     fs::write(&done, "").map_err(|e| e.to_string())?;
@@ -182,6 +167,19 @@ fn downscale(path: &Path, max_px: u32) -> Result<String, String> {
     ))
 }
 
+/// Whether a folder delete belongs to a workshop item whose manifest edit was refused.
+///
+/// A workshop folder is named for its item id, which is what pairs the two actions. Deleting
+/// the folder while Steam still has the item recorded as installed leaves the mod gone and
+/// never re-fetched, which is worse than not repairing it at all. So a refused edit has to
+/// cancel its own delete rather than only be reported beside it.
+fn paired_with_refused(directory: &str, refused: &[String]) -> bool {
+    match Path::new(directory).file_name() {
+        Some(name) => refused.iter().any(|id| *id == name.to_string_lossy()),
+        None => false,
+    }
+}
+
 fn delete_matching(directory: &Path, pattern: &str) -> Result<String, String> {
     if !directory.exists() {
         return Ok("nothing there".into());
@@ -213,23 +211,242 @@ fn delete_matching(directory: &Path, pattern: &str) -> Result<String, String> {
     Ok(format!("removed {removed}"))
 }
 
+/// A console program, run without flashing its window up.
+///
+/// This app has no console of its own, so Windows gives every `tasklist` or `reg` it runs a
+/// fresh one and it appears on screen. During a supervised run that is a black rectangle
+/// blinking over the game every five seconds.
+fn console_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+/// Whether a process with this image name is running, or None when it could not be asked.
+///
+/// Unknown is kept apart from false because the two callers want opposite defaults from it.
+/// A repair deciding whether it may edit Steam's record treats unknown as running and
+/// declines. A loop waiting for Steam to finish closing has to do the same: treating unknown
+/// as gone would start writing that record underneath a Steam still holding it in memory,
+/// which is the exact failure the wait exists to prevent.
+fn image_running(image: &str) -> Option<bool> {
+    let output = console_command("tasklist")
+        .args(["/FI", &format!("IMAGENAME eq {image}"), "/NH"])
+        .output()
+        .ok()?;
+    Some(
+        String::from_utf8_lossy(&output.stdout)
+            .to_lowercase()
+            .contains(&image.to_lowercase()),
+    )
+}
+
 /// Whether the Steam client is running.
 ///
 /// It holds its workshop manifest in memory and rewrites the file on exit, so an edit made
 /// while it is up is simply undone. Anything that touches that manifest has to check first.
-#[tauri::command]
+#[tauri::command(async)]
 fn is_steam_running() -> bool {
-    let output = Command::new("tasklist")
-        .args(["/FI", "IMAGENAME eq steam.exe", "/NH"])
-        .output();
-    match output {
-        Ok(o) => String::from_utf8_lossy(&o.stdout)
-            .to_lowercase()
-            .contains("steam.exe"),
-        // Unknown is treated as running: refusing to edit is recoverable, editing under a
-        // live Steam silently loses the change and looks like the repair did nothing.
-        Err(_) => true,
+    // Unknown is treated as running: refusing to edit is recoverable, editing under a live
+    // Steam silently loses the change and looks like the repair did nothing.
+    image_running("steam.exe").unwrap_or(true)
+}
+
+/// The Steam app id of the game Steam is currently running, or None for none.
+///
+/// Steam keeps this in its own registry key and zeroes it when the game exits, which makes
+/// it the one cheap way to ask "is a game up" that covers every game rather than only the
+/// one this app knows about. `-shutdown` is headless: it cannot raise Steam's usual "a game
+/// is running" prompt, so it would close Steam out from under a live session in silence.
+fn running_app_id() -> Option<u32> {
+    parse_reg_dword(&steam_registry_value("RunningAppID")?).filter(|id| *id != 0)
+}
+
+/// One value out of Steam's own registry key, as `reg` prints it.
+///
+/// Shelled out to rather than linked against a registry crate: two string reads do not earn
+/// a dependency, and `reg` is present on every Windows this app can run on.
+fn steam_registry_value(name: &str) -> Option<String> {
+    let output = console_command("reg")
+        .args(["query", r"HKCU\Software\Valve\Steam", "/v", name])
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// The number out of a `reg query` printing one REG_DWORD, which it writes in hex.
+fn parse_reg_dword(text: &str) -> Option<u32> {
+    let value = text
+        .lines()
+        .find_map(|line| line.split("REG_DWORD").nth(1))?;
+    u32::from_str_radix(value.trim().trim_start_matches("0x"), 16).ok()
+}
+
+/// The string out of a `reg query` printing one REG_SZ.
+///
+/// Taken as everything after the type rather than as the last whitespace-separated word,
+/// because the value here is a path and the default one contains spaces: splitting on
+/// whitespace yields "(x86)/steam/steam.exe" on the machine of almost every user.
+fn parse_reg_sz(text: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        let after = line.split("REG_SZ").nth(1)?.trim();
+        (!after.is_empty()).then(|| after.to_string())
+    })
+}
+
+/// Whether Steam is running a game right now.
+///
+/// Asked before Steam is closed, because closing it takes the game with it and the button
+/// that does so says nothing about that.
+#[tauri::command(async)]
+fn is_game_running() -> bool {
+    running_app_id().is_some()
+}
+
+/// Where steam.exe is, according to Steam.
+///
+/// The registry first, because it is the only source that is right on a machine with Steam
+/// installed somewhere other than Program Files. The workshop folder the scan already found
+/// is the fallback: on a default setup it sits beneath the install, and the alternative to
+/// looking there is asking the player to go and find it themselves.
+fn steam_exe(workshop: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(recorded) = steam_exe_from_registry() {
+        if recorded.is_file() {
+            return Ok(recorded);
+        }
     }
+    if let Some(found) = workshop.and_then(steam_exe_above) {
+        return Ok(found);
+    }
+    Err("Could not find steam.exe on this machine. Close Steam yourself and apply again.".into())
+}
+
+/// Steam records its own executable under Software\Valve\Steam.
+///
+/// Written there with forward slashes and in lower case, which Windows accepts as it stands;
+/// normalised anyway so the path reads like a path wherever it is reported back.
+fn steam_exe_from_registry() -> Option<PathBuf> {
+    let value = parse_reg_sz(&steam_registry_value("SteamExe")?)?;
+    Some(PathBuf::from(value.replace('/', "\\")))
+}
+
+/// The nearest steam.exe above the workshop content folder.
+///
+/// Searched upward rather than counted out, because the number of levels is a fact about
+/// Steam's layout rather than about this app. A library folder on a second drive has the
+/// same shape with no steam.exe above it anywhere, and finding nothing there is the right
+/// answer: that install's client lives elsewhere, and the registry is what knows where.
+fn steam_exe_above(workshop: &str) -> Option<PathBuf> {
+    let mut dir = Path::new(workshop);
+    for _ in 0..6 {
+        dir = dir.parent()?;
+        let candidate = dir.join("steam.exe");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// How long Steam is given to close before the repair is abandoned.
+///
+/// It flushes its download record on the way out, and on a slow machine with a large library
+/// that takes a while. Generous, because the alternative to waiting is writing that record
+/// underneath a Steam that is still up, which is the whole thing this exists to avoid.
+const STEAM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(45);
+const STEAM_SHUTDOWN_POLL: Duration = Duration::from_millis(500);
+
+/// Close Steam, and return only once it has actually gone.
+///
+/// Steam's own `-shutdown` rather than killing it, because a kill is precisely the case
+/// where the record never gets written: what would be left on disk is whatever Steam last
+/// happened to flush, and the repair would be editing a stale file. Waiting for the process
+/// to leave is what makes the edit that follows the last word on the subject.
+#[derive(Debug, Serialize)]
+struct SteamShutdown {
+    /// True only when this call actually closed a Steam that was running. Kept apart from
+    /// the message because the caller decides whether to start Steam again from it, and
+    /// starting a Steam the player did not have open is its own small rudeness.
+    closed: bool,
+    detail: String,
+}
+
+#[tauri::command(async)]
+fn stop_steam(workshop: Option<String>) -> Result<SteamShutdown, String> {
+    // Located before anything is asked to close, so a machine this app cannot find Steam on
+    // fails while Steam is still up rather than after it has been shut down.
+    let exe = steam_exe(workshop.as_deref())?;
+    if image_running("steam.exe") == Some(false) {
+        return Ok(SteamShutdown {
+            closed: false,
+            detail: "Steam was not running".into(),
+        });
+    }
+    Command::new(&exe)
+        .arg("-shutdown")
+        .spawn()
+        .map_err(|e| format!("Could not ask {} to close: {e}", exe.display()))?;
+
+    let started = Instant::now();
+    // Whether the wait ever got a straight answer. A run where every reading failed timed
+    // out reporting that Steam would not close, which is a claim about Steam made from no
+    // evidence at all: what actually failed was the question.
+    let mut ever_answered = false;
+    loop {
+        std::thread::sleep(STEAM_SHUTDOWN_POLL);
+        match image_running("steam.exe") {
+            Some(false) => {
+                return Ok(SteamShutdown {
+                    closed: true,
+                    detail: format!(
+                        "Steam closed after {:.0} seconds",
+                        started.elapsed().as_secs_f32()
+                    ),
+                })
+            }
+            Some(true) => ever_answered = true,
+            None => {}
+        }
+        if started.elapsed() >= STEAM_SHUTDOWN_TIMEOUT {
+            return Err(if ever_answered {
+                format!(
+                    "Steam was still running {} seconds after being asked to close, so nothing has been changed. It may be part way through a download, or waiting on a running game. Close it yourself and apply again.",
+                    STEAM_SHUTDOWN_TIMEOUT.as_secs()
+                )
+            } else {
+                "Could not tell whether Steam closed, so nothing has been changed. Check it yourself and apply again.".to_string()
+            });
+        }
+    }
+}
+
+/// Start Steam again.
+///
+/// Called whether or not the repair worked. Leaving someone's Steam closed because a file
+/// edit failed is a worse state than the one this found.
+#[tauri::command(async)]
+fn start_steam(workshop: Option<String>) -> Result<String, String> {
+    let exe = steam_exe(workshop.as_deref())?;
+    let mut command = Command::new(&exe);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Its own process group and no inherited console, so Steam is not a child that dies
+        // with this app or inherits its lifetime. The player closing RimDoc+ afterwards must
+        // not take their Steam with it.
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
+    command
+        .spawn()
+        .map_err(|e| format!("Could not start {}: {e}", exe.display()))?;
+    Ok(exe.display().to_string())
 }
 
 /// Drop one item from Steam's record of what it has downloaded.
@@ -311,6 +528,11 @@ fn run_file_actions(
 
     let mut outcomes = Vec::new();
     let (mut applied, mut failed, mut skipped) = (0, 0, 0);
+    // Workshop items whose manifest edit was refused. Deleting such a mod's folder is only
+    // safe once Steam has stopped believing it is installed: doing it anyway leaves the mod
+    // gone and never re-fetched, which is worse than not repairing it at all. One failing
+    // action does not stop the rest of a run, so the pairing has to be enforced here.
+    let mut refused: Vec<String> = Vec::new();
 
     for (i, action) in actions.into_iter().enumerate() {
         let (target, result) = match &action {
@@ -335,29 +557,40 @@ fn run_file_actions(
                     backup_once(&p).and_then(|_| downscale(&p, *max_px)),
                 )
             }
-            FileAction::DeleteMatching { directory, pattern } => (
-                directory.clone(),
-                delete_matching(Path::new(directory), pattern),
-            ),
+            FileAction::DeleteMatching { directory, pattern } => {
+                if paired_with_refused(directory, &refused) {
+                    (
+                        directory.clone(),
+                        Ok("nothing there: left alone, because Steam still has it recorded as installed".to_string()),
+                    )
+                } else {
+                    (
+                        directory.clone(),
+                        delete_matching(Path::new(directory), pattern),
+                    )
+                }
+            }
             FileAction::ForgetWorkshopItem { path, steam_id } => {
                 let p = PathBuf::from(path);
                 if is_steam_running() {
+                    refused.push(steam_id.clone());
                     (
                         path.clone(),
                         Err("Steam is running, and it rewrites this file on exit. Close Steam and try again.".to_string()),
                     )
                 } else {
-                    (
-                        path.clone(),
-                        backup_once(&p).and_then(|_| forget_workshop_item(&p, steam_id)),
-                    )
+                    let edit = backup_once(&p).and_then(|_| forget_workshop_item(&p, steam_id));
+                    if edit.is_err() {
+                        refused.push(steam_id.clone());
+                    }
+                    (path.clone(), edit)
                 }
             }
         };
 
         let (ok, detail) = match result {
             Ok(detail) => {
-                if detail.starts_with("already") || detail == "nothing there" {
+                if detail.starts_with("already") || detail.starts_with("nothing there") {
                     skipped += 1;
                 } else {
                     applied += 1;
@@ -480,7 +713,7 @@ struct ScanProgressEvent {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SessionLog {
+struct SessionLog {
     path: String,
     text: String,
 }
@@ -643,7 +876,7 @@ fn stop_game() -> Result<String, String> {
     let Some(pid) = pid else {
         return Ok("No supervised run to stop".into());
     };
-    let out = Command::new("taskkill")
+    let out = console_command("taskkill")
         .args(["/PID", &pid.to_string(), "/F"])
         .output()
         .map_err(|e| e.to_string())?;
@@ -680,7 +913,7 @@ const MEMORY_EVERY: u32 = 20;
 /// second against a process that is loading gigabytes of textures, so the cost of spawning
 /// it is irrelevant next to what it is measuring.
 fn memory_mb(pid: u32) -> Option<u64> {
-    let out = Command::new("tasklist")
+    let out = console_command("tasklist")
         .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
         .output()
         .ok()?;
@@ -852,6 +1085,9 @@ pub fn run() {
             vault_list,
             vault_restore,
             vault_forget,
+            is_game_running,
+            stop_steam,
+            start_steam,
             hash_mod
         ])
         .run(tauri::generate_context!())
@@ -1143,6 +1379,65 @@ mod tests {
 
     /// An id Steam has no record of installing is not an error: the folder removal beside it
     /// is the part that matters, and a manifest that never mentioned it is already correct.
+    #[test]
+    fn steam_paths_survive_the_spaces_in_them() {
+        // Exactly what `reg query` printed here: lower case, forward slashes, and a space
+        // in "program files (x86)" that a whitespace split would break the path on.
+        let output = "\r\nHKEY_CURRENT_USER\\Software\\Valve\\Steam\r\n    SteamExe    REG_SZ    c:/program files (x86)/steam/steam.exe\r\n\r\n";
+        assert_eq!(
+            parse_reg_sz(output).as_deref(),
+            Some("c:/program files (x86)/steam/steam.exe")
+        );
+        assert_eq!(parse_reg_sz("ERROR: The system was unable to find"), None);
+    }
+
+    #[test]
+    fn a_running_game_is_read_out_of_steams_own_record() {
+        let none = "\r\nHKEY_CURRENT_USER\\Software\\Valve\\Steam\r\n    RunningAppID    REG_DWORD    0x0\r\n\r\n";
+        let rimworld = "    RunningAppID    REG_DWORD    0x47cd4\r\n";
+        assert_eq!(parse_reg_dword(none), Some(0));
+        assert_eq!(parse_reg_dword(rimworld), Some(294_100));
+        assert_eq!(parse_reg_dword("nothing here"), None);
+    }
+
+    #[test]
+    fn steam_is_found_above_its_own_workshop_folder() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+        let content = root.join("steamapps/workshop/content/294100");
+        fs::create_dir_all(&content).expect("layout");
+        // No steam.exe yet: a library folder on a second drive has this exact shape and no
+        // client anywhere above it, and inventing one there would be a wrong answer.
+        assert_eq!(steam_exe_above(&content.to_string_lossy()), None);
+
+        write(&root.join("steam.exe"), "");
+        assert_eq!(
+            steam_exe_above(&content.to_string_lossy()),
+            Some(root.join("steam.exe"))
+        );
+    }
+
+    #[test]
+    fn a_refused_manifest_edit_cancels_its_own_folder_delete() {
+        let refused = vec!["2917566333".to_string()];
+        // The item that could not be forgotten: its folder has to survive.
+        assert!(paired_with_refused(
+            "C:/Steam/steamapps/workshop/content/294100/2917566333",
+            &refused
+        ));
+        // A different item in the same run is unaffected: one refusal must not abandon the rest.
+        assert!(!paired_with_refused(
+            "C:/Steam/steamapps/workshop/content/294100/818773962",
+            &refused
+        ));
+        // A local mod folder is not named for a workshop id and cannot be paired with one.
+        assert!(!paired_with_refused("C:/RimWorld/Mods/MyMod", &refused));
+        assert!(!paired_with_refused(
+            "C:/Steam/steamapps/workshop/content/294100/2917566333",
+            &[]
+        ));
+    }
+
     #[test]
     fn forgetting_an_unknown_item_is_not_a_failure() {
         let tmp = tempdir().unwrap();

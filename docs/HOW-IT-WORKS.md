@@ -66,9 +66,10 @@ truncated rather than silently reported as smaller than it is.
 
 ## 2. Static rules
 
-Nine rules over the modpack and the scan, each an independent function returning zero or
-more findings. They run isolated and timed: a rule that throws is recorded and skipped
-rather than taking the whole analysis with it.
+Thirteen entries in the registry: eleven named rules, plus the performance pass and the
+patch-override pass, which each emit more than one kind of finding. Every one is an
+independent function returning zero or more findings, and they run isolated and timed, so a
+rule that throws is recorded and skipped rather than taking the whole analysis with it.
 
 | Rule                   | Catches                                                                          |
 | ---------------------- | -------------------------------------------------------------------------------- |
@@ -81,6 +82,8 @@ rather than taking the whole analysis with it.
 | `incompatible-pair`    | Both enabled where one declares the conflict                                     |
 | `load-order-violation` | `loadAfter`/`loadBefore` constraints the order breaks                            |
 | `version-mismatch`     | Mods not advertising the running game cycle                                      |
+| `bundled-assemblies`   | One assembly shipped by several mods, where only one copy can load               |
+| `workshop-updates`     | Mods newer on the Workshop than the copy on disk                                 |
 
 ### Dependency alternatives
 
@@ -123,6 +126,28 @@ Engine namespaces (`System`, `Verse`, `RimWorld`, `HarmonyLib`, `UnityEngine`, `
 useless.
 
 ---
+
+### Findings the scan has since settled
+
+A log finding is about a run that has already finished. Repairing the files cannot change
+what the log says happened, so a fixed fault came back on every triage and read as the repair
+having achieved nothing.
+
+`settledSince` asks the current scan whether a logged fault has already been dealt with, and
+marks it settled where the answer is decisive. Three categories can be settled, because only
+three leave proof on disk:
+
+| Category               | Settled when                                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------------------------------- |
+| `duplicate-package-id` | Exactly one copy of that id is installed now. None is not proof: the mod may since have been uninstalled. |
+| `ghost-subscription`   | A mod carrying that Workshop file id is now on disk, which is what resubscribing was for.                 |
+| `playdata-reset`       | The load order holds mods again rather than only what the game ships with.                                |
+
+Everything else stays outstanding. Most faults leave no trace, and silence is not proof.
+
+A settled finding is a note rather than work: triage puts it in the informational bucket
+with the reason attached, and sorts it above the ordinary notes so the answer to "did my
+repair work" is not below the cut.
 
 ## 4. Patch overrides
 
@@ -246,6 +271,31 @@ removing a duplicate mod folder was unrecoverable while reporting that it had be
 up.
 
 ---
+
+### Repairs Steam would undo
+
+Steam holds its record of downloaded Workshop items in memory and rewrites the file when it
+exits. An edit made to that file while Steam is up is therefore not refused by anything, it
+is simply undone a few minutes later, which is the worst way for a repair to fail.
+
+Two mechanisms guard it, at different distances from the disk.
+
+`splitBySteam` partitions a triage result into what can run right now and what needs Steam
+closed. It moves **whole repairs**, never individual actions, because the Workshop retry
+pairs an edit to that record with deleting the mod folder, and carrying out only the second
+leaves the mod gone and Steam still believing it has it. That is worse than not repairing at
+all: gone, and never re-fetched.
+
+The run then applies everything that is free to go and names what it held back. An earlier
+version refused the entire run whenever any part of it needed Steam closed, which held back
+repairs that had nothing to do with Steam and looked, from the outside, like the button
+doing nothing.
+
+`paired_with_refused` in the shell is the same rule enforced where the writing happens. One
+failing action does not stop a run, so the ordering alone never protected anything: the edit
+could be refused and the delete still proceed on the next iteration. A folder delete whose
+manifest edit was refused is now skipped, matched by the Workshop id the folder is named
+for, and says so rather than reporting a plain failure.
 
 ## 8. Triage
 

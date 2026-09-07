@@ -77,7 +77,9 @@ the player edits against, instead of a report they read once.
 Runs in well under a second, launches nothing. Rules are independent functions returning
 zero or more findings. Current rules: `orphan-active`, `duplicate-package-id`,
 `dlc-after-mods`, `bootstrap-position`, `missing-dependency`, `inactive-dependency`,
-`incompatible-pair`, `load-order-violation`, `version-mismatch`.
+`incompatible-pair`, `load-order-violation`, `version-mismatch`, `bundled-assemblies`,
+`workshop-updates`, plus the performance pass (`oversized-textures`, `texture-footprint`)
+and the patch pass (`patch-override`).
 
 Planned additions:
 

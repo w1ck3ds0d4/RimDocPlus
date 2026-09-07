@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { RepairProgress, RunReport } from "../lib/shell";
+import { percent } from "../lib/format";
 
 export interface ConsoleLine {
   tone: "cmd" | "info" | "ok" | "warn" | "work" | "done";
@@ -66,7 +67,7 @@ export function RepairConsole({
     return () => clearTimeout(timer);
   }, [running, done]);
 
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const pct = percent(done, total);
 
   return (
     <div className="drawer-scrim console-scrim" onClick={() => !running && onClose()}>

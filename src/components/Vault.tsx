@@ -2,9 +2,18 @@ import { useEffect, useState } from "react";
 import type { ScanResult } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
 import { checkPins, clearPins, pinTo, type PinReport } from "../lib/pins";
-import { hashMod, inShell, vaultCapture, vaultList, vaultRestore, type VaultEntry } from "../lib/shell";
+import {
+  hashMod,
+  inShell,
+  vaultCapture,
+  vaultForget,
+  vaultList,
+  vaultRestore,
+  type VaultEntry,
+} from "../lib/shell";
 import { record } from "../lib/history";
 import { useConfirm } from "./Confirm";
+import { formatBytes, percent } from "../lib/format";
 
 /**
  * Pinning a modpack to exact builds, and keeping copies of them.
@@ -112,6 +121,35 @@ export function Vault({
     record({ kind: "modpack", summary: `Vaulted ${kept} mod builds from ${modpack.name}` });
   }
 
+  /**
+   * Drop one build from the vault for good.
+   *
+   * The vault holds whole copies of mod folders, so it grows by gigabytes and nothing else
+   * shrinks it. Without this the only way to reclaim that space was to go and find the
+   * folder by hand, which is not something an app that filled it should ask.
+   */
+  async function forget(entry: VaultEntry) {
+    const ok = await confirm({
+      title: `Remove this build of ${entry.name} from the vault?`,
+      body: (
+        <>
+          <p>
+            Deletes the vault's copy, freeing {formatBytes(entry.sizeBytes)}. The mod itself is not touched.
+          </p>
+          <p className="muted">
+            Any modpack pinned to this build will still name it, but nothing will be left to put back.
+          </p>
+        </>
+      ),
+      confirmLabel: "Remove it",
+      destructive: true,
+    });
+    if (!ok) return;
+    await vaultForget(entry.packageId, entry.hash);
+    setEntries(await vaultList());
+    record({ kind: "modpack", summary: `Removed a vaulted build of ${entry.name}` });
+  }
+
   async function restore(check: (typeof report.checks)[number]) {
     const mod = scan.mods.find((m) => m.packageId === check.packageId);
     if (!mod || !check.pinned) return;
@@ -180,10 +218,7 @@ export function Vault({
 
       {progress && (
         <div className="splash-bar" role="progressbar" aria-valuenow={progress.done}>
-          <span
-            className="splash-fill"
-            style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
-          />
+          <span className="splash-fill" style={{ width: `${percent(progress.done, progress.total)}%` }} />
         </div>
       )}
 
@@ -232,11 +267,28 @@ export function Vault({
           )}
         </>
       )}
+      {entries.length > 0 && (
+        <>
+          <p className="section-title">Held builds</p>
+          <ul className="pin-list">
+            {entries.map((entry) => (
+              <li key={`${entry.packageId}:${entry.hash}`}>
+                <span className="pin-name">{entry.name}</span>
+                <code className="pin-hash">{entry.hash.slice(0, 8)}</code>
+                <span className="muted">{formatBytes(entry.sizeBytes)}</span>
+                <button
+                  className="btn small danger"
+                  type="button"
+                  disabled={!!busy}
+                  onClick={() => void forget(entry)}
+                >
+                  Forget
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  return `${Math.round(bytes / 1024 ** 2)} MB`;
 }

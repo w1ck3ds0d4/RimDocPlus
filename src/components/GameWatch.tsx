@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScanResult } from "../lib/types";
 import { analyzeLog } from "../lib/analysis/logParser";
 import { inShell, launchSupervised, watchGame, type GameExit } from "../lib/shell";
@@ -113,7 +113,14 @@ export function GameWatch({ scan, modpack }: { scan: ScanResult; modpack: Modpac
 
   // Read out of what the run actually wrote, so the summary is the same analysis the
   // Session tab does rather than a second opinion about the same lines.
-  const faults = phase === "done" && lines.length ? analyzeLog(lines.join("\n")).events.length : 0;
+  //
+  // Memoised because the console re-renders on every scroll tick to keep its follow-the-tail
+  // state, and re-parsing four thousand lines of log through the whole rule set on each of
+  // those made the finished transcript stutter under the reader's own scrolling.
+  const faults = useMemo(
+    () => (phase === "done" && lines.length ? analyzeLog(lines.join("\n")).events.length : 0),
+    [phase, lines],
+  );
 
   return (
     <section className="gamewatch">

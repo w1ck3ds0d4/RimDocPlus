@@ -6,6 +6,7 @@ import { planRepair } from "../lib/repair/repairs";
 import { inShell, isSteamRunning, runFileActions, targetsOf } from "../lib/shell";
 import { record } from "../lib/history";
 import { useConfirm } from "./Confirm";
+import { formatBytes } from "../lib/format";
 
 export interface ModDetailProps {
   mod: ModEntry;
@@ -413,10 +414,4 @@ function initials(name: string): string {
 function shortDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "unknown" : d.toISOString().slice(0, 10);
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }

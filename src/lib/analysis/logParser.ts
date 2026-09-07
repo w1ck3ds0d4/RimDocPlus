@@ -1,4 +1,5 @@
 import type { Finding, ModEntry, Severity } from "../types";
+import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS } from "./about.ts";
 
 /** Hardware and build facts scraped from the log header. Drives the performance rules. */
 export interface SessionEnvironment {
@@ -433,7 +434,11 @@ const EXPLANATIONS: Record<string, Explanation> = {
  * frames allow it. Attribution is by namespace root against mod names and package ids,
  * which is what makes a wall of NullReferences point at something actionable.
  */
-export function findingsFromLog(analysis: SessionAnalysis, mods: ModEntry[]): Finding[] {
+export function findingsFromLog(
+  analysis: SessionAnalysis,
+  mods: ModEntry[],
+  activeOrder: string[] = [],
+): Finding[] {
   const index = buildAttributionIndex(mods);
   return analysis.events.map((event) => {
     const explanation = EXPLANATIONS[event.category];
@@ -452,7 +457,7 @@ export function findingsFromLog(analysis: SessionAnalysis, mods: ModEntry[]): Fi
       count: event.count,
       frames: event.frames,
       firstLine: event.firstLine,
-      stale: settledSince(event, mods),
+      stale: settledSince(event, mods, activeOrder),
       fix: explanation?.fixKind
         ? {
             kind: explanation.fixKind,
@@ -479,7 +484,23 @@ function ghostIdOf(event: LogEvent): string | undefined {
  * beats offering a repair that would find nothing to do. Only claimed where the scan is
  * genuinely decisive: most faults leave no trace on disk, and silence is not proof.
  */
-function settledSince(event: LogEvent, mods: ModEntry[]): string | undefined {
+function settledSince(event: LogEvent, mods: ModEntry[], activeOrder: string[]): string | undefined {
+  if (event.category === "playdata-reset") {
+    // The complaint is that the game rewrote the load order back to the mods it ships with.
+    // A single mod of anyone else's in the current order is that having been put back, and
+    // is the only proof available: the log says what happened, and no amount of repairing
+    // will make it stop saying it. Without this the finding returned on every triage after
+    // being fixed, which read as the repair having done nothing.
+    const restored = activeOrder.filter(
+      (id) =>
+        !OFFICIAL_PACKAGE_IDS.includes(id.toLowerCase()) && !BOOTSTRAP_PACKAGE_IDS.includes(id.toLowerCase()),
+    );
+    return restored.length > 0
+      ? `The load order holds ${restored.length} mod${restored.length === 1 ? "" : "s"} again, ` +
+          `so it was restored after the log was written. Launching the game will clear this.`
+      : undefined;
+  }
+
   if (event.category === "duplicate-package-id") {
     const id = duplicateIdOf(event)?.toLowerCase();
     if (!id) return undefined;

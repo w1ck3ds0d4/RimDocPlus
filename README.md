@@ -49,7 +49,7 @@ Banners reach the two builds by different routes, because neither can use the ot
 
 ### Doctor (L1 static analysis)
 
-Nine independent rules, each provable without launching the game:
+Eleven independent rules, each provable without launching the game:
 
 - **orphan-active**: enabled package ids with no folder on disk
 - **duplicate-package-id**: the same id in two folders, where RimWorld silently picks one
@@ -77,6 +77,14 @@ Every finding carries a proposed repair tagged with its tier and whether it can 
 - Detects the mod-config reset, where a failed load makes RimWorld silently rewrite ModsConfig.xml back to Core only
 - Scrapes the environment header: game build, Unity version, GPU, VRAM, driver
 - Ranks startup phase costs, so a slow launch points at the phase responsible
+
+**Findings the scan has settled.** A log finding describes a run that has already finished, so
+repairing the files cannot change what the log says happened. A fixed fault used to come back on
+every triage and read as the repair having achieved nothing. Where the current scan can settle the
+question it now says so and moves the finding to a note with its reason: a duplicate when one copy
+is left, a ghost subscription when the mod has arrived, a mod-list reset when the order holds mods
+again. Nothing else is settled, because most faults leave no trace on disk and silence is not
+proof.
 
 ### Modpacks
 
@@ -211,6 +219,13 @@ A **Developer mode** toggle in Settings opens a diagnostics panel:
 That last part is the point. The failure mode worth catching is not a crash, it is a parser or matcher that silently matches nothing: it throws nothing, breaks no test that only asserts "did not crash", and returns a clean empty result that looks like good news. A regex whose word boundaries had become literal backspace characters failed exactly that way and cost an hour. It would now read as a zero on this panel.
 
 The panel found a bug in itself on first run: an intent breakdown that sampled `loadAfter` pairs, which are all "declared" by definition, so the other three categories could only ever read zero however well the classifier worked. It now counts the overrides actually reported.
+
+**Reset the app** sits in the same panel. It clears everything RimDoc+ remembers, so the next
+start is a first one: modpacks and their pins, run history, any search in progress, the install
+baseline, and the settings themselves. Swept by prefix rather than from a list of keys, because
+that list is spread across a dozen modules and a reset that quietly missed one would leave the app
+in a state no first run can produce. Your install, the backups a repair took and the builds in the
+vault are left alone: those are how real changes get undone, and this is not a repair.
 
 An orange strip across the top marks dev mode as on, since a diagnostic mode that looks identical to normal use is easy to leave running.
 
@@ -369,10 +384,29 @@ Steam fetch the item again, which is why this is not the same as unsubscribing. 
 too, because Steam treats a present folder as proof of a good copy and a half-downloaded one will
 otherwise survive several retries.
 
-The button is disabled while Steam is running. Steam holds that record in memory and rewrites the
-file when it exits, so an edit made underneath it is simply undone, and a repair that silently
-achieves nothing is worse than one that declines. Both the folder and the manifest are backed up
-first, so undoing puts the current copy back.
+Steam holds that record in memory and rewrites the file when it exits, so an edit made underneath
+it is simply undone, and a repair that silently achieves nothing is worse than one that declines.
+So it needs Steam closed, and there are two ways to get there.
+
+**Close Steam, apply, start it again** does all three in one press, narrating each step in the
+transcript. It uses Steam's own shutdown rather than killing it, because a kill is the case where
+the record never gets written at all and the repair would then be editing a stale file. It waits
+for Steam to actually be gone, treats "could not tell" as still running rather than guessing, and
+starts Steam again whether or not the repair worked, but only if this run was what closed it.
+
+It refuses outright when Steam is running a game, read from Steam's own `RunningAppID`. The
+headless shutdown cannot raise Steam's usual "a game is running" prompt, so without that check it
+would take a live session down with no warning and no save. That is the one consequence the
+button's label does not imply, so it is the one thing that blocks.
+
+**Or apply the rest now.** A run that contains a Steam-blocked repair no longer refuses outright.
+It applies everything that is free to go and names what it held back. Repairs move whole, never
+action by action, because this one pairs the manifest edit with deleting the mod folder: doing
+only the second leaves the mod gone and Steam still believing it has it, which is worse than not
+repairing at all. The shell enforces the same pairing where the writing happens, so a folder
+delete whose manifest edit was refused is skipped rather than carried out anyway.
+
+Both the folder and the manifest are backed up first, so undoing puts the current copy back.
 
 It is offered on any Workshop mod from its detail panel, and on the ghost-subscription finding the
 session report raises when Steam registered a subscription and no folder ever arrived.
@@ -458,6 +492,16 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 - **Subscribing from inside the app**: the anonymous Web API is read-only, and changing a subscription needs the Steamworks SDK, a native binding and a running Steam client. Re-fetching an item is covered without any of that (see Retry download); subscribing to something new is not.
 - **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path
 - **Def audits**: unreachable def pruning
+
+## Documentation
+
+| Document                                         | What is in it                                                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)     | How the pieces fit: the layer split, why repairs are plans rather than actions, the command surface, and the module map. |
+| [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)     | What each individual analysis actually does, rule by rule.                                                               |
+| [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) | Everything this app can touch, with the source that enforces each limit.                                                 |
+| [docs/SPEC.md](docs/SPEC.md)                     | The original specification, including what is planned and not yet built.                                                 |
+| [CONTRIBUTING.md](CONTRIBUTING.md)               | Building it, the checks that must pass, and the house style.                                                             |
 
 ## License
 

@@ -158,11 +158,11 @@ pub struct ScanResult {
 /// Steam library locations scan.mjs checks. Not read from `libraryfolders.vdf`: the
 /// reference scanner hardcodes the common drive letters instead, so this matches it
 /// rather than doing more than the spec does.
-const GAME_CANDIDATES: &[&[&str]] = &[
-    &["C:/Program Files (x86)/Steam/steamapps/common/RimWorld"],
-    &["C:/Program Files/Steam/steamapps/common/RimWorld"],
-    &["D:/SteamLibrary/steamapps/common/RimWorld"],
-    &["E:/SteamLibrary/steamapps/common/RimWorld"],
+const GAME_CANDIDATES: &[&str] = &[
+    "C:/Program Files (x86)/Steam/steamapps/common/RimWorld",
+    "C:/Program Files/Steam/steamapps/common/RimWorld",
+    "D:/SteamLibrary/steamapps/common/RimWorld",
+    "E:/SteamLibrary/steamapps/common/RimWorld",
 ];
 
 /// Join path segments one at a time so the result uses the platform's own separator
@@ -174,13 +174,7 @@ fn join_all(base: &Path, parts: &[&str]) -> PathBuf {
         .fold(base.to_path_buf(), |acc, part| acc.join(part))
 }
 
-fn home_dir() -> Option<PathBuf> {
-    std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .ok()
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-}
+use crate::files::home_dir;
 
 /// Collapse `..` components lexically, without touching the filesystem. `Path::join`
 /// does not do this, so `game/../../workshop/...` would otherwise carry its `..`
@@ -218,10 +212,7 @@ fn first_existing(candidates: Vec<PathBuf>) -> Option<PathBuf> {
 pub fn discover() -> ScanPaths {
     let home = home_dir();
 
-    let mut game_candidates: Vec<PathBuf> = GAME_CANDIDATES
-        .iter()
-        .map(|segs| PathBuf::from(segs[0]))
-        .collect();
+    let mut game_candidates: Vec<PathBuf> = GAME_CANDIDATES.iter().map(PathBuf::from).collect();
     if let Some(home) = &home {
         game_candidates.push(join_all(
             home,
@@ -368,7 +359,7 @@ pub fn scan_install_with(
     };
 
     let game = paths.game.clone().ok_or_else(|| {
-        let checked: Vec<&str> = GAME_CANDIDATES.iter().map(|segs| segs[0]).collect();
+        let checked: Vec<&str> = GAME_CANDIDATES.to_vec();
         format!(
             "No RimWorld install found. Checked:\n  {}",
             checked.join("\n  ")

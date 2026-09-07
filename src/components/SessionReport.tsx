@@ -5,6 +5,7 @@ import { FindingList, SeveritySummary, useSeverityFilter } from "./Findings";
 import { useRepairApi } from "./Repair";
 import { buildReport, describeReport } from "../lib/shareLog";
 import { download } from "../lib/download";
+import { formatMs } from "../lib/format";
 
 /**
  * The session, and a report of it written for someone else to read.
@@ -88,9 +89,7 @@ export function SessionReport({
                 <span className="bar">
                   <i style={{ width: `${Math.max(2, (t.ms / slowest) * 100)}%` }} />
                 </span>
-                <span className="ms">
-                  {t.ms >= 1000 ? `${(t.ms / 1000).toFixed(2)} s` : `${Math.round(t.ms)} ms`}
-                </span>
+                <span className="ms">{formatMs(t.ms)}</span>
               </div>
             ))}
           </div>

@@ -290,6 +290,22 @@ describe("log analysis", () => {
     const reset = findings.find((f) => f.rule === "log:playdata-reset");
     expect(reset?.severity).toBe("critical");
     expect(reset?.title).toBe("RimWorld reset your mod list after a load failure");
+    expect(reset?.stale).toBeUndefined();
+  });
+
+  it("settles the reset once the load order holds mods again", () => {
+    // The log is a record of a run that has finished, so repairing the file cannot stop it
+    // saying this. Only the current order can, and it is what the repair writes.
+    const restored = findingsFromLog(analyzeLog(log), [], ["ludeon.rimworld", "some.mod"]).find(
+      (f) => f.rule === "log:playdata-reset",
+    );
+    expect(restored?.stale).toContain("restored after the log was written");
+
+    // Core alone is the reset still standing: claiming otherwise would hide a real fault.
+    const still = findingsFromLog(analyzeLog(log), [], ["ludeon.rimworld"]).find(
+      (f) => f.rule === "log:playdata-reset",
+    );
+    expect(still?.stale).toBeUndefined();
   });
 
   describe("the duplicate-load complaint", () => {

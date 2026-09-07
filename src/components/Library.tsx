@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ScanResult, WorkshopCache } from "../lib/types";
 import { buildLibrary, cleanupCandidates, sortLibrary, type LibrarySort } from "../lib/library";
+import { formatBytes } from "../lib/format";
 
 const SORTS: { key: LibrarySort; label: string }[] = [
   { key: "order", label: "Load order" },
@@ -134,10 +135,4 @@ function compact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(0)}k`;
   return String(n);
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }

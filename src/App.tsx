@@ -224,7 +224,7 @@ export default function App() {
   );
 
   const sessionFindings = useMemo<Finding[]>(
-    () => (sessionAnalysis && scan ? findingsFromLog(sessionAnalysis, scan.mods) : []),
+    () => (sessionAnalysis && scan ? findingsFromLog(sessionAnalysis, scan.mods, scan.activeOrder) : []),
     [sessionAnalysis, scan],
   );
 
@@ -461,7 +461,6 @@ export default function App() {
   );
 }
 
-/** RD with a medical cross: the mark reads as a doctor, not a mod list. */
 /**
  * One number in the header.
  *

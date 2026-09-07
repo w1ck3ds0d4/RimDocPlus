@@ -1,5 +1,6 @@
 import type { SessionAnalysis } from "./analysis/logParser";
 import type { GameExit } from "./shell";
+import { formatMs } from "./format";
 
 export interface RunMeasurement {
   /** The modpack this run used. */
@@ -90,7 +91,7 @@ export function compareRuns(a: RunMeasurement, b: RunMeasurement): Comparison[] 
 
 export function formatMeasure(value: number, format: Comparison["format"]): string {
   if (format === "mb") return value >= 1024 ? `${(value / 1024).toFixed(1)} GB` : `${value} MB`;
-  if (format === "ms") return value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`;
+  if (format === "ms") return formatMs(value);
   return String(value);
 }
 

@@ -401,6 +401,21 @@ main {
   color: var(--accent);
 }
 
+/* Green, for a button that goes and does the whole thing rather than asking for something
+   first. It reads as a step forward next to buttons that only refuse, without competing
+   with the blue primary action beside it. */
+.btn.go {
+  background: rgba(78, 201, 139, 0.12);
+  border-color: rgba(78, 201, 139, 0.45);
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.btn.go:hover:not(:disabled) {
+  background: rgba(78, 201, 139, 0.22);
+  border-color: var(--ok);
+}
+
 /* Destructive at rest, not only on hover: an action that cannot be undone should not
    look identical to Cancel until the pointer happens to be over it. */
 .btn.danger {

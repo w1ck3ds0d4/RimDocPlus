@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Finding, ModEntry, ProposedFix, ScanResult } from "../types";
 import type { Modpack } from "../modpacks";
 import { runStaticRules } from "../analysis/rules";
-import { allFileActions, runTriage } from "./triage";
+import { allFileActions, runTriage, splitBySteam } from "./triage";
 
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
   return {
@@ -255,5 +255,44 @@ describe("auto mode", () => {
     // It lands in the script, which the player still has to download and run.
     expect(result.files).toHaveLength(1);
     expect(result.files[0].actions[0].op).toBe("delete-matching");
+  });
+});
+
+describe("splitBySteam", () => {
+  // A run holding one Steam-blocked repair used to be refused entirely, which held back
+  // unrelated repairs and read on screen as the button doing nothing at all.
+  const broken = mod("a.one", { steamId: "123" });
+  const scan = {
+    ...scanOf([broken], ["a.one"]),
+    // The retry repair edits Steam's own record, which it only knows where to find when the
+    // scan located the workshop folder.
+    paths: { saveData: "C:/save", workshop: "C:/Steam/steamapps/workshop/content/294100" },
+  };
+  const result = runTriage(
+    [
+      findingWith({ ...manual, kind: "restore-mods-config" }, { id: "config", title: "Mod list was reset" }),
+      findingWith(
+        { ...manual, kind: "retry-workshop-download", params: { steamId: "123" } },
+        { id: "retry", title: "Download it again" },
+      ),
+    ],
+    { scan, modpack: profileOf(["a.one"]) },
+    { auto: false },
+  );
+
+  it("holds back only the repair Steam would undo", () => {
+    const split = splitBySteam(result);
+    expect(split.deferredFor).toEqual(["Download it again"]);
+    expect(split.now.length).toBeGreaterThan(0);
+    expect(split.now.some((a) => a.op === "forget-workshop-item")).toBe(false);
+    expect(split.deferred.some((a) => a.op === "forget-workshop-item")).toBe(true);
+  });
+
+  it("splits the plan without losing or inventing any action", () => {
+    const split = splitBySteam(result);
+    const key = (a: (typeof split.now)[number]) =>
+      "path" in a ? `${a.op}:${a.path}` : `${a.op}:${a.directory}`;
+    const both = new Set([...split.now, ...split.deferred].map(key));
+    expect(both).toEqual(new Set(allFileActions(result).map(key)));
   });
 });

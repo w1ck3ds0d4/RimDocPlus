@@ -10,12 +10,6 @@ importers:
       "@tauri-apps/api":
         specifier: ^2
         version: 2.11.1
-      "@tauri-apps/plugin-opener":
-        specifier: ^2
-        version: 2.5.5
-      lucide-react:
-        specifier: ^1.11.0
-        version: 1.41.0(react@19.2.8)
       react:
         specifier: ^19.2.6
         version: 19.2.8
@@ -332,12 +326,6 @@ packages:
     engines: { node: ">= 10" }
     hasBin: true
 
-  "@tauri-apps/plugin-opener@2.5.5":
-    resolution:
-      {
-        integrity: sha512-xvzGai5aQds8j8R8RsUK/lW6pGG50YgOYIPLzvkqmkwAj7dfySOD7sGtejRzvVdMmv1EQfKVEFh1MvmDp8QR0g==,
-      }
-
   "@types/chai@5.2.3":
     resolution:
       {
@@ -620,14 +608,6 @@ packages:
         integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==,
       }
     engines: { node: ">= 12.0.0" }
-
-  lucide-react@1.41.0:
-    resolution:
-      {
-        integrity: sha512-6lksP35l6KszDKUeRTi4LV7i6DEe0Yzl2ALJm9j4c5xEYN91GdW1xGsawGMOg2mgjF5GHBVX8pKX9kP+cWsP3Q==,
-      }
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   magic-string@0.30.21:
     resolution:
@@ -974,10 +954,6 @@ snapshots:
       "@tauri-apps/cli-win32-ia32-msvc": 2.11.4
       "@tauri-apps/cli-win32-x64-msvc": 2.11.4
 
-  "@tauri-apps/plugin-opener@2.5.5":
-    dependencies:
-      "@tauri-apps/api": 2.11.1
-
   "@types/chai@5.2.3":
     dependencies:
       "@types/deep-eql": 4.0.2
@@ -1114,10 +1090,6 @@ snapshots:
       lightningcss-linux-x64-musl: 1.33.0
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
-
-  lucide-react@1.41.0(react@19.2.8):
-    dependencies:
-      react: 19.2.8
 
   magic-string@0.30.21:
     dependencies:

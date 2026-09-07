@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
 import {
@@ -45,9 +45,22 @@ export function RepairProvider({ value, children }: { value: RepairApi; children
 export function RepairAction({ finding }: { finding: Finding }) {
   const api = useContext(RepairContext);
   const [open, setOpen] = useState(false);
-  if (!api || !finding.fix) return null;
 
-  const plan = planRepair({ scan: api.scan, modpack: api.modpack, workshop: api.workshop, finding });
+  // Planned once per finding rather than once per render. Planning walks every installed
+  // mod to build its lookup maps, and there is one of these per finding row, so a filter
+  // toggle on the Doctor tab rebuilt a few hundred maps over a 253-mod install before
+  // anything had actually changed. Above the early return, because hooks cannot be
+  // conditional, and keyed on the fields rather than on the context object: that object is
+  // built fresh by the provider on every render, so keying on it would never hit.
+  const plan = useMemo(
+    () =>
+      api && finding.fix
+        ? planRepair({ scan: api.scan, modpack: api.modpack, workshop: api.workshop, finding })
+        : null,
+    [api?.scan, api?.modpack, api?.workshop, finding],
+  );
+
+  if (!api || !finding.fix) return null;
 
   if (!plan) {
     return (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
 import { runStaticRulesWithDiagnostics, type RuleRun } from "../lib/analysis/rules";
@@ -7,6 +7,8 @@ import { buildDiagnostics } from "../lib/diagnostics";
 import { clearDevLog, getDevLog, subscribeDevLog, type CapturedEntry } from "../lib/devLog";
 import { runSelfChecks } from "../lib/selfCheck";
 import { download } from "../lib/download";
+import { resetApp, storedKeys } from "../lib/reset";
+import { useConfirm } from "./Confirm";
 
 const DEV_KEY = "rimdoc.devMode";
 const OVERSIZE_KEY = "rimdoc.oversizePx";
@@ -120,7 +122,65 @@ export function Settings({
       </div>
 
       {devMode && <Diagnostics scan={scan} workshop={workshop} modpacks={modpacks} session={session} />}
+      {devMode && <ResetApp modpacks={modpacks} />}
     </>
+  );
+}
+
+/**
+ * Put the app back to a first run.
+ *
+ * Behind developer mode because it is for testing what a new player sees, not for tidying
+ * up: everything it clears was worth keeping until someone deliberately decided otherwise.
+ * It forgets and nothing more. The backups a repair took and the builds in the vault are
+ * how real changes to a real install get undone, and they survive this untouched.
+ */
+function ResetApp({ modpacks }: { modpacks: Modpack[] }) {
+  const { confirm, dialog } = useConfirm();
+  const keys = storedKeys();
+
+  async function reset() {
+    const ok = await confirm({
+      title: "Put the app back to a first run?",
+      body: (
+        <>
+          <p>
+            Forgets {keys.length} stored {keys.length === 1 ? "item" : "items"}: your {modpacks.length}{" "}
+            modpack{modpacks.length === 1 ? " and its" : "s and their"} pins, the run history, any search in
+            progress, the install baseline, and these settings. Developer mode goes with them, which is what a
+            first run looks like.
+          </p>
+          <p className="muted">
+            Your game is not touched. Neither are the backups a repair took, nor the builds in the vault:
+            those are how real changes get undone, and this is not a repair.
+          </p>
+        </>
+      ),
+      confirmLabel: "Forget all of it",
+      destructive: true,
+    });
+    if (!ok) return;
+    resetApp();
+    // Reloaded rather than re-rendered, because half this state was read once at startup and
+    // handed down as props. Anything short of starting again shows a mixture of the two.
+    window.location.reload();
+  }
+
+  return (
+    <div className="setting">
+      {dialog}
+      <span className="setting-text">
+        <b>Reset the app</b>
+        <small>
+          Clears everything RimDoc+ remembers, so the next start is a first one. {keys.length} stored{" "}
+          {keys.length === 1 ? "item" : "items"} right now. Your install, your backups and the vault are left
+          alone.
+        </small>
+      </span>
+      <button className="btn danger" type="button" onClick={() => void reset()}>
+        Reset the app
+      </button>
+    </div>
   );
 }
 
@@ -137,7 +197,10 @@ function Diagnostics({
 }) {
   const [runs, setRuns] = useState<RuleRun[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
-  const groups = buildDiagnostics(scan, workshop, modpacks, session);
+  const groups = useMemo(
+    () => buildDiagnostics(scan, workshop, modpacks, session),
+    [scan, workshop, modpacks, session],
+  );
 
   useEffect(() => {
     const result = runStaticRulesWithDiagnostics(scan);
@@ -145,7 +208,7 @@ function Diagnostics({
     setFindings(result.findings);
   }, [scan]);
 
-  const checks = runSelfChecks(scan, findings);
+  const checks = useMemo(() => runSelfChecks(scan, findings), [scan, findings]);
   const failedChecks = checks.filter((c) => !c.ok);
 
   const broken = runs.filter((r) => r.error);

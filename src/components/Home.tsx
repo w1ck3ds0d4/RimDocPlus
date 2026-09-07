@@ -4,6 +4,7 @@ import { clearHistory, loadHistory, type HistoryKind } from "../lib/history";
 import type { InstallDiff, ModChange } from "../lib/installDiff";
 import { useState } from "react";
 import { RELEASES } from "../lib/releases";
+import { formatBytes } from "../lib/format";
 
 export interface HomeProps {
   scan: ScanResult;
@@ -282,10 +283,4 @@ function ago(iso: string): string {
 function scanAge(iso: string): string {
   const label = ago(iso);
   return label ? `scanned ${label}` : "";
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }

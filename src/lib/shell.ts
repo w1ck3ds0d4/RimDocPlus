@@ -1,4 +1,7 @@
 import type { FileAction } from "./repair/repairs";
+
+// Re-exported so callers that reach for it alongside runFileActions keep one import.
+export { targetsOf } from "./repair/repairs";
 import type { ScanResult } from "./types";
 import type { SaveMeta } from "./saves";
 
@@ -133,6 +136,38 @@ export function isSteamRunning(): Promise<boolean> {
   return invoke<boolean>("is_steam_running", {});
 }
 
+export interface SteamShutdown {
+  /** True only when this call closed a Steam that was actually running. */
+  closed: boolean;
+  detail: string;
+}
+
+/**
+ * Whether Steam is running a game right now, read out of Steam's own record.
+ *
+ * Asked before Steam is closed on the player's behalf, because closing it takes whatever it
+ * is running with it, and a button that says it closes Steam does not say that.
+ */
+export function isGameRunning(): Promise<boolean> {
+  return invoke<boolean>("is_game_running", {});
+}
+
+/**
+ * Close Steam, resolving only once it has actually gone.
+ *
+ * Steam's own shutdown rather than a kill, because a kill is precisely the case where the
+ * download record never gets written: what would be left on disk is whatever Steam last
+ * happened to flush, and the repair would then be editing a stale file.
+ */
+export function stopSteam(workshop: string | null): Promise<SteamShutdown> {
+  return invoke<SteamShutdown>("stop_steam", { workshop });
+}
+
+/** Start Steam again. Called whether or not the repair in between worked. */
+export function startSteam(workshop: string | null): Promise<string> {
+  return invoke<string>("start_steam", { workshop });
+}
+
 /**
  * Every save RimWorld has written, newest first, with the mod list each was made with.
  *
@@ -236,9 +271,4 @@ export function hashMod(folder: string): Promise<string> {
 /** Start RimWorld from its install folder. */
 export function launchGame(gameDir: string): Promise<string> {
   return invoke<string>("launch_game", { gameDir });
-}
-
-/** Every distinct path a plan touches, which is also what a rollback needs. */
-export function targetsOf(actions: FileAction[]): string[] {
-  return [...new Set(actions.map((a) => ("path" in a ? a.path : a.directory)))];
 }

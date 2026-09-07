@@ -1,5 +1,6 @@
 import { Logo } from "./Logo";
 import type { ScanProgress } from "../lib/shell";
+import { percent } from "../lib/format";
 
 /**
  * What the window shows while the install is being read.
@@ -13,7 +14,7 @@ export function Splash({ progress, note }: { progress: ScanProgress | null; note
   // Determinate the moment the scan reports its first folder. Before that there is nothing
   // honest to draw a percentage from, so the bar sweeps instead of claiming a position.
   const determinate = !!progress && progress.total > 0;
-  const pct = determinate ? Math.round((progress.done / progress.total) * 100) : 0;
+  const pct = determinate ? percent(progress.done, progress.total) : 0;
 
   return (
     <div className="splash" role="status" aria-live="polite">

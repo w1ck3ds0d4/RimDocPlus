@@ -4,6 +4,7 @@ import { runStaticRules } from "../analysis/rules.ts";
 import {
   estimateDurationMs,
   formatDuration,
+  needsSteamClosed,
   planRepair,
   type FileAction,
   type RepairPlan,
@@ -212,16 +213,43 @@ function countRemaining(scan: ScanResult, modpack: Modpack): number {
  * Findings overlap: the footprint rule and the oversized rule name many of the same
  * textures. Deduplicating by target keeps the script from acting on one file twice.
  */
-export function allFileActions(result: TriageResult): FileAction[] {
+/**
+ * Split a run into what can go now and what has to wait for Steam to close.
+ *
+ * Whole repairs move together, never individual actions. One repair pairs an edit Steam can
+ * refuse with deleting a mod folder, and running half of that pair leaves the mod gone with
+ * Steam still believing it has it. Everything else is independent, so holding back the
+ * critical mod-list restore because an unrelated Workshop retry needs Steam closed would be
+ * refusing to do the useful thing over the inconvenient one.
+ */
+export function splitBySteam(result: TriageResult): {
+  now: FileAction[];
+  deferred: FileAction[];
+  deferredFor: string[];
+} {
+  const held = result.files.filter((f) => needsSteamClosed(f.actions));
+  const free = result.files.filter((f) => !needsSteamClosed(f.actions));
+  return {
+    now: dedupe(free.flatMap((f) => f.actions)),
+    deferred: dedupe(held.flatMap((f) => f.actions)),
+    deferredFor: held.map((f) => f.finding.title),
+  };
+}
+
+function dedupe(actions: FileAction[]): FileAction[] {
   const seen = new Set<string>();
   const out: FileAction[] = [];
-  for (const action of result.files.flatMap((f) => f.actions)) {
+  for (const action of actions) {
     const key = "path" in action ? `${action.op}:${action.path}` : `${action.op}:${action.directory}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(action);
   }
   return out;
+}
+
+export function allFileActions(result: TriageResult): FileAction[] {
+  return dedupe(result.files.flatMap((f) => f.actions));
 }
 
 /**
