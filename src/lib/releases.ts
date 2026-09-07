@@ -22,6 +22,8 @@ export const RELEASES: Release[] = [
       "Doctor: nine static rules over the load order, from orphaned entries and missing dependencies to bootstrap position and patch overrides",
       "Perform triage applies every repair it can defend, then re-runs the rules to count what actually resolved",
       "Desktop shell applies repairs directly, writes the load order into ModsConfig.xml and launches the game",
+      "The desktop build scans your install itself, so the numbers are what is on disk rather than what was there when the app was built",
+      "Applying a repair shows a live transcript, one line per file, and rescans when it finishes",
       "Modpacks: build, rename, compare and switch between load orders, with the original setup kept as a baseline",
       "Library: what each mod costs you and what breaks without it, beside Steam's public Workshop signals",
       "Session: reads the last Player.log, clusters faults by fingerprint and attributes them to a mod",
@@ -30,6 +32,7 @@ export const RELEASES: Release[] = [
     ],
     known: [
       "Launching the game is not yet supervised: no live log streaming or crash capture",
+      "A mod with more than 25 oversized textures only reports its first 25, so a very heavy mod needs more than one triage pass",
       "Nothing here can tell you the game boots, only that the load order is structurally sound",
       "Harmony patch analysis needs a C# sidecar that is not built yet",
     ],

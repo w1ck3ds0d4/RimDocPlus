@@ -61,6 +61,20 @@ function discover() {
   };
 }
 
+/**
+ * The suffix a repair leaves beside anything it changes.
+ *
+ * Backups land inside the tree the next scan walks, so they have to be skipped here or the
+ * scan reports them as install content. Removing a duplicate mod folder leaves
+ * <id>.rimdocbak behind carrying the same packageId, which brought the duplicate finding
+ * straight back, and backed-up files made a texture pass look like it had grown the install.
+ */
+const BACKUP_SUFFIX = ".rimdocbak";
+
+function isBackup(name) {
+  return name.toLowerCase().endsWith(BACKUP_SUFFIX);
+}
+
 /** Textures at or above this in either dimension are worth naming individually. */
 const OVERSIZE_PX = 1024;
 
@@ -109,6 +123,7 @@ function measureMod(dir, budget = 6000) {
       continue;
     }
     for (const entry of entries) {
+      if (isBackup(entry.name)) continue;
       seen++;
       const full = join(current, entry.name);
       if (entry.isDirectory()) {
@@ -231,9 +246,16 @@ function normaliseXpath(raw) {
 }
 
 /** Folder mtime, which Steam bumps on update, so it stands in for "last updated". */
+/**
+ * When the mod folder last changed, to the second.
+ *
+ * Truncated deliberately, and to match the Rust scanner. This value is compared between
+ * scans to decide whether Steam replaced a mod, and at millisecond precision the two
+ * implementations disagreed on 117 of 253 mods purely from filesystem rounding.
+ */
 function folderMtime(folder) {
   try {
-    return statSync(folder).mtime.toISOString();
+    return new Date(Math.floor(statSync(folder).mtimeMs / 1000) * 1000).toISOString();
   } catch {
     return undefined;
   }
@@ -283,7 +305,7 @@ function scanModDir(dir, source) {
     return mods;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() || isBackup(entry.name)) continue;
     const folder = join(dir, entry.name);
     const xml = readAbout(folder);
     if (!xml) continue;

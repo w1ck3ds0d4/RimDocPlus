@@ -1,4 +1,5 @@
 import type { FileAction } from "./repair/repairs";
+import type { ScanResult } from "./types";
 
 export interface ActionOutcome {
   target: string;
@@ -32,6 +33,40 @@ async function invoke<T>(command: string, args: Record<string, unknown>): Promis
   return call<T>(command, args);
 }
 
+/** One action's result, as it lands rather than at the end of the run. */
+export interface RepairProgress {
+  /** 1-based. */
+  index: number;
+  total: number;
+  target: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface RepairEvents {
+  onBackup?: (configDir: string | null) => void;
+  onStart?: (total: number) => void;
+  onProgress?: (progress: RepairProgress) => void;
+}
+
+/**
+ * Subscribe to a run's transcript, returning a function that stops listening.
+ *
+ * Resolves to a no-op outside the shell rather than throwing, so a caller can arm the
+ * listener unconditionally and let the disabled button be what says the browser cannot run
+ * repairs.
+ */
+export async function watchRepair(events: RepairEvents): Promise<() => void> {
+  if (!inShell()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  const offs = await Promise.all([
+    listen<string | null>("repair:backup", (e) => events.onBackup?.(e.payload)),
+    listen<number>("repair:start", (e) => events.onStart?.(e.payload)),
+    listen<RepairProgress>("repair:progress", (e) => events.onProgress?.(e.payload)),
+  ]);
+  return () => offs.forEach((off) => off());
+}
+
 /** Carry out a repair plan directly, backing every target up first. */
 export function runFileActions(actions: FileAction[], configDir: string | null): Promise<RunReport> {
   return invoke<RunReport>("run_file_actions", { actions, configDir });
@@ -50,6 +85,17 @@ export function rollback(targets: string[]): Promise<RunReport> {
 /** Read a mod's banner image back as a data URL. */
 export function readModPreview(path: string): Promise<string> {
   return invoke<string>("read_mod_preview", { path });
+}
+
+/**
+ * Walk the install and report what is on disk right now.
+ *
+ * The browser build reads a fixture written by `pnpm scan`, which is fixed at build time.
+ * The desktop build asks the shell instead, so the numbers reflect the install as it is
+ * rather than as it was when the app was compiled.
+ */
+export function scanInstall(): Promise<ScanResult> {
+  return invoke<ScanResult>("scan_install", {});
 }
 
 /** Start RimWorld from its install folder. */

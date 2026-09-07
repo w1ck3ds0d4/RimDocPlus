@@ -25,6 +25,7 @@ import { record } from "./lib/history";
 import { installDiff } from "./lib/installDiff";
 import { Settings, loadDevMode } from "./components/Settings";
 import { GameControls } from "./components/GameControls";
+import { inShell, scanInstall } from "./lib/shell";
 
 type Tab = "home" | "doctor" | "session" | "packs" | "order" | "library" | "settings";
 
@@ -38,6 +39,7 @@ export default function App() {
   const [modpacks, setProfiles] = useState<Modpack[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [devMode, setDevMode] = useState(loadDevMode);
+  const [scanning, setScanning] = useState(false);
 
   const setDevModePersisted = useCallback((on: boolean) => {
     setDevMode(on);
@@ -51,7 +53,8 @@ export default function App() {
   const [undoStack, setUndoStack] = useState<{ modpack: Modpack; label: string }[]>([]);
 
   useEffect(() => {
-    Promise.all([loadScan(), loadSession(), loadWorkshop()])
+    // The shell scans the install itself; the browser has only the build-time fixture.
+    Promise.all([inShell() ? scanInstall() : loadScan(), loadSession(), loadWorkshop()])
       .then(([s, l, w]) => {
         setScan(s);
         setSession(l);
@@ -119,6 +122,25 @@ export default function App() {
     },
     [modpacks],
   );
+
+  /**
+   * Retake the scan.
+   *
+   * Called after anything that changes the install, so the findings describe what is on
+   * disk rather than what was there when the app started. Only the scan is replaced: the
+   * modpacks are the user's own state and a rescan is not a reason to discard them.
+   */
+  const rescan = useCallback(async () => {
+    if (!inShell() || scanning) return;
+    setScanning(true);
+    try {
+      setScan(await scanInstall());
+    } catch (e) {
+      console.error("Rescan failed", e);
+    } finally {
+      setScanning(false);
+    }
+  }, [scanning]);
 
   const undo = useCallback(() => {
     const [last, ...rest] = undoStack;
@@ -218,7 +240,7 @@ export default function App() {
             {dirty && <span className="dot" title="Differs from the game's current load order" />}
           </div>
         )}
-        {active && <GameControls scan={scan} modpack={active} />}
+        {active && <GameControls scan={scan} modpack={active} onRescan={rescan} scanning={scanning} />}
         <div className="facts">
           <Fact label="Game" value={scan.gameVersion} />
           <Fact label="Installed" value={String(scan.mods.length)} optional />
@@ -270,6 +292,7 @@ export default function App() {
                 modpack={active}
                 workshop={workshop}
                 applyModpack={applyModpack}
+                onApplied={() => void rescan()}
               />
             )}
             {undoStack.length > 0 && (

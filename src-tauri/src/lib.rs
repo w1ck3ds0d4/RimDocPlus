@@ -1,3 +1,5 @@
+mod scan;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -5,6 +7,7 @@ use std::process::Command;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 
 /// One change to disk, mirroring the FileAction union the analysis layer produces.
 ///
@@ -38,6 +41,22 @@ pub struct ActionOutcome {
     target: String,
     ok: bool,
     /// What happened, in the same words the console uses.
+    detail: String,
+}
+
+/// One line of the live transcript, emitted as each action lands.
+///
+/// The run reports itself as it goes rather than only at the end. A texture pass is 730
+/// files and the better part of a minute, and a window that sits still for that long is
+/// indistinguishable from one that has hung.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepairProgress {
+    /// 1-based, so it reads as "412 of 730" without arithmetic at the other end.
+    index: usize,
+    total: usize,
+    target: String,
+    ok: bool,
     detail: String,
 }
 
@@ -142,7 +161,13 @@ fn downscale(path: &Path, max_px: u32) -> Result<String, String> {
     // resample, which matters across several hundred textures.
     let resized = img.thumbnail(max_px, max_px);
     resized.save(path).map_err(|e| e.to_string())?;
-    Ok(format!("{}x{} to {}x{}", w, h, resized.width(), resized.height()))
+    Ok(format!(
+        "{}x{} to {}x{}",
+        w,
+        h,
+        resized.width(),
+        resized.height()
+    ))
 }
 
 fn delete_matching(directory: &Path, pattern: &str) -> Result<String, String> {
@@ -182,16 +207,29 @@ fn delete_matching(directory: &Path, pattern: &str) -> Result<String, String> {
 /// reported against its own target, because a plan of 730 texture resizes should not be
 /// abandoned wholesale because one file is locked.
 #[tauri::command]
-fn run_file_actions(actions: Vec<FileAction>, config_dir: Option<String>) -> Result<RunReport, String> {
+fn run_file_actions(
+    app: AppHandle,
+    actions: Vec<FileAction>,
+    config_dir: Option<String>,
+) -> Result<RunReport, String> {
+    let total = actions.len();
+    // Taking the original-version copy walks the whole Config folder, so it is announced
+    // before it starts rather than leaving the first pause unexplained.
+    let _ = app.emit("repair:backup", config_dir.clone());
     let backup_dir = save_original(config_dir.as_deref())?;
+    let _ = app.emit("repair:start", total);
+
     let mut outcomes = Vec::new();
     let (mut applied, mut failed, mut skipped) = (0, 0, 0);
 
-    for action in actions {
+    for (i, action) in actions.into_iter().enumerate() {
         let (target, result) = match &action {
             FileAction::AddSupportedVersion { path, cycle } => {
                 let p = PathBuf::from(path);
-                (path.clone(), backup_once(&p).and_then(|_| add_supported_version(&p, cycle)))
+                (
+                    path.clone(),
+                    backup_once(&p).and_then(|_| add_supported_version(&p, cycle)),
+                )
             }
             FileAction::Write { path, contents } => {
                 let p = PathBuf::from(path);
@@ -202,27 +240,45 @@ fn run_file_actions(actions: Vec<FileAction>, config_dir: Option<String>) -> Res
             }
             FileAction::DownscalePng { path, max_px } => {
                 let p = PathBuf::from(path);
-                (path.clone(), backup_once(&p).and_then(|_| downscale(&p, *max_px)))
+                (
+                    path.clone(),
+                    backup_once(&p).and_then(|_| downscale(&p, *max_px)),
+                )
             }
-            FileAction::DeleteMatching { directory, pattern } => {
-                (directory.clone(), delete_matching(Path::new(directory), pattern))
-            }
+            FileAction::DeleteMatching { directory, pattern } => (
+                directory.clone(),
+                delete_matching(Path::new(directory), pattern),
+            ),
         };
 
-        match result {
+        let (ok, detail) = match result {
             Ok(detail) => {
                 if detail.starts_with("already") || detail == "nothing there" {
                     skipped += 1;
                 } else {
                     applied += 1;
                 }
-                outcomes.push(ActionOutcome { target, ok: true, detail });
+                (true, detail)
             }
             Err(detail) => {
                 failed += 1;
-                outcomes.push(ActionOutcome { target, ok: false, detail });
+                (false, detail)
             }
-        }
+        };
+
+        // A dropped event must not fail the run: the report is still returned in full, and
+        // losing a transcript line matters far less than abandoning 300 pending resizes.
+        let _ = app.emit(
+            "repair:progress",
+            RepairProgress {
+                index: i + 1,
+                total,
+                target: target.clone(),
+                ok,
+                detail: detail.clone(),
+            },
+        );
+        outcomes.push(ActionOutcome { target, ok, detail });
     }
 
     Ok(RunReport {
@@ -254,7 +310,11 @@ fn rollback(targets: Vec<String>) -> Result<RunReport, String> {
         let bak = PathBuf::from(format!("{target}.rimdocbak"));
         if !bak.exists() {
             skipped += 1;
-            outcomes.push(ActionOutcome { target, ok: true, detail: "no backup".into() });
+            outcomes.push(ActionOutcome {
+                target,
+                ok: true,
+                detail: "no backup".into(),
+            });
             continue;
         }
         let restore = (|| -> Result<(), String> {
@@ -271,11 +331,19 @@ fn rollback(targets: Vec<String>) -> Result<RunReport, String> {
         match restore {
             Ok(()) => {
                 applied += 1;
-                outcomes.push(ActionOutcome { target, ok: true, detail: "restored".into() });
+                outcomes.push(ActionOutcome {
+                    target,
+                    ok: true,
+                    detail: "restored".into(),
+                });
             }
             Err(detail) => {
                 failed += 1;
-                outcomes.push(ActionOutcome { target, ok: false, detail });
+                outcomes.push(ActionOutcome {
+                    target,
+                    ok: false,
+                    detail,
+                });
             }
         }
     }
@@ -287,6 +355,17 @@ fn rollback(targets: Vec<String>) -> Result<RunReport, String> {
         backup_dir: backups_root()?.display().to_string(),
         outcomes,
     })
+}
+
+/// Walk the install and report what is actually there right now.
+///
+/// The browser build reads a fixture written at build time, which is fine for a preview but
+/// means the desktop app would keep reporting the install as it was when it was compiled.
+/// After a repair rewrites 730 textures, or after Steam updates a mod, that snapshot is
+/// simply wrong, so the shell scans for itself.
+#[tauri::command]
+fn scan_install() -> Result<scan::ScanResult, String> {
+    scan::scan_install(None)
 }
 
 /// Read a mod's banner image back as a data URL.
@@ -351,7 +430,8 @@ pub fn run() {
             apply_mods_config,
             rollback,
             launch_game,
-            read_mod_preview
+            read_mod_preview,
+            scan_install
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");
@@ -381,8 +461,14 @@ mod tests {
         backup_once(&mod_dir).unwrap();
 
         let bak = tmp.path().join("DuplicateMod.rimdocbak");
-        assert_eq!(fs::read_to_string(bak.join("About/About.xml")).unwrap(), "<ModMetaData/>");
-        assert_eq!(fs::read_to_string(bak.join("Defs/Things.xml")).unwrap(), "<Defs/>");
+        assert_eq!(
+            fs::read_to_string(bak.join("About/About.xml")).unwrap(),
+            "<ModMetaData/>"
+        );
+        assert_eq!(
+            fs::read_to_string(bak.join("Defs/Things.xml")).unwrap(),
+            "<Defs/>"
+        );
     }
 
     /// A second run must not overwrite the copy the first run took, or the backup would
@@ -417,8 +503,14 @@ mod tests {
         let report = rollback(vec![mod_dir.display().to_string()]).unwrap();
         assert_eq!(report.applied, 1);
         assert_eq!(report.failed, 0);
-        assert_eq!(fs::read_to_string(mod_dir.join("About/About.xml")).unwrap(), "<ModMetaData/>");
-        assert_eq!(fs::read_to_string(mod_dir.join("Assemblies/Hospitality.dll")).unwrap(), "MZ");
+        assert_eq!(
+            fs::read_to_string(mod_dir.join("About/About.xml")).unwrap(),
+            "<ModMetaData/>"
+        );
+        assert_eq!(
+            fs::read_to_string(mod_dir.join("Assemblies/Hospitality.dll")).unwrap(),
+            "MZ"
+        );
         assert!(!tmp.path().join("Hospitality.rimdocbak").exists());
     }
 
@@ -446,11 +538,17 @@ mod tests {
         write(&about, "<ModMetaData>\n  <supportedVersions>\n    <li>1.5</li>\n  </supportedVersions>\n</ModMetaData>");
 
         assert_eq!(add_supported_version(&about, "1.6").unwrap(), "stamped 1.6");
-        assert_eq!(add_supported_version(&about, "1.6").unwrap(), "already advertises 1.6");
+        assert_eq!(
+            add_supported_version(&about, "1.6").unwrap(),
+            "already advertises 1.6"
+        );
 
         let xml = fs::read_to_string(&about).unwrap();
         assert_eq!(xml.matches("<li>1.6</li>").count(), 1);
-        assert!(xml.contains("<li>1.5</li>"), "the existing cycle must survive");
+        assert!(
+            xml.contains("<li>1.5</li>"),
+            "the existing cycle must survive"
+        );
     }
 
     /// The shell is a second executor of a plan the TypeScript layer writes, so the union it
@@ -482,7 +580,10 @@ mod tests {
     fn only_a_mod_banner_can_be_read_back() {
         let tmp = tempdir().unwrap();
         let about = tmp.path().join("About");
-        write(&about.join("Preview.png"), "not really a png, but it is the right file");
+        write(
+            &about.join("Preview.png"),
+            "not really a png, but it is the right file",
+        );
         write(&about.join("About.xml"), "<ModMetaData/>");
         write(&tmp.path().join("secrets.png"), "somewhere else entirely");
 

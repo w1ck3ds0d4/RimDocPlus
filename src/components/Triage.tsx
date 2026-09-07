@@ -12,7 +12,8 @@ import {
 } from "../lib/repair/triage";
 import type { WorkshopCache } from "../lib/types";
 import { download } from "../lib/download";
-import { inShell, rollback, runFileActions, targetsOf, type RunReport } from "../lib/shell";
+import { inShell, rollback, runFileActions, targetsOf, watchRepair, type RunReport } from "../lib/shell";
+import { RepairConsole, lineOf, type ConsoleLine } from "./RepairConsole";
 import { record } from "../lib/history";
 
 const AUTO_KEY = "rimdoc.triage.auto";
@@ -38,12 +39,15 @@ export function Triage({
   modpack,
   workshop,
   applyModpack,
+  onApplied,
 }: {
   findings: Finding[];
   scan: ScanResult;
   modpack: Modpack;
   workshop?: WorkshopCache | null;
   applyModpack: (modpack: Modpack, label: string) => void;
+  /** Called once a run has changed files on disk, so the scan can be retaken. */
+  onApplied?: () => void;
 }) {
   const [result, setResult] = useState<TriageResult | null>(null);
   const [steps, setSteps] = useState<TriageStep[]>([]);
@@ -147,7 +151,9 @@ export function Triage({
         />
       )}
       {steps.length > 0 && <TriageConsole steps={steps} />}
-      {result && <TriageReport result={result} scan={scan} onDismiss={() => setResult(null)} />}
+      {result && (
+        <TriageReport result={result} scan={scan} onApplied={onApplied} onDismiss={() => setResult(null)} />
+      )}
     </>
   );
 }
@@ -220,10 +226,12 @@ function TriageConsole({ steps }: { steps: TriageStep[] }) {
 function TriageReport({
   result,
   scan,
+  onApplied,
   onDismiss,
 }: {
   result: TriageResult;
   scan: ScanResult;
+  onApplied?: () => void;
   onDismiss: () => void;
 }) {
   const actions = allFileActions(result);
@@ -283,7 +291,15 @@ function TriageReport({
         ))}
       </Section>
 
-      <Section title="Needs a script" count={actions.length} tone="warn" empty="Nothing on disk to change.">
+      {/* What this section is called depends on who can carry it out. In the desktop app
+          these run directly, and calling them "needs a script" while a button beside them
+          has just applied all 730 was simply wrong. */}
+      <Section
+        title={inShell() ? "Changes to your files" : "Needs a script"}
+        count={actions.length}
+        tone="warn"
+        empty="Nothing on disk to change."
+      >
         {result.files.map(({ finding, actions: own, summary }) => (
           <li key={finding.id}>
             <b>
@@ -294,7 +310,7 @@ function TriageReport({
         ))}
         {actions.length > 0 && (
           <li className="triage-cta">
-            <ApplyActions actions={actions} config={configDir(scan)} />
+            <ApplyActions actions={actions} config={configDir(scan)} onApplied={onApplied} />
             <button
               className="btn"
               type="button"
@@ -311,8 +327,9 @@ function TriageReport({
               Download rollback
             </button>
             <span className="repair-note">
-              A browser cannot write to disk, so these wait for the script. It backs everything up first, and
-              the rollback undoes the whole run.
+              {inShell()
+                ? "Everything is copied to .rimdocbak first, and undoing restores the whole run. The script is there if you would rather read it before it runs."
+                : "A browser cannot write to disk, so these wait for the script. It backs everything up first, and the rollback undoes the whole run."}
             </span>
           </li>
         )}
@@ -387,45 +404,133 @@ function headline(result: TriageResult, resolved: number): string {
  * against what was actually written. In a browser the button says what is missing rather
  * than being hidden, because a disabled control with a reason is more use than an absence.
  */
-function ApplyActions({ actions, config }: { actions: FileAction[]; config: string | null }) {
+/**
+ * Run a repair plan, with the transcript on screen while it happens.
+ *
+ * Events arrive one per action and a texture pass is 730 of them, so they are buffered and
+ * flushed on a timer. Setting state per event would re-render the list 730 times and make
+ * the console the slowest part of the run it is reporting.
+ */
+function ApplyActions({
+  actions,
+  config,
+  onApplied,
+}: {
+  actions: FileAction[];
+  config: string | null;
+  onApplied?: () => void;
+}) {
   const [state, setState] = useState<"idle" | "running" | "done" | "undone">("idle");
   const [report, setReport] = useState<RunReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [lines, setLines] = useState<ConsoleLine[]>([]);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
-  async function apply() {
+  const pending = useRef<ConsoleLine[]>([]);
+  const flusher = useRef<number | null>(null);
+
+  const startFlushing = () => {
+    if (flusher.current !== null) return;
+    flusher.current = window.setInterval(() => {
+      if (pending.current.length === 0) return;
+      const batch = pending.current;
+      pending.current = [];
+      setLines((current) => [...current, ...batch]);
+    }, 90);
+  };
+
+  const stopFlushing = () => {
+    if (flusher.current !== null) {
+      clearInterval(flusher.current);
+      flusher.current = null;
+    }
+    if (pending.current.length > 0) {
+      const batch = pending.current;
+      pending.current = [];
+      setLines((current) => [...current, ...batch]);
+    }
+  };
+
+  useEffect(() => stopFlushing, []);
+
+  const push = (line: ConsoleLine) => pending.current.push(line);
+
+  async function run(kind: "apply" | "undo") {
+    const applying = kind === "apply";
     setState("running");
     setError(null);
-    try {
-      const run = await runFileActions(actions, config);
-      setReport(run);
-      setState("done");
-      record({
-        kind: "repair",
-        summary: `Applied ${run.applied} file change${run.applied === 1 ? "" : "s"}`,
-        detail: `${run.skipped} skipped${run.failed > 0 ? `, ${run.failed} failed` : ""}. Backups in ${run.backup_dir}.`,
-        targets: targetsOf(actions),
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setState("idle");
-    }
-  }
+    setReport(null);
+    setLines([
+      {
+        tone: "cmd",
+        text: applying
+          ? `rimdoc apply --actions ${actions.length}`
+          : `rimdoc rollback --targets ${targetsOf(actions).length}`,
+      },
+    ]);
+    setProgress({ done: 0, total: applying ? actions.length : targetsOf(actions).length });
+    setConsoleOpen(true);
+    startFlushing();
 
-  async function undo() {
-    setState("running");
+    const off = await watchRepair({
+      onBackup: (dir) =>
+        push({
+          tone: "info",
+          label: "backup",
+          text: dir ? `saving original version of ${dir}` : "saving original version",
+        }),
+      onStart: (total) => {
+        push({ tone: "info", label: "start", text: `${total} action${total === 1 ? "" : "s"} to carry out` });
+        setProgress((p) => ({ ...p, total }));
+      },
+      onProgress: (p) => {
+        push(lineOf(p));
+        setProgress({ done: p.index, total: p.total });
+      },
+    });
+
     try {
-      const run = await rollback(targetsOf(actions));
-      setReport(run);
-      setState("undone");
-      record({
-        kind: "rollback",
-        summary: `Restored ${run.applied} file${run.applied === 1 ? "" : "s"}`,
-        detail: run.skipped > 0 ? `${run.skipped} had no backup to restore` : undefined,
-        targets: targetsOf(actions),
-      });
+      const result = applying ? await runFileActions(actions, config) : await rollback(targetsOf(actions));
+      off();
+      stopFlushing();
+      setReport(result);
+      setState(applying ? "done" : "undone");
+      setLines((current) => [
+        ...current,
+        {
+          tone: result.failed > 0 ? "warn" : "done",
+          label: "done",
+          text: `${result.applied} ${applying ? "applied" : "restored"}, ${result.skipped} skipped${
+            result.failed > 0 ? `, ${result.failed} failed` : ""
+          }`,
+        },
+      ]);
+      record(
+        applying
+          ? {
+              kind: "repair",
+              summary: `Applied ${result.applied} file change${result.applied === 1 ? "" : "s"}`,
+              detail: `${result.skipped} skipped${result.failed > 0 ? `, ${result.failed} failed` : ""}. Backups in ${result.backup_dir}.`,
+              targets: targetsOf(actions),
+            }
+          : {
+              kind: "rollback",
+              summary: `Restored ${result.applied} file${result.applied === 1 ? "" : "s"}`,
+              detail: result.skipped > 0 ? `${result.skipped} had no backup to restore` : undefined,
+              targets: targetsOf(actions),
+            },
+      );
+      // The install on disk is no longer what the app was told it was, so whoever owns the
+      // scan is asked to take it again rather than the numbers quietly going stale.
+      onApplied?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setState("done");
+      off();
+      stopFlushing();
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      setState(applying ? "idle" : "done");
+      setLines((current) => [...current, { tone: "warn", label: "error", text: message }]);
     }
   }
 
@@ -440,13 +545,23 @@ function ApplyActions({ actions, config }: { actions: FileAction[]; config: stri
   return (
     <>
       {state !== "done" && state !== "undone" && (
-        <button className="btn primary" type="button" disabled={state === "running"} onClick={apply}>
+        <button
+          className="btn primary"
+          type="button"
+          disabled={state === "running"}
+          onClick={() => void run("apply")}
+        >
           {state === "running" ? "Applying..." : `Apply ${actions.length} directly`}
         </button>
       )}
       {(state === "done" || state === "undone") && (
-        <button className="btn" type="button" onClick={undo} disabled={state === "undone"}>
+        <button className="btn" type="button" onClick={() => void run("undo")} disabled={state === "undone"}>
           {state === "undone" ? "Undone" : "Undo this run"}
+        </button>
+      )}
+      {report && !consoleOpen && (
+        <button className="btn" type="button" onClick={() => setConsoleOpen(true)}>
+          Show transcript
         </button>
       )}
       {report && (
@@ -455,7 +570,17 @@ function ApplyActions({ actions, config }: { actions: FileAction[]; config: stri
           {report.failed > 0 ? `, ${report.failed} failed` : ""}. Backups in {report.backup_dir}.
         </span>
       )}
-      {error && <span className="prompt-error">{error}</span>}
+      {error && !consoleOpen && <span className="prompt-error">{error}</span>}
+      {consoleOpen && (
+        <RepairConsole
+          lines={lines}
+          done={progress.done}
+          total={progress.total}
+          report={report}
+          error={error}
+          onClose={() => setConsoleOpen(false)}
+        />
+      )}
     </>
   );
 }

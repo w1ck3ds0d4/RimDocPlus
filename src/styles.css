@@ -2921,3 +2921,88 @@ tr.clickable:hover td {
   padding: 2px 8px;
   font-size: 11px;
 }
+
+/* Live repair console ------------------------------------------------------ */
+
+/* Centred rather than pinned to an edge: this one blocks, so it should read as the thing
+   the window is doing rather than as a panel beside it. */
+.console-scrim {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.console.modal {
+  width: min(760px, 100%);
+  max-height: min(620px, 100%);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.console.modal .console-body {
+  flex: 1;
+  max-height: none;
+}
+
+.console-progress {
+  height: 2px;
+  background: var(--panel-3);
+  flex: none;
+}
+
+.console-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
+.console-progress-fill.done {
+  background: var(--ok);
+}
+
+.console-progress-fill.bad {
+  background: var(--critical);
+}
+
+.console-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  flex: none;
+}
+
+.console-foot .muted,
+.console-foot .prompt-error {
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.console-foot .btn {
+  margin-left: auto;
+  flex: none;
+}
+
+/* A blinking tail so a long quiet stretch still looks alive. */
+.console-body .caret::after {
+  content: "_";
+  animation: caret 1s steps(2, start) infinite;
+}
+
+@keyframes caret {
+  to {
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-body .caret::after {
+    animation: none;
+  }
+}

@@ -13,7 +13,18 @@ import { record } from "../lib/history";
  * They render disabled with the reason rather than being hidden, so the browser build
  * still shows what the desktop build adds.
  */
-export function GameControls({ scan, modpack }: { scan: ScanResult; modpack: Modpack }) {
+export function GameControls({
+  scan,
+  modpack,
+  onRescan,
+  scanning,
+}: {
+  scan: ScanResult;
+  modpack: Modpack;
+  /** Retake the scan, so the findings describe the install as it is now. */
+  onRescan: () => void;
+  scanning: boolean;
+}) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { confirm, dialog } = useConfirm();
@@ -84,6 +95,15 @@ export function GameControls({ scan, modpack }: { scan: ScanResult; modpack: Mod
         onClick={() => void apply()}
       >
         Apply to game
+      </button>
+      <button
+        className="btn"
+        type="button"
+        disabled={!shell || scanning}
+        title={shell ? "Read the install again" : "Needs the desktop app"}
+        onClick={onRescan}
+      >
+        {scanning ? "Scanning..." : "Rescan"}
       </button>
       <button
         className="btn play"

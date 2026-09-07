@@ -214,6 +214,17 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Live scanning
+
+The desktop build walks the install itself rather than reading a fixture written at build time.
+
+- A **Rescan** button, and an automatic rescan after any repair that touched disk
+- The scanner is a port of `scripts/scan.mjs`, validated by running both against the same 252-mod install and diffing every field: name, author, source, versions, dependencies, load order constraints, size, texture stats and all 9,782 patch operations. They agree on all of them.
+- Both scanners skip `.rimdocbak`. Repairs write their backups beside the originals, which puts them inside the tree the next scan walks: removing a duplicate mod folder left `<id>.rimdocbak` behind carrying the same `packageId`, so the rescan reported the duplicate the repair had just resolved, and backed-up files made a texture pass look like it had grown the install.
+- Folder modification times are recorded to the second. At millisecond precision the two implementations disagreed on 117 of 252 mods purely from filesystem rounding, which the install-change feed would have read as 117 updates.
+
+Without the shell the app still reads the `pnpm scan` fixture, so the browser preview is unchanged.
+
 ### Desktop shell
 
 In the browser, RimDoc+ analyses and plans; the desktop build also carries plans out.
