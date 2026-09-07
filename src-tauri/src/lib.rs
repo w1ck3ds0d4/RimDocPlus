@@ -562,24 +562,181 @@ fn read_mod_preview(path: String) -> Result<String, String> {
     Ok(format!("data:{mime};base64,{}", BASE64.encode(bytes)))
 }
 
-/// Start RimWorld.
-///
-/// Spawned detached rather than waited on: the point is to hand the player their game,
-/// and supervising the process is the next slice rather than this one.
+fn rimworld_exe(game_dir: &str) -> Result<PathBuf, String> {
+    ["RimWorldWin64.exe", "RimWorld.exe", "RimWorldWin.exe"]
+        .iter()
+        .map(|name| Path::new(game_dir).join(name))
+        .find(|candidate| candidate.exists())
+        .ok_or_else(|| format!("No RimWorld executable in {game_dir}"))
+}
+
+/// Start RimWorld and hand it over, without watching it.
 #[tauri::command]
 fn launch_game(game_dir: String) -> Result<String, String> {
-    let exe = ["RimWorldWin64.exe", "RimWorld.exe", "RimWorldWin.exe"]
-        .iter()
-        .map(|name| Path::new(&game_dir).join(name))
-        .find(|candidate| candidate.exists())
-        .ok_or_else(|| format!("No RimWorld executable in {game_dir}"))?;
-
+    let exe = rimworld_exe(&game_dir)?;
     Command::new(&exe)
         .current_dir(&game_dir)
         .spawn()
         .map_err(|e| format!("Could not start {}: {e}", exe.display()))?;
+    Ok(exe.display().to_string())
+}
+
+/// How long the game may write nothing before the run is called quiet.
+///
+/// Loading a large mod list has genuinely silent stretches, so this is well past anything a
+/// working load produces. It reports rather than acts: a quiet run is a fact about the log,
+/// not proof of a hang, and killing someone's game on a guess is not worth being right.
+const QUIET_SECONDS: u64 = 90;
+
+/// How often the log is read and the process checked.
+const POLL_MS: u64 = 250;
+
+/// Current working set of a process, in megabytes.
+///
+/// Read through tasklist rather than a Windows API binding: it is one poll every quarter
+/// second against a process that is loading gigabytes of textures, so the cost of spawning
+/// it is irrelevant next to what it is measuring.
+fn memory_mb(pid: u32) -> Option<u64> {
+    let out = Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    // "name","pid","session","n","27,900 K"
+    let field = text.split(',').next_back()?.trim().trim_matches('"');
+    let kb: u64 = field
+        .trim_end_matches(" K")
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .ok()?;
+    Some(kb / 1024)
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GameExit {
+    /// Highest working set seen while the run was watched.
+    peak_memory_mb: u64,
+    /// None when the process was terminated rather than exiting on its own.
+    code: Option<i32>,
+    duration_ms: u128,
+    lines: usize,
+    /// True when the game stopped writing well before it stopped running.
+    went_quiet: bool,
+}
+
+/// Start RimWorld and watch it.
+///
+/// The log is followed from wherever it stands when the game starts, because RimWorld
+/// truncates Player.log on launch: reading from the beginning would replay the previous run
+/// as though it were this one, and reading from the old end would miss everything until the
+/// file grew past it. A shrinking file is the truncation, so the offset resets with it.
+///
+/// Nothing here decides the game is broken. It reports what the run did, and the exit code
+/// and the transcript are what the player and the rules reason about afterwards.
+#[tauri::command(async)]
+fn launch_supervised(app: AppHandle, game_dir: String, log_path: String) -> Result<String, String> {
+    let exe = rimworld_exe(&game_dir)?;
+    let mut child = Command::new(&exe)
+        .current_dir(&game_dir)
+        .spawn()
+        .map_err(|e| format!("Could not start {}: {e}", exe.display()))?;
+
+    let log = PathBuf::from(&log_path);
+    let started = std::time::Instant::now();
+    let _ = app.emit("game:started", exe.display().to_string());
+
+    // A thread rather than the command's own body: the command returns as soon as the game
+    // is up, so the window stays usable while the run is watched.
+    std::thread::spawn(move || {
+        let mut offset: u64 = fs::metadata(&log).map(|m| m.len()).unwrap_or(0);
+        let mut lines = 0usize;
+        let mut last_output = std::time::Instant::now();
+        let mut went_quiet = false;
+        let mut carry = String::new();
+        let pid = child.id();
+        let mut peak_memory_mb = 0u64;
+
+        loop {
+            let exited = child.try_wait().ok().flatten();
+
+            match read_from(&log, &mut offset) {
+                Some(chunk) if !chunk.is_empty() => {
+                    carry.push_str(&chunk);
+                    // Hold back a trailing partial line: the game writes in chunks, and
+                    // splitting mid-line would put half a stack frame in the transcript.
+                    let keep = carry.rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    let ready: Vec<String> = carry[..keep]
+                        .lines()
+                        .map(|l| l.trim_end().to_string())
+                        .collect();
+                    carry.drain(..keep);
+
+                    if !ready.is_empty() {
+                        lines += ready.len();
+                        last_output = std::time::Instant::now();
+                        let _ = app.emit("game:lines", ready);
+                    }
+                }
+                _ => {}
+            }
+
+            if !went_quiet && exited.is_none() && last_output.elapsed().as_secs() >= QUIET_SECONDS {
+                went_quiet = true;
+                let _ = app.emit("game:quiet", QUIET_SECONDS);
+            }
+
+            if let Some(mb) = memory_mb(pid) {
+                peak_memory_mb = peak_memory_mb.max(mb);
+            }
+
+            if let Some(status) = exited {
+                let _ = app.emit(
+                    "game:exited",
+                    GameExit {
+                        peak_memory_mb,
+                        code: status.code(),
+                        duration_ms: started.elapsed().as_millis(),
+                        lines,
+                        went_quiet,
+                    },
+                );
+                return;
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
+        }
+    });
 
     Ok(exe.display().to_string())
+}
+
+/// Read whatever has been appended since the last look.
+///
+/// A file shorter than the offset has been truncated, which is RimWorld starting a new run,
+/// so the offset goes back to the beginning rather than waiting for the file to grow past
+/// where the previous run left off.
+fn read_from(path: &Path, offset: &mut u64) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let len = fs::metadata(path).ok()?.len();
+    if len < *offset {
+        *offset = 0;
+    }
+    if len == *offset {
+        return None;
+    }
+
+    let mut file = fs::File::open(path).ok()?;
+    file.seek(SeekFrom::Start(*offset)).ok()?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).ok()?;
+    *offset = len;
+    // Lossy on purpose: logs carry raw bytes from mods with odd encodings, and a strict
+    // decode would drop the whole chunk over one of them.
+    Some(bytes.iter().map(|&b| b as char).collect())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -595,7 +752,8 @@ pub fn run() {
             scan_install,
             read_session_log,
             is_steam_running,
-            list_saves
+            list_saves,
+            launch_supervised
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");

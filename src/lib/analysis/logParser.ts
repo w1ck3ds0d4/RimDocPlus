@@ -312,13 +312,37 @@ function readEnvironment(lines: string[]): SessionEnvironment {
 }
 
 /** Startup phase costs the log volunteers, e.g. Prepatcher's serialize step. */
+/**
+ * Startup phases and how long each took.
+ *
+ * Three shapes, because the engine and the game do not agree on one. Unity writes
+ * "- Loaded All Assemblies, in  0.195 seconds" and "UnloadTime: 0.708800 ms"; other lines
+ * use "took". Only "took" was matched before, which is a form a real RimWorld log does not
+ * contain, so this returned nothing at all on every genuine log and the panel built on it
+ * was permanently empty.
+ */
 function readTimings(lines: string[]): { label: string; ms: number }[] {
+  const patterns: [RegExp, number, number, (unit: string) => number][] = [
+    // "- Loaded All Assemblies, in  0.195 seconds"
+    [/^-?\s*(.+?),\s+in\s+([\d.]+)\s*(seconds?|s|ms)\b/i, 1, 2, (u) => (u.startsWith("m") ? 1 : 1000)],
+    // "UnloadTime: 0.708800 ms"
+    [/^(.+?):\s+([\d.]+)\s*(ms|seconds?|s)\b/i, 1, 2, (u) => (u.startsWith("m") ? 1 : 1000)],
+    // "Something took 12.5 ms"
+    [/^(.*?)\s+took\s+([\d.]+)\s*(ms|seconds?|s)\b/i, 1, 2, (u) => (u.startsWith("m") ? 1 : 1000)],
+  ];
+
   const timings: { label: string; ms: number }[] = [];
   for (const line of lines) {
-    const m = /^(.*?)\s+took\s+([\d.]+)\s*(ms|s)\b/.exec(line.trim());
-    if (!m) continue;
-    const ms = Number(m[2]) * (m[3] === "s" ? 1000 : 1);
-    if (Number.isFinite(ms)) timings.push({ label: m[1].replace(/[:,]$/, ""), ms });
+    const text = line.trim();
+    for (const [pattern, labelAt, valueAt, scale] of patterns) {
+      const m = pattern.exec(text);
+      if (!m) continue;
+      const ms = Number(m[valueAt]) * scale(m[3].toLowerCase());
+      if (Number.isFinite(ms)) {
+        timings.push({ label: m[labelAt].replace(/^[-\s]+|[:,]$/g, "").trim(), ms });
+      }
+      break;
+    }
   }
   return timings.sort((a, b) => b.ms - a.ms).slice(0, 10);
 }

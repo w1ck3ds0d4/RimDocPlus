@@ -390,6 +390,37 @@ describe("log analysis", () => {
     });
   });
 
+  /**
+   * The engine and the game do not agree on how to write a duration. Only the "took" form
+   * was matched, which a real RimWorld log does not contain, so this read nothing at all on
+   * every genuine log and the panel built on it was permanently empty.
+   */
+  describe("startup timings", () => {
+    it("reads the form Unity actually writes", () => {
+      const text = [
+        "- Loaded All Assemblies, in  0.195 seconds",
+        "- Finished resetting the current domain, in  0.001 seconds",
+      ].join("\n");
+      expect(analyzeLog(text).timings).toEqual([
+        { label: "Loaded All Assemblies", ms: 195 },
+        { label: "Finished resetting the current domain", ms: 1 },
+      ]);
+    });
+
+    it("reads a bare colon-and-milliseconds line", () => {
+      expect(analyzeLog("UnloadTime: 0.708800 ms").timings).toEqual([{ label: "UnloadTime", ms: 0.7088 }]);
+    });
+
+    it("still reads the took form, which some lines use", () => {
+      expect(analyzeLog("Loading defs took 1.5 s").timings).toEqual([{ label: "Loading defs", ms: 1500 }]);
+    });
+
+    it("puts the longest phase first, since that is the one worth looking at", () => {
+      const text = ["Quick: 5 ms", "- Slow, in  2 seconds"].join("\n");
+      expect(analyzeLog(text).timings.map((t) => t.label)).toEqual(["Slow", "Quick"]);
+    });
+  });
+
   it("attributes a stack trace back to the mod that owns the namespace", () => {
     const mods = [mod("dankpyon.medieval.overhaul", { name: "Medieval Overhaul" })];
     const findings = findingsFromLog(analyzeLog(log), mods);

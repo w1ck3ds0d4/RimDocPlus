@@ -3531,3 +3531,108 @@ tr.clickable:hover td {
 .share .repair-actions {
   flex: none;
 }
+
+/* Watching a run ----------------------------------------------------------- */
+
+.gamewatch {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.gamewatch p {
+  margin: 0 0 10px;
+}
+
+.gamewatch .console {
+  margin: 12px 0;
+}
+
+.gamewatch .console-body {
+  max-height: 300px;
+}
+
+/* Enough to pick a fault out of a wall of load messages, without pretending the tint is
+   an analysis. The Session tab is where the lines are actually read. */
+.gamewatch .line.warn .text {
+  color: var(--warning);
+}
+
+.gamewatch .line.info .text {
+  color: var(--dim);
+}
+
+.benchmark {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.bench-pick {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.bench-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.bench-picker small {
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.bench-picker select {
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.bench-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.bench-table th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.bench-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.bench-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bench-table .worse {
+  color: var(--warning);
+}
+
+.bench-table .better {
+  color: var(--ok);
+}

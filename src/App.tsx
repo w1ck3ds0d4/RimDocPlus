@@ -23,6 +23,7 @@ import { ModDetail } from "./components/ModDetail";
 import { Home } from "./components/Home";
 import { Bisect } from "./components/Bisect";
 import { Saves } from "./components/Saves";
+import { GameWatch } from "./components/GameWatch";
 import { record } from "./lib/history";
 import { installDiff } from "./lib/installDiff";
 import { Settings, loadDevMode, loadOversizePx, saveOversizePx } from "./components/Settings";
@@ -360,6 +361,7 @@ export default function App() {
             {active && <Bisect scan={workingScan} modpack={active} />}
           </>
         )}
+        {tab === "session" && active && <GameWatch scan={workingScan} modpack={active} />}
         {tab === "session" &&
           (sessionAnalysis ? (
             <SessionReport

@@ -216,6 +216,34 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Watching a run
+
+Play and watch starts the game and follows it. The log streams in as it is written, so a crash on
+load is in front of you rather than something to go looking for afterwards, and the run reports how
+it ended: exit code, how long it lasted, how many lines it wrote, and the faults the same analysis
+the Session tab uses finds in them.
+
+The log is followed from wherever it stands when the game starts, because RimWorld truncates
+Player.log on launch. Reading from the beginning would replay the previous run as this one, and
+reading from the old end would miss everything until the file grew past it, so a shrinking file is
+taken as the truncation and the offset resets with it. A trailing partial line is held back rather
+than shown, since the game writes in chunks and splitting mid-line puts half a stack frame in the
+transcript.
+
+A run that stops writing for 90 seconds while still alive is called out. That is well past anything
+a working load produces, and it reports rather than acts: a quiet run is a fact about the log, not
+proof of a hang, and killing someone's game on a guess is not worth being right.
+
+### Measured runs
+
+Every watched run is recorded with what it cost: the startup phases the game reports, wall clock,
+peak working set, and the faults found in its log. Two runs can then be compared side by side, which
+is how you tell whether a modpack actually loads faster or just feels like it.
+
+All of it is measured from outside the process. There is no frame rate and no tick rate here, on
+purpose: attributing simulation time to a particular mod means timing methods inside the running
+game, and a number invented in its absence would read exactly like a measured one.
+
 ### Sharing a session
 
 Asking for help usually means pasting tens of thousands of lines of Unity noise into a forum. By the
@@ -373,11 +401,10 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 
 - **Version pinning in modpacks**: a modpack records package ids, not exact mod versions, so it is repeatable but not yet reproducible. Pinning arrives with the vault.
 - **Mod vault**: content-addressed local store so Steam updates land as new versions instead of overwriting a working setup
-- **Supervised launch**: the shell starts the game, but does not yet watch it. Live log streaming, crash and hang detection and case-file capture are still to come
 - **Unattended bisect**: the search is assisted, and needs you to judge each trial. Deciding automatically whether a fault is present means the headless boot check and a definition of "broken", neither of which exists yet
 - **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
-- **L2 and L3 testing**: headless boot check and scripted soak run with TPS attribution
-- **A/B benchmarking**: same save, two profiles, measured locally
+- **L2 and L3 testing**: headless boot check and scripted soak run. The soak run needs the tick measurement above
+- **Frame and tick measurement**: load time and memory are measured from outside the process, but what a mod costs per tick is not. Attributing simulation time to a method needs code running inside the game, which is an in-game companion mod and a separate deliverable
 - **Subscribing from inside the app**: the anonymous Web API is read-only, and changing a subscription needs the Steamworks SDK, a native binding and a running Steam client. Re-fetching an item is covered without any of that (see Retry download); subscribing to something new is not.
 - **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path
 - **Def audits**: unreachable def pruning

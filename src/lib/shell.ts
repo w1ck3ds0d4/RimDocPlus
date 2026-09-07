@@ -143,6 +143,47 @@ export function listSaves(): Promise<SaveMeta[]> {
   return invoke<SaveMeta[]>("list_saves", {});
 }
 
+export interface GameExit {
+  /** Null when the process was terminated rather than exiting on its own. */
+  code: number | null;
+  durationMs: number;
+  lines: number;
+  /** Highest working set seen while the run was watched. */
+  peakMemoryMb: number;
+  /** The game stopped writing well before it stopped running. */
+  wentQuiet: boolean;
+}
+
+export interface GameEvents {
+  onStarted?: (exe: string) => void;
+  onLines?: (lines: string[]) => void;
+  /** The run has written nothing for this many seconds while still running. */
+  onQuiet?: (seconds: number) => void;
+  onExited?: (exit: GameExit) => void;
+}
+
+/** Follow a supervised run, returning a function that stops listening. */
+export async function watchGame(events: GameEvents): Promise<() => void> {
+  if (!inShell()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  const offs = await Promise.all([
+    listen<string>("game:started", (e) => events.onStarted?.(e.payload)),
+    listen<string[]>("game:lines", (e) => events.onLines?.(e.payload)),
+    listen<number>("game:quiet", (e) => events.onQuiet?.(e.payload)),
+    listen<GameExit>("game:exited", (e) => events.onExited?.(e.payload)),
+  ]);
+  return () => offs.forEach((off) => off());
+}
+
+/**
+ * Start RimWorld and watch it: the log streams back live, and the run reports how it ended.
+ *
+ * Returns as soon as the game is up. Everything after that arrives through watchGame.
+ */
+export function launchSupervised(gameDir: string, logPath: string): Promise<string> {
+  return invoke<string>("launch_supervised", { gameDir, logPath });
+}
+
 /** Start RimWorld from its install folder. */
 export function launchGame(gameDir: string): Promise<string> {
   return invoke<string>("launch_game", { gameDir });
