@@ -91,13 +91,42 @@ export function isTicking(before: TickReport | null, after: TickReport | null): 
  * Rendered next to the numbers rather than left for a reader to work out. A profiler that
  * does not say what it missed invites the reading that everything else is free.
  */
-export function tickCoverage(report: TickReport): string {
-  if (report.ticksPlayed === 0) {
-    return `Watching ${report.patchedMethods} tick methods. Nothing has ticked yet: load a colony and the numbers start.`;
+/**
+ * Where the probe has got to, in one sentence.
+ *
+ * One sentence, from one place, because the panel used to show two: what the load order said
+ * and what the report said. Installed-but-not-enabled and "the probe is running" were both on
+ * screen at once, and a reader had no way to tell which was true.
+ */
+export function probeStatus(state: {
+  installed: boolean;
+  /** Whether the installed copy is the build this app ships. */
+  current: boolean;
+  /** Whether the load order names it. On disk is not the same as running. */
+  enabled: boolean;
+  /** Ticks in the report on disk, or null when there is no report yet. */
+  ticksPlayed: number | null;
+  patchedMethods: number;
+}): string {
+  if (!state.installed) return "Not installed, so nothing is being timed.";
+  if (!state.current) return "Older than the build this app ships. Update it before you rely on the numbers.";
+  if (!state.enabled) return "On disk, but not in your load order, so it does not run.";
+  if (state.ticksPlayed === null) return "Enabled. Apply to game, then play.";
+  if (state.ticksPlayed === 0) {
+    return `Watching ${state.patchedMethods} tick methods. Nothing ticks at the main menu: load a colony.`;
   }
+  return `${state.patchedMethods} tick methods timed across ${state.ticksPlayed.toLocaleString()} ticks.`;
+}
+
+/**
+ * What the numbers do not include.
+ *
+ * Under the table rather than beside the heading. It is a caveat about figures, so it is
+ * worth nothing until there are figures to qualify.
+ */
+export function tickCaveat(): string {
   return (
-    `${report.patchedMethods} tick methods timed across ${report.ticksPlayed.toLocaleString()} ticks. ` +
-    `Only what a mod does inside a tick is counted, so work it does while drawing, on its own threads, ` +
-    `or in another mod's patches is not here.`
+    "Only what a mod does inside a tick is counted. Work it does while drawing, on its own " +
+    "threads, or inside another mod's patches is not here."
   );
 }
