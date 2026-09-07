@@ -196,7 +196,7 @@ run that also contained unrelated work.
 
 ## The command surface
 
-Nineteen commands, and that is the whole of what the app can do to a machine. Anything not on
+Twenty commands, and that is the whole of what the app can do to a machine. Anything not on
 this list, it cannot do.
 
 **Writes to disk** (five, and only these):
@@ -211,10 +211,15 @@ this list, it cannot do.
 **Reads only:** `scan_install`, `read_session_log`, `list_saves`, `read_mod_preview`,
 `hash_mod`, `vault_list`, `is_steam_running`, `is_game_running`.
 
+**Reaches the network:** `fetch_shared_log`, and only when a gist link has been pasted and
+the button pressed. Two hosts, matched on the whole host segment, https only. It exists
+because RimWorld's Share logs uploads to a gist and leaves nothing on disk to read instead.
+See [SECURITY-MODEL.md](SECURITY-MODEL.md#network).
+
 **Process control:** `launch_game`, `launch_supervised`, `stop_game` (only ever the process
 this app started, by stored pid, never by image name), `stop_steam`, `start_steam`.
 
-Seventeen of the nineteen are `#[tauri::command(async)]`. That is not decoration. A synchronous
+Eighteen of the twenty are `#[tauri::command(async)]`. That is not decoration. A synchronous
 Tauri command runs on the thread that pumps the WebView2 message loop, so a long one freezes
 the window and an `emit` from inside it deadlocks outright. That happened: a repair run of 476
 texture resizes hung on the very first progress event with the process at zero CPU. Any

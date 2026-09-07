@@ -15,7 +15,7 @@ import {
 import { FindingList, SeveritySummary, useSeverityFilter } from "./components/Findings";
 import { PackEditor } from "./components/ModpackEditor";
 import { Modpacks } from "./components/Modpacks";
-import { SessionReport } from "./components/SessionReport";
+import { LogSourcePicker, SessionReport, type LogSource } from "./components/SessionReport";
 import { RepairProvider } from "./components/Repair";
 import { Triage } from "./components/Triage";
 import { Library } from "./components/Library";
@@ -39,6 +39,16 @@ type Tab = "home" | "doctor" | "session" | "saves" | "packs" | "order" | "librar
 export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [session, setSession] = useState<{ path: string; text: string } | null>(null);
+  /**
+   * Which log the Session tab is reading.
+   *
+   * RimWorld truncates Player.log on launch, so after a crash the run worth reading is the
+   * previous one and the live file describes the relaunch that went looking for it. Pasting
+   * covers the log RimWorld's own debug window copies out, which carries the mod list and
+   * the Harmony patches that Player.log alone does not.
+   */
+  const [logSource, setLogSource] = useState<LogSource>("current");
+  const [pasted, setPasted] = useState("");
   const [openMod, setOpenMod] = useState<string | null>(null);
   const [workshop, setWorkshop] = useState<WorkshopCache | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,7 +83,7 @@ export default function App() {
     // fixtures `pnpm scan` wrote.
     Promise.all([
       inShell() ? scanInstall() : loadScan(),
-      inShell() ? readSessionLog() : loadSession(),
+      inShell() ? readSessionLog(false) : loadSession(),
       loadWorkshop(),
     ])
       .then(([s, l, w]) => {
@@ -163,7 +173,14 @@ export default function App() {
       // The log is retaken alongside the install. A rescan that refreshed only the files
       // left the Session tab reporting faults from a run the player had already dealt with,
       // with no way to clear them short of restarting the app.
-      const [next, log] = await Promise.all([scanInstall(), readSessionLog()]);
+      const [next, log] = await Promise.all([
+        scanInstall(),
+        // Retaken from whichever log is being read, so a rescan does not quietly switch the
+        // Session tab back to the live run while the picker still says otherwise.
+        logSource === "pasted" || logSource === "link"
+          ? Promise.resolve(session)
+          : readSessionLog(logSource === "previous"),
+      ]);
       setScan(next);
       setSession(log);
     } catch (e) {
@@ -217,6 +234,28 @@ export default function App() {
     () => (workingScan ? runStaticRules(workingScan, { oversizePx, workshop }) : []),
     [workingScan, oversizePx, workshop],
   );
+
+  // Reloads when the picker moves. Pasted text needs no shell call: it is already here.
+  useEffect(() => {
+    if (logSource === "pasted") {
+      setSession(pasted.trim() ? { path: "pasted from RimWorld", text: pasted } : null);
+      return;
+    }
+    // A fetched log arrives through the picker's own button, so switching to this source
+    // clears what was there rather than reading a file over it.
+    if (logSource === "link") {
+      setSession(null);
+      return;
+    }
+    if (!inShell()) return;
+    let live = true;
+    void readSessionLog(logSource === "previous")
+      .then((log) => live && setSession(log))
+      .catch(() => live && setSession(null));
+    return () => {
+      live = false;
+    };
+  }, [logSource, pasted]);
 
   const sessionAnalysis = useMemo<SessionAnalysis | null>(
     () => (session ? analyzeLog(session.text) : null),
@@ -390,16 +429,34 @@ export default function App() {
           </>
         )}
         {tab === "session" && active && <GameWatch scan={workingScan} modpack={active} />}
-        {tab === "session" &&
-          (sessionAnalysis ? (
-            <SessionReport
-              analysis={sessionAnalysis}
-              findings={sessionFindings}
-              source={session?.path ?? "unknown"}
+        {tab === "session" && (
+          <>
+            <LogSourcePicker
+              value={logSource}
+              onChange={setLogSource}
+              pasted={pasted}
+              onPasted={setPasted}
+              onFetched={setSession}
             />
-          ) : (
-            <p className="muted">No session log loaded.</p>
-          ))}
+            {sessionAnalysis ? (
+              <SessionReport
+                analysis={sessionAnalysis}
+                findings={sessionFindings}
+                source={session?.path ?? "unknown"}
+              />
+            ) : (
+              <p className="muted">
+                {logSource === "previous"
+                  ? "No previous run. RimWorld keeps one only once the game has been launched twice."
+                  : logSource === "pasted"
+                    ? "Nothing pasted yet."
+                    : logSource === "link"
+                      ? "Paste a gist link and press Fetch."
+                      : "No session log loaded."}
+              </p>
+            )}
+          </>
+        )}
         {tab === "saves" &&
           (active ? (
             <Saves scan={workingScan} modpack={active} />

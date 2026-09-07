@@ -10,8 +10,8 @@ Everything below is checkable. Each claim names where in the source it is enforc
 
 - It writes to your RimWorld install, its config folder, and two folders in your home
   directory. Nowhere else.
-- It makes no network requests at all. There is not a single `fetch` in the app and not one
-  HTTP crate in the shell.
+- It makes exactly one kind of network request, to fetch a shared log from a gist link you
+  pasted, and only when you press Fetch. Nothing else ever leaves the machine.
 - It copies every file to `<file>.rimdocbak` before changing it, and every run is undoable.
 - It runs five external programs: RimWorld, `steam.exe`, `tasklist`, `reg` and `taskkill`.
 - It sends nothing anywhere. There is no telemetry, no analytics, no crash reporter.
@@ -19,7 +19,7 @@ Everything below is checkable. Each claim names where in the source it is enforc
 ## The command boundary
 
 The webview cannot touch the filesystem. Everything it can ask the shell to do is one of
-nineteen commands registered in `src-tauri/src/lib.rs`, and that list is the complete surface.
+twenty commands registered in `src-tauri/src/lib.rs`, and that list is the complete surface.
 If a capability is not on it, the app does not have it.
 
 ### The five that write
@@ -41,6 +41,14 @@ command" and no "write this path with these bytes" that the analysis layer can r
 
 `scan_install`, `read_session_log`, `list_saves`, `read_mod_preview`, `hash_mod`,
 `vault_list`, `is_steam_running`, `is_game_running`.
+
+`read_session_log` takes a flag saying which of the game's two logs to read, not a path. No
+command anywhere takes a path to read, because that would be a general file-read primitive
+and the point of a twenty-command surface is that there is not one.
+
+### The one that reaches the network
+
+`fetch_shared_log`. Covered in full under [Network](#network).
 
 `read_mod_preview` deserves a note, because it is the one command that hands file contents
 back to the webview. It will only return a file named like a mod banner from inside a folder
@@ -106,14 +114,35 @@ script so you can undo it later, from outside the app, without RimDoc+ running a
 
 ## Network
 
-**The app never makes a network request.** Not one, in either half. Check it yourself:
+**The app makes exactly one request, and only when you ask for it.**
+
+RimWorld's **Share logs** button uploads your log to a gist and writes nothing to disk, so
+there is no local file to read instead. `fetch_shared_log` fetches that gist when you paste
+the link and press Fetch.
+
+What holds it to that:
+
+- **Two hosts, and no others.** `gist.github.com` and `gist.githubusercontent.com`, matched on
+  the whole host segment and never on a suffix. `gist.github.com.example.com` and
+  `gist.github.com@example.com` are both refused, and there are tests named for exactly those.
+- **HTTPS only.** An `http://` or `file://` link is refused before anything is opened.
+- **Nothing goes with it.** The request carries the URL you pasted. No identifier of your
+  machine, no mod list, no path.
+- **You press the button.** Nothing fetches on startup, on a scan, or on a timer.
+
+If you would rather make no request at all, **Copy to clipboard** sits beside **Share logs**
+in the same debug window and puts the identical text on your clipboard. Paste it into the
+**Pasted** source and the app reads it with no network involved. That path is always there.
+
+Everything else stays local. There is no telemetry, no analytics, no crash reporting, no
+update check, and nothing is fetched about your mods:
 
 ```bash
 grep -rn "fetch(\|XMLHttpRequest\|WebSocket" --include="*.ts" --include="*.tsx" src/
-grep -rn "reqwest\|ureq\|hyper\|curl" src-tauri/src/ src-tauri/Cargo.toml
 ```
 
-Both come back empty. There is no HTTP client in the dependency tree of either half.
+comes back empty, because the frontend cannot reach the network at all; the one request lives
+behind a shell command that refuses anything but a gist.
 
 Three `https://` strings do appear in `src/`, in `library.ts` and `repairs.ts`. All three build
 the address of a Steam Workshop page for a link you can click. They are link targets that open

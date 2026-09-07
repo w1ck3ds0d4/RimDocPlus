@@ -118,12 +118,14 @@ export function scanInstall(): Promise<ScanResult> {
 }
 
 /**
- * Read the game's current Player.log.
+ * Read one of the game's two logs.
  *
- * Null when the game has never been run, or the log has been cleared away.
+ * RimWorld truncates Player.log on launch and keeps what was there as Player-prev.log, so
+ * after a crash the run worth reading is the previous one. Null when that run never happened
+ * or its log has been cleared away.
  */
-export function readSessionLog(): Promise<{ path: string; text: string } | null> {
-  return invoke<{ path: string; text: string } | null>("read_session_log", {});
+export function readSessionLog(previous = false): Promise<{ path: string; text: string } | null> {
+  return invoke<{ path: string; text: string } | null>("read_session_log", { previous });
 }
 
 /**
@@ -134,6 +136,17 @@ export function readSessionLog(): Promise<{ path: string; text: string } | null>
  */
 export function isSteamRunning(): Promise<boolean> {
   return invoke<boolean>("is_steam_running", {});
+}
+
+/**
+ * Fetch a log someone shared, from a gist link.
+ *
+ * The only outbound request this app makes, and only because a link was pasted and a button
+ * pressed. The shell refuses any host but gist.github.com and gist.githubusercontent.com, so
+ * this cannot be turned into a general fetcher by whatever ends up in the box.
+ */
+export function fetchSharedLog(url: string): Promise<{ path: string; text: string }> {
+  return invoke<{ path: string; text: string }>("fetch_shared_log", { url });
 }
 
 export interface SteamShutdown {
