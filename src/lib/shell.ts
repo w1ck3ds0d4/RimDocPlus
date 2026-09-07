@@ -161,6 +161,40 @@ export function probePatches(folders: string[], cycle: string): Promise<ProbeRep
   return invoke<ProbeReport>("probe_patches", { folders, cycle });
 }
 
+export interface ProbeModState {
+  installed: boolean;
+  /** Where it is, or would go. */
+  path: string;
+  /** Whether the installed copy is the one this build ships. */
+  current: boolean;
+  packageId: string;
+}
+
+/** Whether the companion mod is installed in the game, and whether it is current. */
+export function probeModState(gameDir: string): Promise<ProbeModState> {
+  return invoke<ProbeModState>("probe_mod_state", { gameDir });
+}
+
+/** Put the companion mod into the game's Mods folder, replacing any older copy. */
+export function installProbeMod(gameDir: string): Promise<string> {
+  return invoke<string>("install_probe_mod", { gameDir });
+}
+
+/** Take it out again, leaving nothing of this app's behind. */
+export function removeProbeMod(gameDir: string): Promise<string> {
+  return invoke<string>("remove_probe_mod", { gameDir });
+}
+
+/**
+ * What the companion mod last wrote, as text.
+ *
+ * Null when it has never run, which is the ordinary state of an install nobody has asked to
+ * measure anything. Parsed by the analysis layer, not here.
+ */
+export function readProbeReport(): Promise<string | null> {
+  return invoke<string | null>("read_probe_report", {});
+}
+
 export interface SteamShutdown {
   /** True only when this call closed a Steam that was actually running. */
   closed: boolean;
