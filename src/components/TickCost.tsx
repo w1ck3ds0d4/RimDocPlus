@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ScanResult } from "../lib/types";
+import type { Modpack } from "../lib/modpacks";
 import { parseTickReport, tickCostRows, tickCoverage, type TickReport } from "../lib/analysis/tickCost";
 import { formatMs } from "../lib/format";
 import {
@@ -20,7 +21,16 @@ import { useConfirm } from "./Confirm";
  * can be read from outside; simulation time cannot be attributed to a mod from out there at
  * all, which is why this exists and why it is opt in.
  */
-export function TickCost({ scan }: { scan: ScanResult }) {
+export function TickCost({
+  scan,
+  modpack,
+  onModpack,
+}: {
+  scan: ScanResult;
+  modpack: Modpack | null;
+  /** Adds the probe to the load order, which is the only thing that makes it run. */
+  onModpack?: (next: Modpack, label: string) => void;
+}) {
   const [state, setState] = useState<ProbeModState | null>(null);
   const [report, setReport] = useState<TickReport | null>(null);
   const [busy, setBusy] = useState(false);
@@ -28,6 +38,9 @@ export function TickCost({ scan }: { scan: ScanResult }) {
   const { confirm, dialog } = useConfirm();
 
   const game = scan.paths.game ?? null;
+  // In the load order is the only thing that makes it run: installed and inactive looks
+  // identical to installed and working from here, and said nothing about the difference.
+  const enabled = !!state && !!modpack && modpack.activeOrder.includes(state.packageId);
 
   async function refresh() {
     if (!inShell() || !game) return;
@@ -124,9 +137,23 @@ export function TickCost({ scan }: { scan: ScanResult }) {
             Remove it
           </button>
         )}
+        {state?.installed && !enabled && onModpack && modpack && (
+          <button
+            className="btn go"
+            type="button"
+            title="Adds it to the end of the load order. Apply to game in the header writes that out."
+            onClick={() => {
+              onModpack({ ...modpack, activeOrder: [...modpack.activeOrder, state.packageId] }, "probe");
+            }}
+          >
+            Enable it
+          </button>
+        )}
         {state?.installed && (
           <span className="repair-note">
-            Installed at {state.path}. Enable <code>{state.packageId}</code> in your load order, then play.
+            {enabled
+              ? "Enabled. Apply to game, then load a colony."
+              : "Installed but not in the load order, so it does not run yet."}
           </span>
         )}
         {error && <span className="prompt-error">{error}</span>}

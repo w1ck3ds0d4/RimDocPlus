@@ -514,7 +514,7 @@ export default function App() {
             <GameWatch scan={workingScan} modpack={active} startSignal={watchRequest} />
           </div>
         )}
-        {tab === "performance" && <TickCost scan={workingScan} />}
+        {tab === "performance" && <TickCost scan={workingScan} modpack={active} onModpack={applyModpack} />}
         {tab === "session" && (
           <>
             <LogSourcePicker
