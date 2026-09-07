@@ -216,6 +216,27 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Sharing a session
+
+Asking for help usually means pasting tens of thousands of lines of Unity noise into a forum. By the
+time anyone is looking at the Session tab the parts that matter have already been found, so what the
+report carries is the environment, the clustered faults with what each was blamed on, and the active
+mod list. On the reference install that is 252 lines and 12.8 KB, against a log of many thousands.
+
+Copied or saved, never sent. The app is offline by default and this does not change that: it produces
+something small enough to paste wherever you were going to ask, and where it goes is your choice.
+
+### Patches named in a trace
+
+A patched method reports the patch in the stack rather than the original, so the frames name every mod
+whose code was on the way to a fault. That is a different question from which mod threw: a fault
+inside a postfix belongs to whoever wrote the postfix, not to whatever they patched.
+
+Those frames are pulled out above the trace, each with its kind, the patch method, and the mod that
+owns it. A transpiler is marked differently from a prefix or postfix, because it rewrites the method
+body and can break things the other two cannot. A patch whose owner is not installed is still listed
+rather than dropped.
+
 ### Saves
 
 Every save carries its own list of the mods it was made with. Opening one against a different list is

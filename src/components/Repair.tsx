@@ -21,6 +21,16 @@ export interface RepairApi {
 
 const RepairContext = createContext<RepairApi | null>(null);
 
+/**
+ * The scan and modpack every finding is being judged against.
+ *
+ * Exposed so a component deep in a findings list can reach them without four layers of prop
+ * drilling for something the provider already wraps the whole app with.
+ */
+export function useRepairApi(): RepairApi | null {
+  return useContext(RepairContext);
+}
+
 export function RepairProvider({ value, children }: { value: RepairApi; children: React.ReactNode }) {
   return <RepairContext.Provider value={value}>{children}</RepairContext.Provider>;
 }

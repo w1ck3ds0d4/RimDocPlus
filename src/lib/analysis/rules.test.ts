@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runStaticRules } from "./rules";
-import { analyzeLog, findingsFromLog, frameKind } from "./logParser";
+import { analyzeLog, findingsFromLog, frameKind, patchFrames } from "./logParser";
 import type { ModEntry, ScanResult } from "../types";
 
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
@@ -343,6 +343,50 @@ describe("log analysis", () => {
     it("is settled once the download has arrived", () => {
       const arrived = [mod("cabbage.rimcities", { name: "RimCities", steamId: "3092936341" })];
       expect(ghost(arrived)?.stale).toContain("RimCities");
+    });
+  });
+
+  /**
+   * A patched method reports the patch in the stack rather than the original, so the frames
+   * name every mod whose code was on the way to the fault. Which is a different question
+   * from which mod threw: a fault inside a postfix belongs to whoever wrote the postfix.
+   */
+  describe("patches named in a trace", () => {
+    const frames = [
+      "at Verse.Thing.SpawnSetup (Verse.Map map) [0x00000]",
+      "- POSTFIX UnlimitedHugs.HugsLib.Patches.Thing_SpawnSetup+Postfix",
+      "- TRANSPILER CombatExtended.Harmony.Harmony_Verb_TryStartCastOn",
+      "- POSTFIX UnlimitedHugs.HugsLib.Patches.Thing_SpawnSetup+Postfix",
+    ];
+    const mods = [
+      mod("unlimitedhugs.hugslib", { name: "HugsLib" }),
+      mod("ceteam.combatextended", { name: "Combat Extended" }),
+    ];
+
+    it("names each patch, its kind, and the mod that owns it", () => {
+      expect(patchFrames(frames, mods)).toEqual([
+        {
+          kind: "POSTFIX",
+          method: "UnlimitedHugs.HugsLib.Patches.Thing_SpawnSetup",
+          packageId: "unlimitedhugs.hugslib",
+        },
+        {
+          kind: "TRANSPILER",
+          method: "CombatExtended.Harmony.Harmony_Verb_TryStartCastOn",
+          packageId: "ceteam.combatextended",
+        },
+      ]);
+    });
+
+    it("reports a patch whose owner is not installed rather than dropping it", () => {
+      const orphan = ["- PREFIX SomeGoneMod.Patches.Thing_Tick"];
+      expect(patchFrames(orphan, mods)).toEqual([
+        { kind: "PREFIX", method: "SomeGoneMod.Patches.Thing_Tick", packageId: undefined },
+      ]);
+    });
+
+    it("says nothing for a trace with no patches in it", () => {
+      expect(patchFrames(["at Verse.Thing.Tick () [0x00000]"], mods)).toHaveLength(0);
     });
   });
 

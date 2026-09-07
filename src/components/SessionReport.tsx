@@ -1,7 +1,19 @@
 import type { SessionAnalysis } from "../lib/analysis/logParser";
 import type { Finding } from "../lib/types";
+import { useState } from "react";
 import { FindingList, SeveritySummary, useSeverityFilter } from "./Findings";
+import { useRepairApi } from "./Repair";
+import { buildReport, describeReport } from "../lib/shareLog";
+import { download } from "../lib/download";
 
+/**
+ * The session, and a report of it written for someone else to read.
+ *
+ * Sharing a log usually means pasting tens of thousands of lines of Unity noise into a forum.
+ * The parts that matter have already been found by the time anyone is looking at this tab,
+ * so what leaves is the environment, the clustered faults with their attribution, and the
+ * mod list, which is what anyone helping actually needs.
+ */
 export function SessionReport({
   analysis,
   findings,
@@ -14,9 +26,44 @@ export function SessionReport({
   const { environment: env, timings } = analysis;
   const filter = useSeverityFilter(findings);
   const slowest = timings[0]?.ms ?? 1;
+  const api = useRepairApi();
+  const [copied, setCopied] = useState(false);
+
+  const report = api ? buildReport(analysis, findings, api.scan, source) : "";
+  const size = describeReport(report);
 
   return (
     <>
+      {report && (
+        <div className="share">
+          <div>
+            <b>Share this session</b>
+            <span className="muted">
+              {size.lines} lines, {(size.bytes / 1024).toFixed(1)} KB: the environment, the faults with what
+              they were blamed on, and the active mod list. Not the raw log, which is mostly Unity noise.
+              Nothing leaves the machine on its own.
+            </span>
+          </div>
+          <div className="repair-actions">
+            <button
+              className="btn"
+              type="button"
+              onClick={() =>
+                navigator.clipboard?.writeText(report).then(
+                  () => setCopied(true),
+                  () => setCopied(false),
+                )
+              }
+            >
+              {copied ? "Copied" : "Copy report"}
+            </button>
+            <button className="btn" type="button" onClick={() => download("rimdoc-session.txt", report)}>
+              Save as file
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="env">
         <Fact label="Game" value={env.gameVersion} />
         <Fact label="Unity" value={env.unityVersion} />

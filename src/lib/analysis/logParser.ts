@@ -70,6 +70,48 @@ const FRAMEWORK_ROOTS = new Set([
 
 export type FrameKind = "patch" | "mod" | "framework" | "separator";
 
+/** One Harmony patch named in a stack trace: who patched what, and how. */
+export interface PatchFrame {
+  /** PREFIX, POSTFIX, TRANSPILER or FINALIZER. */
+  kind: string;
+  /** The patch method Harmony ran, as the trace names it. */
+  method: string;
+  /** The mod that owns it, when the frame's namespace matches an installed one. */
+  packageId?: string;
+}
+
+/**
+ * The Harmony patches a trace ran through.
+ *
+ * A patched method reports the patch in the stack rather than the original, so the frames
+ * name every mod whose code was on the way to the fault. That is a different question from
+ * which mod threw: a fault inside a postfix belongs to whoever wrote the postfix, not to
+ * whatever they patched, and the trace is the only place that distinction is visible.
+ */
+export function patchFrames(frames: string[], mods: ModEntry[]): PatchFrame[] {
+  const index = buildAttributionIndex(mods);
+  const seen = new Set<string>();
+  const found: PatchFrame[] = [];
+
+  for (const frame of frames) {
+    const match = /^-\s+(PREFIX|POSTFIX|TRANSPILER|FINALIZER)\s+([\w.]+)/.exec(frame);
+    if (!match) continue;
+    const [, kind, method] = match;
+    const key = `${kind} ${method}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    // Either half of "UnlimitedHugs.HugsLib" can be the one that names the mod.
+    const owner = method
+      .split(".")
+      .map((part) => index.get(part.toLowerCase()))
+      .find((id): id is string => !!id);
+
+    found.push({ kind, method, packageId: owner });
+  }
+  return found;
+}
+
 /**
  * Classify a trace line so the UI can grey out engine noise and surface the handful of
  * frames that actually belong to a mod. In a 40-frame Mono trace, typically three lines

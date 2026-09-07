@@ -37,6 +37,8 @@ export const RELEASES: Release[] = [
       "Reports mods the Workshop has updated more recently than the copy on disk",
       "Find the culprit: halves the mod list, runs the game, and halves again on your verdict until one mod is left",
       "Saves: compares the mod list each colony was made with against the one that would load today",
+      "Harmony patches in a stack trace are named above it, with their kind and the mod that owns them",
+      "A session report you can copy or save: the environment, the faults and the mod list, without the raw log",
       "Settings: choose the size at which a texture counts as oversized, from 1024px down to anything above the 512px target",
       "Every change is backed up first, and every repair that touches disk can be rolled back",
     ],

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Finding, Severity } from "../lib/types";
 import { SEVERITY_ORDER, sortFindings } from "../lib/types";
-import { frameKind } from "../lib/analysis/logParser";
+import { frameKind, patchFrames } from "../lib/analysis/logParser";
+import { useRepairApi } from "./Repair";
 import { RepairAction } from "./Repair";
 
 const SEVERITIES: Severity[] = ["critical", "error", "warning", "info"];
@@ -188,27 +189,52 @@ function FindingRow({ finding }: { finding: Finding }) {
  * because they name the mod whose patch is on the stack, which is usually the answer.
  */
 function StackTrace({ frames }: { frames: string[] }) {
+  const mods = useRepairApi()?.scan.mods ?? [];
   const patches = frames.filter((f) => frameKind(f) === "patch");
   const modFrames = frames.filter((f) => frameKind(f) === "mod");
+  const named = patchFrames(frames, mods);
 
   return (
-    <details className="trace" open={frames.length <= 12}>
-      <summary>
-        Stack trace
-        <span className="trace-meta">
-          {frames.length} frames
-          {modFrames.length > 0 && `, ${modFrames.length} in mod code`}
-          {patches.length > 0 && `, ${patches.length} patched`}
-        </span>
-      </summary>
-      <ol className="trace-body">
-        {frames.map((frame, i) => (
-          <li key={`${i}:${frame}`} className={`fr ${frameKind(frame)}`}>
-            <code>{stripAddress(frame)}</code>
-          </li>
-        ))}
-      </ol>
-    </details>
+    <>
+      {/* Named above the trace rather than left inside it. A fault inside a postfix belongs
+          to whoever wrote the postfix, not to whatever they patched, and reading forty
+          frames of Mono plumbing is the only other way to see that. */}
+      {named.length > 0 && (
+        <div className="patched-by">
+          <h4>Ran through {named.length === 1 ? "a patch" : `${named.length} patches`}</h4>
+          <ul>
+            {named.map((p) => (
+              <li key={`${p.kind}:${p.method}`}>
+                <span className={`patch-kind ${p.kind.toLowerCase()}`}>{p.kind}</span>
+                <code>{p.method}</code>
+                <span className="muted">
+                  {p.packageId
+                    ? (mods.find((m) => m.packageId === p.packageId)?.name ?? p.packageId)
+                    : "owner unknown"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <details className="trace" open={frames.length <= 12}>
+        <summary>
+          Stack trace
+          <span className="trace-meta">
+            {frames.length} frames
+            {modFrames.length > 0 && `, ${modFrames.length} in mod code`}
+            {patches.length > 0 && `, ${patches.length} patched`}
+          </span>
+        </summary>
+        <ol className="trace-body">
+          {frames.map((frame, i) => (
+            <li key={`${i}:${frame}`} className={`fr ${frameKind(frame)}`}>
+              <code>{stripAddress(frame)}</code>
+            </li>
+          ))}
+        </ol>
+      </details>
+    </>
   );
 }
 

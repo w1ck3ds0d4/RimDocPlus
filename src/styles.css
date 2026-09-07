@@ -3442,3 +3442,92 @@ tr.clickable:hover td {
   margin: 10px 0;
   color: var(--warning);
 }
+
+/* Harmony patches named in a trace ----------------------------------------- */
+
+.patched-by {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.patched-by h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.patched-by ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.patched-by li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.patch-kind {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+}
+
+/* A transpiler rewrites the method body, so it can break things the other two cannot. */
+.patch-kind.transpiler {
+  color: var(--warning);
+  border-color: rgba(217, 171, 65, 0.45);
+}
+
+.patch-kind.prefix,
+.patch-kind.postfix {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+.patch-kind.finalizer {
+  color: var(--ok);
+  border-color: rgba(78, 201, 139, 0.4);
+}
+
+/* Sharing a session -------------------------------------------------------- */
+
+.share {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.share > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.share .repair-actions {
+  flex: none;
+}
