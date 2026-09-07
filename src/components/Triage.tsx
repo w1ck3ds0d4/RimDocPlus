@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { Finding, ScanResult } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
-import { configDir, toPowerShell, toRollbackPowerShell, type FileAction } from "../lib/repair/repairs";
+import {
+  configDir,
+  needsSteamClosed,
+  toPowerShell,
+  toRollbackPowerShell,
+  type FileAction,
+} from "../lib/repair/repairs";
 import {
   allFileActions,
   resolveDecision,
@@ -12,7 +18,15 @@ import {
 } from "../lib/repair/triage";
 import type { WorkshopCache } from "../lib/types";
 import { download } from "../lib/download";
-import { inShell, rollback, runFileActions, targetsOf, watchRepair, type RunReport } from "../lib/shell";
+import {
+  inShell,
+  isSteamRunning,
+  rollback,
+  runFileActions,
+  targetsOf,
+  watchRepair,
+  type RunReport,
+} from "../lib/shell";
 import { RepairConsole, lineOf, type ConsoleLine } from "./RepairConsole";
 import { record } from "../lib/history";
 
@@ -499,6 +513,19 @@ function ApplyActions({
 
   async function run(kind: "apply" | "undo") {
     const applying = kind === "apply";
+
+    // Checked before anything is written, not reported half way through. One failing action
+    // does not stop the rest, and this plan pairs an edit Steam will undo with deleting a
+    // mod folder, so a run that got part way could leave the mod gone and Steam still
+    // believing it had it.
+    if (applying && needsSteamClosed(actions) && (await isSteamRunning())) {
+      setError(
+        "Steam is running, and it rewrites its download record when it closes, so this would " +
+          "be undone. Close Steam and apply again. Nothing has been changed.",
+      );
+      return;
+    }
+
     setState("running");
     setError(null);
     setReport(null);

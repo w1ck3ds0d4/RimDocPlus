@@ -3,6 +3,7 @@ import type { Finding, ModEntry, ProposedFix, ScanResult } from "../types";
 import type { Modpack } from "../modpacks";
 import {
   autoPackRepairs,
+  needsSteamClosed,
   workshopManifest,
   planRepair,
   toPowerShell,
@@ -273,6 +274,44 @@ describe("workshopManifest", () => {
   it("says nothing rather than guessing when the path is not the shape it expects", () => {
     expect(workshopManifest(withWorkshop("C:/somewhere/else"))).toBeNull();
     expect(workshopManifest(scanOf([], []))).toBeNull();
+  });
+});
+
+describe("retry-workshop-download", () => {
+  const scanWith = (mods: ModEntry[], workshop?: string): ScanResult => ({
+    ...scanOf(
+      mods,
+      mods.map((m) => m.packageId),
+    ),
+    paths: { saveData: "C:/save", ...(workshop ? { workshop } : {}) },
+  });
+
+  const planFor = (mods: ModEntry[]) =>
+    planRepair({
+      scan: scanWith(mods, "C:/Steam/steamapps/workshop/content/294100"),
+      modpack: profileOf([]),
+      finding: findingWith({ ...manual, kind: "retry-workshop-download", params: { steamId: "123" } }),
+    }) as Extract<RepairPlan, { kind: "files" }>;
+
+  /**
+   * One failing action does not stop the rest, so the other order left the mod deleted while
+   * Steam still believed it had a copy: gone, and never re-fetched. That is the one outcome
+   * worse than doing nothing, so the edit Steam can refuse goes first.
+   */
+  it("drops Steam's record before removing the folder, never after", () => {
+    const plan = planFor([mod("a.one", { steamId: "123", folder: "C:/ws/123" })]);
+    expect(plan.actions.map((a) => a.op)).toEqual(["forget-workshop-item", "delete-matching"]);
+  });
+
+  /** A ghost subscription has no folder, so there is nothing on disk to remove. */
+  it("only touches the manifest when the mod never arrived", () => {
+    const plan = planFor([mod("other.mod", { steamId: "999" })]);
+    expect(plan.actions.map((a) => a.op)).toEqual(["forget-workshop-item"]);
+  });
+
+  it("is recognised as needing Steam closed, whichever half of it exists", () => {
+    expect(needsSteamClosed(planFor([mod("a.one", { steamId: "123" })]).actions)).toBe(true);
+    expect(needsSteamClosed([{ op: "write", path: "p", contents: "c", reason: "r" }])).toBe(false);
   });
 });
 

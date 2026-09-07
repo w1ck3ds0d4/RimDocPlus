@@ -94,6 +94,18 @@ export function workshopManifest(scan: ScanResult): string | null {
   return `${root}${sep}appworkshop_294100.acf`;
 }
 
+/**
+ * Whether a plan cannot run while Steam is up.
+ *
+ * Steam holds its workshop record in memory and rewrites it on exit, so an edit made
+ * underneath it is undone. Worth knowing before a run rather than during one: these plans
+ * pair the edit with deleting a mod folder, and a run that gets half way leaves the mod gone
+ * with Steam still believing it has it.
+ */
+export function needsSteamClosed(actions: FileAction[]): boolean {
+  return actions.some((a) => a.op === "forget-workshop-item");
+}
+
 /** Config folder holding ModsConfig.xml and per-mod settings files. */
 export function configDir(scan: ScanResult): string | null {
   return scan.paths.saveData ? `${scan.paths.saveData}/Config` : null;
@@ -330,22 +342,26 @@ const REPAIRS: Record<string, RepairFn> = {
     const mod = ctx.scan.mods.find((m) => m.steamId === steamId);
     const name = mod?.name ?? `item ${steamId}`;
     const manifest = workshopManifest(ctx.scan);
+    // Steam's record goes first, and the folder second. One failing action does not stop the
+    // rest, so the other order left the mod deleted while Steam still believed it had it,
+    // which is the one outcome worse than doing nothing: gone, and never re-fetched. This
+    // way a refused manifest edit leaves a working mod exactly where it was.
     const actions: FileAction[] = [];
 
-    if (mod) {
-      actions.push({
-        op: "delete-matching",
-        directory: mod.folder,
-        pattern: "*",
-        reason: `${name}: remove the copy on disk so Steam replaces it`,
-      });
-    }
     if (manifest) {
       actions.push({
         op: "forget-workshop-item",
         path: manifest,
         steamId,
         reason: `${name}: drop Steam's record of having downloaded it`,
+      });
+    }
+    if (mod) {
+      actions.push({
+        op: "delete-matching",
+        directory: mod.folder,
+        pattern: "*",
+        reason: `${name}: remove the copy on disk so Steam replaces it`,
       });
     }
     if (!actions.length) return null;

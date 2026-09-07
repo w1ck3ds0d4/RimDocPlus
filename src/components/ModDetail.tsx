@@ -256,6 +256,12 @@ function RetryDownload({ mod, scan }: { mod: ModEntry; scan: ScanResult }) {
       confirmLabel: "Remove and re-fetch",
     });
     if (!ok) return;
+    // Re-checked at the moment of acting: Steam may have been started since the panel
+    // decided whether to enable the button.
+    if (await isSteamRunning()) {
+      setSteamUp(true);
+      return;
+    }
     await runFileActions(filePlan.actions, null);
     record({
       kind: "repair",
