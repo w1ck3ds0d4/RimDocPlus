@@ -168,6 +168,7 @@ export function runPatchRulesWithIntents(scan: ScanResult): {
             .join("\n") +
           (paths.length > 8 ? `\n  and ${paths.length - 8} more` : ""),
         packageIds: [later.packageId, earlier.packageId],
+        observation: true as const,
         count: paths.length,
         // Still info, and still usually deliberate. The repair is offered because the one
         // thing a reader cannot do from a note is act on it, not because the app thinks
