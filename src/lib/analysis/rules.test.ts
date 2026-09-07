@@ -306,6 +306,44 @@ describe("log analysis", () => {
     expect(vge?.namespaces).toContain("Orion");
   });
 
+  // RimWorld writes some def errors twice, back to back. Seven rejected defs produced
+  // fourteen lines, and the headline counted the lines.
+  const doubleLogged = [
+    "Config error in ND_Weapon_M87Frag: verb 0: has incorrect forcedMiss settings; explosive projectiles and only those should have forced miss enabled",
+    "Config error in ND_Weapon_M87Frag: verb 0: has incorrect forcedMiss settings; explosive projectiles and only those should have forced miss enabled",
+    "Config error in ND_Weapon_EMPGrenade: verb 0: has incorrect forcedMiss settings; explosive projectiles and only those should have forced miss enabled",
+    "Config error in ND_Weapon_EMPGrenade: verb 0: has incorrect forcedMiss settings; explosive projectiles and only those should have forced miss enabled",
+  ].join(NEWLINE);
+
+  it("counts the defs a rejection is about, not the lines RimWorld wrote about them", () => {
+    const finding = findingsFromLog(analyzeLog(doubleLogged), [])[0];
+    expect(finding.title).toMatch(/^2 defs rejected/);
+    // The badge counts the same thing the headline does. Two numbers on one row, 2 and 4,
+    // asks a question the row does not answer.
+    expect(finding.count).toBe(2);
+  });
+
+  it("cuts a long reason at a word, so a title does not end mid-word", () => {
+    const finding = findingsFromLog(analyzeLog(doubleLogged), [])[0];
+    const reason =
+      "verb 0: has incorrect forcedMiss settings; explosive projectiles and only those should have forced miss enabled";
+    const shown = finding.title.split("rejected: ")[1].replace(/\.\.\.$/, "");
+    // Everything shown is the reason's own opening, and it stops where a word does. A hard
+    // slice at 70 characters ended it "explosive projectiles and o".
+    expect(reason.startsWith(shown)).toBe(true);
+    expect(reason[shown.length]).toBe(" ");
+  });
+
+  it("names the type or def RimWorld could not find, which is the whole point of the row", () => {
+    const missing = [
+      "Could not find a type named Milira.CompProperties_MiliraShield",
+      "Could not find ThingDef named VFEM_Longsword",
+    ].join(NEWLINE);
+    const titles = findingsFromLog(analyzeLog(missing), []).map((f) => f.title);
+    expect(titles).toContain("Missing type Milira.CompProperties_MiliraShield");
+    expect(titles).toContain("Missing ThingDef VFEM_Longsword");
+  });
+
   it("collapses repeats of the same fault into one counted event", () => {
     const spam = Array(50).fill("Created WorkshopItem for 123 but there is no folder for it.").join("\n");
     const events = analyzeLog(spam).events;
