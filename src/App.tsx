@@ -26,6 +26,7 @@ import { PatchProbe } from "./components/PatchProbe";
 import { findingsFromProbe, type ProbeReport } from "./lib/analysis/harmony";
 import { Saves } from "./components/Saves";
 import { GameWatch } from "./components/GameWatch";
+import { TickCost } from "./components/TickCost";
 import { Vault } from "./components/Vault";
 import { record } from "./lib/history";
 import { installDiff } from "./lib/installDiff";
@@ -464,6 +465,7 @@ export default function App() {
         {tab === "session" && active && (
           <GameWatch scan={workingScan} modpack={active} startSignal={watchRequest} />
         )}
+        {tab === "session" && <TickCost scan={workingScan} />}
         {tab === "session" && (
           <>
             <LogSourcePicker

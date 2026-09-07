@@ -11,7 +11,8 @@ use std::time::{Duration, Instant};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::path::BaseDirectory;
+use tauri::{AppHandle, Emitter, Manager};
 
 /// One change to disk, mirroring the FileAction union the analysis layer produces.
 ///
@@ -1009,6 +1010,127 @@ fn probe_patches(folders: Vec<String>, cycle: String) -> Result<ProbeReport, Str
         .map_err(|e| format!("Could not read the probe's report: {e}"))
 }
 
+/// The folder the companion mod is installed into, inside the game's own Mods directory.
+///
+/// A local mod rather than a Workshop one: it is installed by this app, versioned with this
+/// app, and removed by this app. Putting it on the Workshop would make its version a separate
+/// thing to keep in step with the game and with RimDoc+, for no gain to anyone.
+const PROBE_MOD_FOLDER: &str = "RimDocProbe";
+
+/// The package id the mod declares, which is what the load order refers to it by.
+const PROBE_MOD_ID: &str = "w1ck3ds0d4.rimdocprobe";
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProbeModState {
+    installed: bool,
+    /// Where it is, or would go.
+    path: String,
+    /// Whether the copy on disk matches the one this build of the app ships.
+    current: bool,
+    package_id: String,
+}
+
+fn probe_mod_source(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .resolve("resources/probe-mod", BaseDirectory::Resource)
+        .map_err(|e| format!("The companion mod is not bundled with this build: {e}"))
+}
+
+fn probe_mod_target(game_dir: &str) -> PathBuf {
+    PathBuf::from(game_dir).join("Mods").join(PROBE_MOD_FOLDER)
+}
+
+/// Whether the installed copy is the one this build ships.
+///
+/// Compared byte for byte. Length was the obvious cheaper test and it is wrong: the first
+/// rebuild after adding a dependency declaration to this mod produced a different assembly
+/// of exactly the same size, so a length check would have reported it up to date. The file
+/// is thirteen kilobytes and this runs when a panel opens.
+fn same_bytes(a: &Path, b: &Path) -> bool {
+    match (fs::read(a), fs::read(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
+}
+
+#[tauri::command(async)]
+fn probe_mod_state(app: AppHandle, game_dir: String) -> Result<ProbeModState, String> {
+    let target = probe_mod_target(&game_dir);
+    let installed = target.join("About").join("About.xml").is_file();
+    let current = installed
+        && probe_mod_source(&app)
+            .map(|source| {
+                same_bytes(
+                    &source.join("Assemblies").join("RimDocProbe.dll"),
+                    &target.join("Assemblies").join("RimDocProbe.dll"),
+                )
+            })
+            .unwrap_or(false);
+
+    Ok(ProbeModState {
+        installed,
+        path: target.display().to_string(),
+        current,
+        package_id: PROBE_MOD_ID.to_string(),
+    })
+}
+
+/// Put the companion mod into the game's Mods folder.
+///
+/// Copied whole and overwritten, because there is nothing of the player's in it: every file
+/// there came from this app and a stale one is only ever this app's own older build.
+#[tauri::command(async)]
+fn install_probe_mod(app: AppHandle, game_dir: String) -> Result<String, String> {
+    let source = probe_mod_source(&app)?;
+    if !source.join("About").join("About.xml").is_file() {
+        return Err(
+            "The companion mod is not bundled with this build. Build it with \
+             `pnpm probe-mod:build` and stage it with `pnpm probe-mod:stage`."
+                .into(),
+        );
+    }
+
+    let target = probe_mod_target(&game_dir);
+    if target.exists() {
+        fs::remove_dir_all(&target).map_err(|e| format!("Could not replace the old copy: {e}"))?;
+    }
+    files::copy_dir_all(&source, &target)?;
+    Ok(target.display().to_string())
+}
+
+/// Take it out again.
+///
+/// Removed rather than disabled, so nothing of this app's is left in someone's install after
+/// they have said they do not want it. The load order still names it until the player's
+/// modpack is applied again, which is theirs to decide and not something to do behind them.
+#[tauri::command(async)]
+fn remove_probe_mod(game_dir: String) -> Result<String, String> {
+    let target = probe_mod_target(&game_dir);
+    if !target.exists() {
+        return Ok("It was not installed".into());
+    }
+    fs::remove_dir_all(&target).map_err(|e| format!("Could not remove it: {e}"))?;
+    Ok(format!("Removed {}", target.display()))
+}
+
+/// What the companion mod last wrote, if it is running.
+///
+/// Returned as text rather than parsed here, because reading it is analysis and the shell
+/// does not do analysis. Null when the mod has never run, which is not an error: it is the
+/// ordinary state of an install that has not been asked to measure anything.
+#[tauri::command(async)]
+fn read_probe_report() -> Result<Option<String>, String> {
+    let Some(save_data) = scan::discover().save_data else {
+        return Ok(None);
+    };
+    let path = PathBuf::from(save_data).join("RimDoc").join("probe.json");
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(_) => Ok(None),
+    }
+}
+
 /// Every save RimWorld has written, newest first, with the mod list each was made with.
 ///
 /// Only the head of each file is read: the mod list sits in a meta block at the very top,
@@ -1349,6 +1471,10 @@ pub fn run() {
             read_session_log,
             fetch_shared_log,
             probe_patches,
+            probe_mod_state,
+            install_probe_mod,
+            remove_probe_mod,
+            read_probe_report,
             is_steam_running,
             list_saves,
             launch_supervised,

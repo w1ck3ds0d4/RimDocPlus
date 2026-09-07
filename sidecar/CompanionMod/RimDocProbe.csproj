@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The in-game half of RimDoc+.
+
+    Everything else this app does is measured from outside the process, which is why load
+    time and memory are known and what a mod costs per tick is not. Simulation time can only
+    be attributed from inside, so this is a small RimWorld mod that times the ticking and
+    writes what it saw to a file the app reads.
+
+    Built against reference assemblies from NuGet rather than the player's own install, so it
+    compiles on a machine with no RimWorld on it and CI can check it like anything else. The
+    reference package version is the game version it is built for.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>RimDocProbe</AssemblyName>
+    <RootNamespace>RimDocProbe</RootNamespace>
+    <Nullable>disable</Nullable>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      NU1701 says the reference package declares .NET Framework rather than netstandard2.1.
+      It is about what the package declares, not what is in it: RimWorld's own
+      Assembly-CSharp targets netstandard2.1, which is why this project does, and building
+      against the game's assemblies directly gives the identical result. Suppressed here
+      alone so every other warning stays an error.
+    -->
+    <NoWarn>NU1701</NoWarn>
+    <!-- The game supplies these at runtime; shipping copies would fight its own. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Probe.cs" />
+    <Compile Include="Meter.cs" />
+    <Compile Include="Report.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4871" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+</Project>

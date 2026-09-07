@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+	<name>RimDoc+ Probe</name>
+	<author>w1ck3ds0d4</author>
+	<supportedVersions>
+		<li>1.6</li>
+	</supportedVersions>
+	<packageId>w1ck3ds0d4.rimdocprobe</packageId>
+	<url>https://github.com/w1ck3ds0d4/RimDocPlus</url>
+	<modDependencies>
+		<li>
+			<packageId>brrainz.harmony</packageId>
+			<displayName>Harmony</displayName>
+			<steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+			<downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
+		</li>
+	</modDependencies>
+	<loadAfter>
+		<li>brrainz.harmony</li>
+	</loadAfter>
+	<description>Measures what each mod costs per tick, and reports that a running game is still ticking.
+
+Installed by RimDoc+, and removable from it. Everything else RimDoc+ does is measured from outside the game, which is why it knows load time and memory and cannot know simulation time. This is the part that has to be inside.
+
+It times the tick methods that mods declare, adds up the time per mod, and writes the result to Config/../RimDoc/probe.json every five seconds. It changes nothing about your game: no defs, no saves, no behaviour. It only measures.
+
+The report is also a heartbeat. From outside the process a crash an hour into a colony looks exactly like a healthy boot, and a report whose numbers keep advancing is the difference.
+
+Safe to remove at any time. RimDoc+ has a button for it.</description>
+</ModMetaData>

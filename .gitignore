@@ -28,3 +28,6 @@ sidecar/**/obj/
 
 # The published sidecar, copied in by `pnpm probe:stage`. Built, not committed.
 src-tauri/binaries/
+
+# The companion mod, assembled by `pnpm probe-mod:stage`. Built, not committed.
+src-tauri/resources/

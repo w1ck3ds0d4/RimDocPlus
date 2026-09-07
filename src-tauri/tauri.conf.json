@@ -27,6 +27,7 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.ico"],
-    "externalBin": ["binaries/rimdoc-patchprobe"]
+    "externalBin": ["binaries/rimdoc-patchprobe"],
+    "resources": ["resources/probe-mod/**/*"]
   }
 }

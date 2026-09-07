@@ -80,6 +80,15 @@ jobs:
       - name: Stage it as a sidecar
         run: pnpm probe:stage
 
+      # The companion mod is bundled as a resource, so it has to exist before Tauri's build
+      # script runs. Built from NuGet reference assemblies, which is the whole reason for
+      # using them: no RimWorld install is needed to compile a RimWorld mod.
+      - name: Build the companion mod
+        run: pnpm probe-mod:build
+
+      - name: Stage the companion mod
+        run: pnpm probe-mod:stage
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
