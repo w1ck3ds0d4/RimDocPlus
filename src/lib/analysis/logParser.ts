@@ -26,6 +26,21 @@ export interface LogEvent {
   exceptionType?: string;
   count: number;
   firstLine: number;
+  /**
+   * For a failing XML patch: the mod that shipped it, and what it could not find.
+   *
+   * RimWorld already says both, on the lines around the failure. Reading them turns "a
+   * PatchOperation could not find its target node", which is true of every one of these and
+   * useful for none of them, into the file and the xpath somebody could act on.
+   */
+  patch?: {
+    /** The mod named on the "[X - Start of stack trace]" line above the failure. */
+    owner?: string;
+    /** Each distinct xpath that failed, in the order they were met. */
+    xpaths: string[];
+    /** Each distinct source file named beneath one. */
+    files: string[];
+  };
 }
 
 export interface SessionAnalysis {
@@ -190,10 +205,12 @@ export function analyzeLog(text: string): SessionAnalysis {
 
     const { frames, next } = collectFrames(lines, i + 1);
     const message = line.trim();
-    const fingerprint = fingerprintOf(matcher.category, message, frames);
+    const owner = matcher.category === "xml-patch-failure" ? patchOwnerOf(lines, i) : undefined;
+    const fingerprint = fingerprintOf(matcher.category, message, frames, owner);
     const existing = clusters.get(fingerprint);
     if (existing) {
       existing.count++;
+      rememberPatch(existing, line, lines, i);
     } else {
       clusters.set(fingerprint, {
         fingerprint,
@@ -205,7 +222,9 @@ export function analyzeLog(text: string): SessionAnalysis {
         exceptionType: exceptionTypeOf(message),
         count: 1,
         firstLine: i + 1,
+        patch: matcher.category === "xml-patch-failure" ? { owner, xpaths: [], files: [] } : undefined,
       });
+      rememberPatch(clusters.get(fingerprint)!, line, lines, i);
     }
     // Jump past the trace we just consumed so none of it is re-examined.
     i = next - 1;
@@ -233,6 +252,49 @@ function isFrame(line: string): boolean {
  * Tags trailing with no frame after them belong to the next entry, so they are handed
  * back rather than swallowed.
  */
+/** `[The Dead Man's Switch-more dozer - Start of stack trace]` -> the mod's name. */
+const PATCH_OWNER = /^\[(.+?)\s+-\s+Start of stack trace\]/;
+
+/** The xpath a PatchOperation was looking for. */
+const PATCH_XPATH = /xpath="([^"]*(?:"[^"]*"[^"]*)*)"\)/;
+
+/** RimWorld names the file a few lines under the failure. */
+const PATCH_FILE = /^Source file:\s*(.+)$/i;
+
+/** `[The Dead Man's Switch-more dozer] Patch operation ...` names its mod inline. */
+const PATCH_OWNER_INLINE = /^\[([^\]]+)\]\s+Patch operation/;
+
+/**
+ * The mod that owns a failing patch.
+ *
+ * RimWorld reports these twice in two shapes: a stack trace under a marker line naming the
+ * mod, and a summary line carrying the name inline. Both are read, or the same seven
+ * failures appear as one grouped row and seven loose ones.
+ *
+ * Searched upward only a short way rather than tracked as state, because the marker sits
+ * immediately above and a scan that carried the last one seen would attribute an unmarked
+ * failure to whichever mod happened to fail before it.
+ */
+function patchOwnerOf(lines: string[], at: number): string | undefined {
+  const inline = PATCH_OWNER_INLINE.exec(lines[at].trim());
+  if (inline) return inline[1].trim();
+
+  for (let i = at - 1; i >= 0 && i >= at - 3; i--) {
+    const found = PATCH_OWNER.exec(lines[i].trim());
+    if (found) return found[1].trim();
+  }
+  return undefined;
+}
+
+/** The source file named below a failing patch, within the same block. */
+function patchFileBelow(lines: string[], at: number): string | undefined {
+  for (let i = at + 1; i < lines.length && i <= at + 6; i++) {
+    const found = PATCH_FILE.exec(lines[i].trim());
+    if (found) return found[1].trim();
+  }
+  return undefined;
+}
+
 function collectFrames(lines: string[], from: number): { frames: string[]; next: number } {
   const frames: string[] = [];
   let i = from;
@@ -259,10 +321,30 @@ function collectFrames(lines: string[], from: number): { frames: string[]; next:
  * normalised out of the message because ids, coordinates and tick counts vary per
  * occurrence while the underlying fault does not.
  */
-function fingerprintOf(category: string, message: string, frames: string[]): string {
+function fingerprintOf(category: string, message: string, frames: string[], patchOwner?: string): string {
+  // A failing patch is grouped by the mod that shipped it, not by what it was looking for.
+  // The message carries the defName, so one mod whose compatibility patches miss seven
+  // different defs became seven identical-looking rows saying nothing seven times. What
+  // someone decides about is the mod, once.
+  if (category === "xml-patch-failure" && patchOwner) {
+    return [category, patchOwner].join("|");
+  }
   const normalised = message.replace(/\d+/g, "#").slice(0, 200);
   const top = frames.slice(0, 3).map((f) => f.replace(/\s*\[0x[0-9a-f]+\].*$/i, ""));
   return [category, normalised, ...top].join("|");
+}
+
+/** Add this occurrence's xpath and file to the row it was grouped into. */
+function rememberPatch(event: LogEvent, line: string, lines: string[], at: number): void {
+  if (!event.patch) return;
+  const xpath = PATCH_XPATH.exec(line)?.[1];
+  if (xpath && !event.patch.xpaths.includes(xpath) && event.patch.xpaths.length < 40) {
+    event.patch.xpaths.push(xpath);
+  }
+  const file = patchFileBelow(lines, at);
+  if (file && !event.patch.files.includes(file) && event.patch.files.length < 40) {
+    event.patch.files.push(file);
+  }
 }
 
 /** "System.Reflection.TargetInvocationException" -> "TargetInvocationException". */
@@ -350,7 +432,8 @@ function readTimings(lines: string[]): { label: string; ms: number }[] {
 
 interface Explanation {
   title: (e: LogEvent) => string;
-  detail: string;
+  /** A function where the entry itself carries the specifics worth naming. */
+  detail: string | ((e: LogEvent) => string);
   fixKind?: string;
   /** Arguments the repair needs, read back out of the log line that raised it. */
   params?: (e: LogEvent) => Record<string, string | string[]>;
@@ -406,10 +489,27 @@ const EXPLANATIONS: Record<string, Explanation> = {
     fixKind: "force-dgpu",
   },
   "xml-patch-failure": {
-    title: () => "XML patch did not apply",
-    detail:
-      "A PatchOperation could not find its target node. The patch silently did nothing, so the mod is " +
-      "loaded but part of its content is missing.",
+    title: (e) =>
+      e.patch?.owner
+        ? `${e.patch.owner}: ${e.count} XML patch${e.count === 1 ? "" : "es"} found nothing to change`
+        : "XML patch did not apply",
+    detail: (e) => {
+      const said =
+        "A PatchOperation names a node that is not there, so it silently does nothing and part " +
+        "of what the mod meant to add is missing. Usually the mod it patches has changed, or a " +
+        "sibling operation guards for the node being absent and this one does not.";
+      const xpaths = e.patch?.xpaths ?? [];
+      const files = e.patch?.files ?? [];
+      if (xpaths.length === 0) return said;
+      // The log names both. Repeating the generic sentence and nothing else was the whole
+      // of what these findings used to say, seven times over.
+      return (
+        said +
+        "\n\nLooking for:\n" +
+        xpaths.map((x) => `  ${x}`).join("\n") +
+        (files.length > 0 ? "\n\nIn:\n" + files.map((f) => `  ${f}`).join("\n") : "")
+      );
+    },
     fixKind: "repair-xpath",
   },
   "cross-reference": {
@@ -452,7 +552,10 @@ export function findingsFromLog(
       rule: `log:${event.category}`,
       severity: event.severity,
       title: explanation?.title(event) ?? genericTitle(event),
-      detail: explanation?.detail ?? event.message,
+      detail:
+        typeof explanation?.detail === "function"
+          ? explanation.detail(event)
+          : (explanation?.detail ?? event.message),
       packageIds,
       count: event.count,
       frames: event.frames,

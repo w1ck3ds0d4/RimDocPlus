@@ -3,6 +3,9 @@ import { runStaticRules } from "./rules";
 import { analyzeLog, findingsFromLog, frameKind, patchFrames } from "./logParser";
 import type { ModEntry, ScanResult } from "../types";
 
+/** A real newline, built so no escaping layer between here and the file can eat it. */
+const NEWLINE = String.fromCharCode(10);
+
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
   return {
     packageId,
@@ -291,6 +294,49 @@ describe("log analysis", () => {
     expect(reset?.severity).toBe("critical");
     expect(reset?.title).toBe("RimWorld reset your mod list after a load failure");
     expect(reset?.stale).toBeUndefined();
+  });
+
+  it("gathers one mod's failing patches into a single row", () => {
+    // RimWorld reports each failure twice, as a stack trace under a marker naming the mod
+    // and again as a summary line carrying the name inline. Both shapes, and every defName,
+    // used to become their own row: on a real install one mod produced twenty-one of them,
+    // each saying the same generic sentence and nothing else.
+    const log = [
+      "[Some Mod - Start of stack trace]",
+      'Verse.PatchOperationReplace(xpath="Defs/ThingDef[defName=\"A\"]/tools"): Failed to find a node with the given xpath',
+      "[End of stack trace]",
+      "Source file: C:/mods/Some/Patches/A.xml",
+      "[Some Mod - Start of stack trace]",
+      'Verse.PatchOperationReplace(xpath="Defs/ThingDef[defName=\"B\"]/tools"): Failed to find a node with the given xpath',
+      "[End of stack trace]",
+      "Source file: C:/mods/Some/Patches/B.xml",
+      "[Some Mod] Patch operation Verse.PatchOperationSequence(count=4) failed",
+    ].join(NEWLINE);
+
+    const events = analyzeLog(log).events.filter((e) => e.category === "xml-patch-failure");
+    expect(events).toHaveLength(1);
+    expect(events[0].patch?.owner).toBe("Some Mod");
+    expect(events[0].count).toBe(3);
+    // What it was actually looking for, which is the part worth reading.
+    expect(events[0].patch?.xpaths).toEqual([
+      'Defs/ThingDef[defName="A"]/tools',
+      'Defs/ThingDef[defName="B"]/tools',
+    ]);
+    expect(events[0].patch?.files).toEqual(["C:/mods/Some/Patches/A.xml", "C:/mods/Some/Patches/B.xml"]);
+  });
+
+  it("keeps two mods' failing patches apart", () => {
+    const log = [
+      "[Mod One - Start of stack trace]",
+      'Verse.PatchOperationReplace(xpath="Defs/A"): Failed to find a node with the given xpath',
+      "[End of stack trace]",
+      "[Mod Two - Start of stack trace]",
+      'Verse.PatchOperationReplace(xpath="Defs/B"): Failed to find a node with the given xpath',
+      "[End of stack trace]",
+    ].join(NEWLINE);
+
+    const events = analyzeLog(log).events.filter((e) => e.category === "xml-patch-failure");
+    expect(events.map((e) => e.patch?.owner).sort()).toEqual(["Mod One", "Mod Two"]);
   });
 
   it("settles the reset once the load order holds mods again", () => {
