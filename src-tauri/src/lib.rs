@@ -665,6 +665,15 @@ const QUIET_SECONDS: u64 = 90;
 /// How often the log is read and the process checked.
 const POLL_MS: u64 = 250;
 
+/// How many of those polls pass between memory readings.
+///
+/// Reading it costs a `tasklist` process, about 200ms, which at the log's own rate would eat
+/// most of every cycle and spawn some fourteen thousand processes an hour across a session.
+/// Peak working set does not move fast enough to be worth that: this is every five seconds,
+/// and it is a peak rather than a series, so the only cost of looking less often is missing
+/// a spike shorter than the interval.
+const MEMORY_EVERY: u32 = 20;
+
 /// Current working set of a process, in megabytes.
 ///
 /// Read through tasklist rather than a Windows API binding: it is one poll every quarter
@@ -735,6 +744,7 @@ fn launch_supervised(app: AppHandle, game_dir: String, log_path: String) -> Resu
         let mut carry = String::new();
         let pid = child.id();
         let mut peak_memory_mb = 0u64;
+        let mut ticks: u32 = 0;
 
         loop {
             let exited = child.try_wait().ok().flatten();
@@ -765,8 +775,11 @@ fn launch_supervised(app: AppHandle, game_dir: String, log_path: String) -> Resu
                 let _ = app.emit("game:quiet", QUIET_SECONDS);
             }
 
-            if let Some(mb) = memory_mb(pid) {
-                peak_memory_mb = peak_memory_mb.max(mb);
+            ticks = ticks.wrapping_add(1);
+            if ticks % MEMORY_EVERY == 0 {
+                if let Some(mb) = memory_mb(pid) {
+                    peak_memory_mb = peak_memory_mb.max(mb);
+                }
             }
 
             if let Some(status) = exited {

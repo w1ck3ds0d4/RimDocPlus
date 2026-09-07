@@ -339,6 +339,9 @@ pub struct ScanProgress<'a> {
     pub label: &'a str,
 }
 
+/// The scan, without progress reporting. Kept as the plain form of the API; the shell uses
+/// [`scan_install_with`] so it can show the walk happening.
+#[allow(dead_code)]
 pub fn scan_install(paths_override: Option<ScanPaths>) -> Result<ScanResult, String> {
     scan_install_with(paths_override, &mut |_| {})
 }
@@ -1182,12 +1185,6 @@ fn find_all_tag_matches(text: &str, tag: &str) -> Vec<(usize, usize, usize)> {
     result
 }
 
-/// Remove every whole `<tag>...</tag>` block, for each tag in `tags`, case-insensitively.
-///
-/// Scalar fields have to be read from a document with the container blocks stripped out:
-/// a dependency entry nests its own `<packageId>`, so a mod whose About.xml declares
-/// `<modDependencies>` above its own `<packageId>` would otherwise report its
-/// dependency's id as its identity.
 // ---------------------------------------------------------------------------------
 // Saves
 // ---------------------------------------------------------------------------------
@@ -1236,7 +1233,8 @@ pub fn list_saves(save_data: &Path) -> Vec<PathBuf> {
             Some((when, p))
         })
         .collect();
-    saves.sort_by(|a, b| b.0.cmp(&a.0));
+    // Newest first, so `Reverse` rather than a hand-rolled comparator.
+    saves.sort_by_key(|(when, _)| std::cmp::Reverse(*when));
     saves.into_iter().map(|(_, p)| p).collect()
 }
 
@@ -1275,6 +1273,12 @@ pub fn read_save_meta(path: &Path) -> Result<SaveMeta, String> {
     })
 }
 
+/// Remove every whole `<tag>...</tag>` block, for each tag in `tags`, case-insensitively.
+///
+/// Scalar fields have to be read from a document with the container blocks stripped out:
+/// a dependency entry nests its own `<packageId>`, so a mod whose About.xml declares
+/// `<modDependencies>` above its own `<packageId>` would otherwise report its
+/// dependency's id as its identity.
 fn strip_blocks(xml: &str, tags: &[&str]) -> String {
     tags.iter()
         .fold(xml.to_string(), |acc, tag| strip_tag(&acc, tag))
