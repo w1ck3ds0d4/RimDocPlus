@@ -2721,17 +2721,39 @@ tr.clickable:hover td {
 
 /* The whole outline carries the verdict, not just the left edge, so the state is legible
    from the shape of the card rather than from a stripe that reads as decoration. */
+/*
+ * One tone per state, set once and used by everything inside. The button read as a blue
+ * accent against an amber card, which made it look like a control that had wandered in from
+ * somewhere else rather than the way out of what the card is saying.
+ */
 .verdict.good {
-  border-color: var(--ok);
+  --tone: var(--ok);
+  border-color: var(--tone);
 }
 
 .verdict.warn {
-  border-color: var(--warning);
+  --tone: var(--warning);
+  border-color: var(--tone);
 }
 
 .verdict.bad {
-  border-color: var(--critical);
+  --tone: var(--critical);
+  border-color: var(--tone);
   box-shadow: 0 0 0 1px rgba(240, 97, 109, 0.16);
+}
+
+.verdict .btn.primary {
+  border-color: var(--tone);
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 13%, transparent);
+}
+
+.verdict .btn.primary:hover {
+  background: color-mix(in srgb, var(--tone) 24%, transparent);
+}
+
+.verdict .btn.primary:focus-visible {
+  outline-color: var(--tone);
 }
 
 .verdict h2 {
