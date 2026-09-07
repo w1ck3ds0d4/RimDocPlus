@@ -23,7 +23,7 @@ import { ModDetail } from "./components/ModDetail";
 import { Home } from "./components/Home";
 import { record } from "./lib/history";
 import { installDiff } from "./lib/installDiff";
-import { Settings, loadDevMode } from "./components/Settings";
+import { Settings, loadDevMode, loadOversizePx, saveOversizePx } from "./components/Settings";
 import { GameControls } from "./components/GameControls";
 import { inShell, scanInstall } from "./lib/shell";
 
@@ -40,6 +40,7 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [devMode, setDevMode] = useState(loadDevMode);
   const [scanning, setScanning] = useState(false);
+  const [oversizePx, setOversizePx] = useState(loadOversizePx);
 
   const setDevModePersisted = useCallback((on: boolean) => {
     setDevMode(on);
@@ -181,8 +182,8 @@ export default function App() {
   }, [scan, active]);
 
   const staticFindings = useMemo<Finding[]>(
-    () => (workingScan ? runStaticRules(workingScan) : []),
-    [workingScan],
+    () => (workingScan ? runStaticRules(workingScan, { oversizePx }) : []),
+    [workingScan, oversizePx],
   );
 
   const sessionAnalysis = useMemo<SessionAnalysis | null>(
@@ -343,6 +344,11 @@ export default function App() {
             session={session}
             devMode={devMode}
             onDevMode={setDevModePersisted}
+            oversizePx={oversizePx}
+            onOversizePx={(px) => {
+              setOversizePx(px);
+              saveOversizePx(px);
+            }}
           />
         )}
         {tab === "order" &&

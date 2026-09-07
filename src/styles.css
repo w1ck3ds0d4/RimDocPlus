@@ -1376,6 +1376,8 @@ tr.row-off td:not(.toggle-cell) {
   background: linear-gradient(135deg, var(--panel-2), var(--panel));
   border-color: var(--line);
   box-shadow: none;
+  /* Nothing to fix, so nothing to beat for. */
+  animation: none;
 }
 
 .triage-bar:has(.triage-btn.clean)::after {
@@ -1412,6 +1414,7 @@ tr.row-off td:not(.toggle-cell) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .triage-bar,
   .triage-bar::after,
   .triage-btn .cross,
   .triage-report {
@@ -1762,6 +1765,42 @@ tr.row-off td:not(.toggle-cell) {
   box-shadow:
     0 0 0 1px rgba(229, 72, 77, 0.3),
     0 10px 26px -10px rgba(229, 72, 77, 0.8);
+  /*
+   * The glow beats on the same 2.6s cycle as the cross, so the control pulses as one thing
+   * rather than as two animations that happen to share a button. Only the shadow moves: the
+   * bar runs the width of the page, and scaling it even slightly would swing the text.
+   */
+  animation: triage-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes triage-pulse {
+  0%,
+  62%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(229, 72, 77, 0.3),
+      0 10px 26px -10px rgba(229, 72, 77, 0.8);
+  }
+  12% {
+    box-shadow:
+      0 0 0 2px rgba(240, 97, 109, 0.55),
+      0 12px 40px -8px rgba(229, 72, 77, 1);
+  }
+  24% {
+    box-shadow:
+      0 0 0 1px rgba(229, 72, 77, 0.3),
+      0 10px 26px -10px rgba(229, 72, 77, 0.8);
+  }
+  36% {
+    box-shadow:
+      0 0 0 1.5px rgba(240, 97, 109, 0.45),
+      0 11px 34px -9px rgba(229, 72, 77, 0.92);
+  }
+  48% {
+    box-shadow:
+      0 0 0 1px rgba(229, 72, 77, 0.3),
+      0 10px 26px -10px rgba(229, 72, 77, 0.8);
+  }
 }
 
 .auto-toggle {
@@ -3005,4 +3044,25 @@ tr.clickable:hover td {
   .console-body .caret::after {
     animation: none;
   }
+}
+
+/* Observations, and a report that has already run --------------------------- */
+
+.finding-list.notes .finding {
+  opacity: 0.82;
+}
+
+.section-title .count {
+  margin-left: 5px;
+  color: var(--dim);
+  font-weight: 400;
+}
+
+.resolved-note {
+  margin: 0 0 4px;
+}
+
+/* Says the numbers beneath it describe the plan, not the install as it stands. */
+.triage-applied {
+  color: var(--ok);
 }

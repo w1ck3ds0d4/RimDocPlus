@@ -1,6 +1,6 @@
 import type { Finding, ModEntry, ScanResult } from "../types";
 import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS } from "./about.ts";
-import { runPerformanceRules } from "./performance.ts";
+import { DEFAULT_ANALYSIS, runPerformanceRules, type AnalysisOptions } from "./performance.ts";
 import { runPatchRules } from "./patches.ts";
 
 /** What one rule did on one run, for the diagnostics panel. */
@@ -21,7 +21,10 @@ export interface RuleRun {
  * taking the whole analysis with it, and a rule that quietly matches nothing shows up as
  * a zero in the panel, which is the failure mode that hides best in a passing test suite.
  */
-export function runStaticRulesWithDiagnostics(scan: ScanResult): {
+export function runStaticRulesWithDiagnostics(
+  scan: ScanResult,
+  options: AnalysisOptions = DEFAULT_ANALYSIS,
+): {
   findings: Finding[];
   runs: RuleRun[];
 } {
@@ -45,7 +48,7 @@ export function runStaticRulesWithDiagnostics(scan: ScanResult): {
     ["incompatible-pair", () => ruleIncompatiblePair(active, activeSet, byId)],
     ["load-order-violation", () => ruleLoadOrder(active, position)],
     ["version-mismatch", () => ruleVersionMismatch(active, scan.gameCycle)],
-    ["performance", () => runPerformanceRules(scan)],
+    ["performance", () => runPerformanceRules(scan, options)],
     ["patch-override", () => runPatchRules(scan)],
   ];
 
@@ -71,8 +74,8 @@ export function runStaticRulesWithDiagnostics(scan: ScanResult): {
   return { findings, runs };
 }
 
-export function runStaticRules(scan: ScanResult): Finding[] {
-  return runStaticRulesWithDiagnostics(scan).findings;
+export function runStaticRules(scan: ScanResult, options: AnalysisOptions = DEFAULT_ANALYSIS): Finding[] {
+  return runStaticRulesWithDiagnostics(scan, options).findings;
 }
 
 /** ModsConfig references a mod that is not on disk. The game drops it and errors. */

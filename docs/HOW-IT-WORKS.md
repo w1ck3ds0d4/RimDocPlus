@@ -160,10 +160,20 @@ if everything were resident at once, not live usage, since RimWorld atlases and 
 It is the number that decides how much work the atlas builder does at load. The reference
 install reads 20.4 GB across 225 active mods, on a card with 8 GB.
 
-**Oversized textures**: anything at 1024px or larger, named per mod. RimWorld draws at
-roughly 64px per tile, so past 512px is detail the camera never resolves. Halving a
-dimension quarters the cost. 729 of them on the reference install, costing 4.20 GB; at
-512px they cost 0.60 GB.
+**Oversized textures**: named per mod. RimWorld draws at roughly 64px per tile, so past
+512px is detail the camera never resolves, and halving a dimension quarters the cost.
+
+The scan records every texture above the 512px downscale target, and a setting decides which
+of them count as oversized, defaulting to 1024px. Splitting it that way means moving the
+setting re-decides the answer with no second walk of the disk.
+
+**The footprint carries no repair, on purpose.** It once offered the oversize rule's own
+downscale, which was the same plan over the same files listed twice, and it promised
+something it could not deliver. Measured on the reference install: resizing every texture at
+1024px or larger moved the total from 16.8 GB to 15.5 GB, and capping _every_ texture at
+512px would only reach 13.4 GB. The remaining 8.46 GB sits in 10,432 textures already at or
+under the target. A large mod list is expensive because it is large, and that comes down by
+running fewer mods rather than by resizing.
 
 ### The duration estimate
 

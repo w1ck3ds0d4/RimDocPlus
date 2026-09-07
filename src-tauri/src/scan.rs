@@ -64,7 +64,7 @@ pub struct TextureStats {
     /// never file size: Unity uploads textures decoded, so on-disk PNG compression buys
     /// nothing at runtime.
     pub estimated_vram_bytes: u64,
-    /// Textures at or above the oversize threshold, largest first, capped at MAX_OVERSIZED.
+    /// Textures above the downscale target, largest first, capped at MAX_OVERSIZED.
     pub oversized: Vec<OversizedTexture>,
     /// True when the walk hit its directory-entry budget, so the numbers are a floor.
     pub truncated: bool,
@@ -286,17 +286,19 @@ pub fn discover() -> ScanPaths {
 // ---------------------------------------------------------------------------------
 
 /// Textures at or above this in either dimension are worth naming individually.
-const OVERSIZE_PX: u32 = 1024;
-/// Named oversized textures kept per mod. Past this, the count is what matters.
-/// Named oversized textures kept per mod.
+/// Textures above this are recorded individually.
+/// The downscale target, not the oversize threshold: anything at or below the target cannot
+/// be made smaller, and anything above it might be worth resizing. Which of them actually
+/// count is a setting the player owns, applied when the rules run, so moving that setting
+/// re-decides the answer without another walk of the disk.
+const RECORD_ABOVE_PX: u32 = 512;
+/// Named textures kept per mod.
 ///
-/// This is what the downscale repair works from, so the cap is a cap on how much of the
-/// problem one triage pass can fix, not just on how much is displayed. At 25 a pass over
-/// the reference install resized 729 textures and left 476 behind, seven mods still at the
-/// limit, which is not what a button called "fix all" should do. The heaviest single mod
-/// there carries 158, so 200 clears the install with room to spare while still bounding a
+/// This list is what the downscale repair works from, so the cap bounds how much of the
+/// problem one pass can fix rather than only how much is shown. The heaviest mod on the
+/// reference install carries 359 above the target, so 400 clears it while still bounding a
 /// pathological one.
-const MAX_OVERSIZED: usize = 200;
+const MAX_OVERSIZED: usize = 400;
 /// Directory entries walked per mod for the size/texture pass. A mod that hits this is
 /// marked truncated rather than silently reported smaller than it is.
 const SIZE_WALK_BUDGET: usize = 6000;
@@ -523,7 +525,7 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
             };
             count += 1;
             vram += (width as u64) * (height as u64) * 4;
-            if width >= OVERSIZE_PX || height >= OVERSIZE_PX {
+            if width > RECORD_ABOVE_PX || height > RECORD_ABOVE_PX {
                 oversized.push(OversizedTexture {
                     path: full.display().to_string(),
                     width,

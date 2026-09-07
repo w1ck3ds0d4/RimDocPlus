@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
 import { runStaticRulesWithDiagnostics, type RuleRun } from "../lib/analysis/rules";
+import { DEFAULT_OVERSIZE_PX } from "../lib/analysis/performance";
 import { buildDiagnostics } from "../lib/diagnostics";
 import { clearDevLog, getDevLog, subscribeDevLog, type CapturedEntry } from "../lib/devLog";
 import { runSelfChecks } from "../lib/selfCheck";
 import { download } from "../lib/download";
 
 const DEV_KEY = "rimdoc.devMode";
+const OVERSIZE_KEY = "rimdoc.oversizePx";
 
 export function loadDevMode(): boolean {
   try {
@@ -17,6 +19,35 @@ export function loadDevMode(): boolean {
   }
 }
 
+/**
+ * The size at which a texture is worth resizing.
+ *
+ * The scan records everything above the 512px downscale target, so this only decides which
+ * of them the rule counts. Moving it re-decides that immediately, with no rescan.
+ */
+export function loadOversizePx(): number {
+  try {
+    const raw = Number(localStorage.getItem(OVERSIZE_KEY));
+    return OVERSIZE_CHOICES.some((c) => c.px === raw) ? raw : DEFAULT_OVERSIZE_PX;
+  } catch {
+    return DEFAULT_OVERSIZE_PX;
+  }
+}
+
+export function saveOversizePx(px: number): void {
+  try {
+    localStorage.setItem(OVERSIZE_KEY, String(px));
+  } catch {
+    /* private window; the choice still holds for this session */
+  }
+}
+
+const OVERSIZE_CHOICES = [
+  { px: 1024, label: "1024px", note: "Only the obviously outsized. The default, and the safest." },
+  { px: 768, label: "768px", note: "Catches the middle band most mods sit in." },
+  { px: 513, label: "Anything above 512px", note: "Everything the 512px target could shrink." },
+];
+
 export function Settings({
   scan,
   workshop,
@@ -24,6 +55,8 @@ export function Settings({
   session,
   devMode,
   onDevMode,
+  oversizePx,
+  onOversizePx,
 }: {
   scan: ScanResult;
   workshop: WorkshopCache | null;
@@ -31,9 +64,39 @@ export function Settings({
   session: { path: string; text: string } | null;
   devMode: boolean;
   onDevMode: (on: boolean) => void;
+  oversizePx: number;
+  onOversizePx: (px: number) => void;
 }) {
   return (
     <>
+      <p className="section-title">Textures</p>
+      <div className="setting">
+        <div className="setting-head">
+          <b>Call a texture oversized at</b>
+          <span className="muted">
+            Resizing never goes below 512px, which is already generous at RimWorld's zoom. This decides how
+            far down from there the Doctor bothers you, and what a triage pass will touch.
+          </span>
+        </div>
+        <div className="segmented">
+          {OVERSIZE_CHOICES.map((choice) => (
+            <button
+              key={choice.px}
+              type="button"
+              aria-pressed={oversizePx === choice.px}
+              title={choice.note}
+              onClick={() => onOversizePx(choice.px)}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+        <p className="note">
+          {OVERSIZE_CHOICES.find((c) => c.px === oversizePx)?.note} Lowering it takes effect at once: the scan
+          already records every texture above 512px, so nothing needs re-reading.
+        </p>
+      </div>
+
       <p className="section-title">Developer</p>
       <div className="setting">
         <label className="setting-toggle">

@@ -75,11 +75,25 @@ function isBackup(name) {
   return name.toLowerCase().endsWith(BACKUP_SUFFIX);
 }
 
-/** Textures at or above this in either dimension are worth naming individually. */
-const OVERSIZE_PX = 1024;
+/**
+ * Textures above this are recorded individually.
+ *
+ * The downscale target, not the oversize threshold: anything at or below the target cannot
+ * be made smaller, and anything above it might be worth resizing. Which of them actually
+ * count is a setting the player owns, applied when the rules run, so moving that setting
+ * re-decides the answer without another walk of the disk.
+ */
+const RECORD_ABOVE_PX = 512;
 
-/** Named oversized textures kept per mod. Also the ceiling on one triage pass. */
-const MAX_OVERSIZED = 200;
+/**
+ * Named textures kept per mod.
+ *
+ * This list is what the downscale repair works from, so the cap bounds how much of the
+ * problem one pass can fix rather than only how much is shown. The heaviest mod on the
+ * reference install carries 359 above the target, so 400 clears it while still bounding a
+ * pathological one.
+ */
+const MAX_OVERSIZED = 400;
 
 /**
  * Read a PNG's dimensions from its header.
@@ -143,17 +157,13 @@ function measureMod(dir, budget = 6000) {
       if (!size) continue;
       textures.count++;
       textures.estimatedVramBytes += size.width * size.height * 4;
-      if (size.width >= OVERSIZE_PX || size.height >= OVERSIZE_PX) {
+      if (size.width > RECORD_ABOVE_PX || size.height > RECORD_ABOVE_PX) {
         textures.oversized.push({ path: full, width: size.width, height: size.height });
       }
     }
   }
 
   textures.oversized.sort((a, b) => b.width * b.height - a.width * a.height);
-  // This list is what the downscale repair works from, so the cap bounds how much of the
-  // problem one triage pass can fix rather than only how much is shown. At 25 a pass over
-  // the reference install resized 729 and left 476 behind with seven mods still at the
-  // limit; the heaviest carries 158, so 200 clears it while still bounding a pathological mod.
   textures.oversized = textures.oversized.slice(0, MAX_OVERSIZED);
   return { sizeBytes: total, textures };
 }

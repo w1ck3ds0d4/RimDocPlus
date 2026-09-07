@@ -1,4 +1,5 @@
 import type { Finding, ScanResult, WorkshopCache } from "../types";
+import { DEFAULT_OVERSIZE_PX, DOWNSCALE_TARGET_PX, oversizedAt } from "../analysis/performance";
 import { sortLoadOrder, toggleMod, toModsConfigXml, type Modpack } from "../modpacks.ts";
 import { rankDuplicates, rankKeepPreference } from "../analysis/duplicates.ts";
 
@@ -242,13 +243,17 @@ const REPAIRS: Record<string, RepairFn> = {
   },
 
   "downscale-textures": (ctx) => {
-    const target = Number(str(ctx, "target") ?? 512);
+    const target = Number(str(ctx, "target") ?? DOWNSCALE_TARGET_PX);
+    // Taken from the finding rather than re-derived. The scan records every texture above
+    // the downscale target, so without this the plan would cover files the finding that
+    // proposed it never counted.
+    const threshold = Number(str(ctx, "threshold") ?? DEFAULT_OVERSIZE_PX);
     const byId = modsById(ctx.scan);
     const actions = list(ctx, "ids")
       .map((id) => byId.get(id))
       .filter((mod): mod is NonNullable<typeof mod> => !!mod)
       .flatMap((mod) =>
-        (mod.textures?.oversized ?? []).map((texture) => ({
+        oversizedAt(mod, threshold).map((texture) => ({
           op: "downscale-png" as const,
           path: texture.path,
           maxPx: target,
@@ -264,7 +269,8 @@ const REPAIRS: Record<string, RepairFn> = {
     let before = 0;
     let after = 0;
     for (const id of list(ctx, "ids")) {
-      for (const t of byId.get(id)?.textures?.oversized ?? []) {
+      const mod = byId.get(id);
+      for (const t of mod ? oversizedAt(mod, threshold) : []) {
         const scale = Math.min(target / t.width, target / t.height, 1);
         before += t.width * t.height * 4;
         after += Math.round(t.width * scale) * Math.round(t.height * scale) * 4;

@@ -236,6 +236,8 @@ function TriageReport({
 }) {
   const actions = allFileActions(result);
   const resolved = result.before - result.after;
+  // A report describes a plan until the plan runs, and a record of what happened after.
+  const [applied, setApplied] = useState(false);
 
   return (
     <div className="triage-report">
@@ -291,15 +293,21 @@ function TriageReport({
         ))}
       </Section>
 
-      {/* What this section is called depends on who can carry it out. In the desktop app
-          these run directly, and calling them "needs a script" while a button beside them
-          has just applied all 730 was simply wrong. */}
+      {/* What this section is called depends on who can carry it out, and on whether it
+          already has. In the desktop app these run directly, and calling them "needs a
+          script" while a button beside them had just applied all 730 was simply wrong. */}
       <Section
-        title={inShell() ? "Changes to your files" : "Needs a script"}
+        title={applied ? "Applied to your files" : inShell() ? "Changes to your files" : "Needs a script"}
         count={actions.length}
-        tone="warn"
+        tone={applied ? "ok" : "warn"}
         empty="Nothing on disk to change."
       >
+        {applied && (
+          <li className="triage-applied">
+            Carried out. The figures below are what the plan set out to do, not the state of the install now:
+            rescan or reopen the Doctor for that.
+          </li>
+        )}
         {result.files.map(({ finding, actions: own, summary }) => (
           <li key={finding.id}>
             <b>
@@ -310,7 +318,14 @@ function TriageReport({
         ))}
         {actions.length > 0 && (
           <li className="triage-cta">
-            <ApplyActions actions={actions} config={configDir(scan)} onApplied={onApplied} />
+            <ApplyActions
+              actions={actions}
+              config={configDir(scan)}
+              onApplied={() => {
+                setApplied(true);
+                onApplied?.();
+              }}
+            />
             <button
               className="btn"
               type="button"

@@ -67,14 +67,54 @@ export function SeveritySummary({
   );
 }
 
+/**
+ * The findings, with the ones nothing can be done about kept separate.
+ *
+ * A patch override is reported deliberately and resolves never: it is how content layers,
+ * not a fault. Thirteen of them sitting in one list beside a single real problem made a
+ * finished triage look like it had achieved nothing, which is the opposite of true. Split
+ * on whether a repair exists, because that is exactly the distinction being drawn.
+ */
 export function FindingList({ findings, empty }: { findings: Finding[]; empty: string }) {
+  const actionable = findings.filter((f) => f.fix);
+  const notes = findings.filter((f) => !f.fix);
+
   if (!findings.length) return <p className="muted">{empty}</p>;
+
   return (
-    <div className="finding-list">
-      {sortFindings(findings).map((finding) => (
-        <FindingRow key={finding.id} finding={finding} />
-      ))}
-    </div>
+    <>
+      {actionable.length > 0 && (
+        <div className="finding-list">
+          {sortFindings(actionable).map((finding) => (
+            <FindingRow key={finding.id} finding={finding} />
+          ))}
+        </div>
+      )}
+
+      {actionable.length === 0 && notes.length > 0 && (
+        <p className="muted resolved-note">
+          Nothing here has an outstanding repair. What follows is what the Doctor observed, not work waiting
+          to be done.
+        </p>
+      )}
+
+      {notes.length > 0 && (
+        <>
+          <p className="section-title">
+            Observations <span className="count">{notes.length}</span>
+          </p>
+          <p className="note">
+            Read rather than fixed. A patch override is how one mod layers content over another, so it is
+            reported and left alone; a total measurement is a fact about the list, not a defect.
+          </p>
+          <div className="finding-list notes">
+            {sortFindings(notes).map((finding) => (
+              <FindingRow key={finding.id} finding={finding} />
+            ))}
+          </div>
+        </>
+      )}
+    </>
   );
 }
 

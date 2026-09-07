@@ -28,6 +28,8 @@ export const RELEASES: Release[] = [
       "Library: what each mod costs you and what breaks without it, beside Steam's public Workshop signals",
       "Session: reads the last Player.log, clusters faults by fingerprint and attributes them to a mod",
       "Mod details: click any mod for its banner, description, cost, relationships and findings",
+      "The Doctor separates what it can repair from what it merely observed, so a finished triage does not look like it achieved nothing",
+      "Settings: choose the size at which a texture counts as oversized, from 1024px down to anything above the 512px target",
       "Every change is backed up first, and every repair that touches disk can be rolled back",
     ],
     known: [
