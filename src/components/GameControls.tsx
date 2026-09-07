@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ScanResult } from "../lib/types";
 import { toModsConfigXml, type Modpack } from "../lib/modpacks";
 import { configDir } from "../lib/repair/repairs";
@@ -30,6 +30,37 @@ export function GameControls({
 }) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const menu = useRef<HTMLSpanElement>(null);
+
+  /**
+   * Close the menu on a click anywhere else, or on Escape.
+   *
+   * A menu that only closes by choosing from it sits over the page until something is
+   * picked, and the one thing someone wants after opening it by accident is to put it away
+   * without starting a game. Listens while it is open and not otherwise, so there is no
+   * document-wide handler running for a menu nobody has opened.
+   *
+   * On pointerdown rather than click: the menu should be gone by the time whatever was
+   * clicked underneath reacts.
+   */
+  useEffect(() => {
+    if (!open) return;
+
+    const away = (e: PointerEvent) => {
+      if (!menu.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
   const { confirm, dialog } = useConfirm();
   const shell = inShell();
   const config = configDir(scan);
@@ -108,28 +139,57 @@ export function GameControls({
       >
         {scanning ? "Scanning..." : "Rescan"}
       </button>
-      <button
-        className="btn play"
-        type="button"
-        disabled={!shell || busy || !scan.paths.game}
-        title={shell ? "Start RimWorld" : "Needs the desktop app"}
-        onClick={() => void launch()}
-      >
-        <span aria-hidden="true">&#9654;</span> Play
-      </button>
-      <button
-        className="btn play"
-        type="button"
-        disabled={!shell || busy || !scan.paths.game}
-        title={
-          shell
-            ? "Start RimWorld and follow its log, so a crash on load is in front of you"
-            : "Needs the desktop app"
-        }
-        onClick={onPlayAndWatch}
-      >
-        <span aria-hidden="true">&#9654;</span> Play and watch
-      </button>
+      <span className="split" ref={menu}>
+        <button
+          className="btn play"
+          type="button"
+          disabled={!shell || busy || !scan.paths.game}
+          title={shell ? "Start RimWorld" : "Needs the desktop app"}
+          onClick={() => void launch()}
+        >
+          <span aria-hidden="true">&#9654;</span> Play
+        </button>
+        <button
+          className="btn play split-caret"
+          type="button"
+          disabled={!shell || busy || !scan.paths.game}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="How to start the game"
+          title="How to start the game"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span aria-hidden="true">&#9662;</span>
+        </button>
+        {open && (
+          <div className="split-menu" role="menu">
+            <button
+              className="split-item"
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                void launch();
+              }}
+            >
+              <b>Play</b>
+              <small>Starts the game and leaves it to you.</small>
+            </button>
+            <button
+              className="split-item"
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onPlayAndWatch();
+              }}
+            >
+              <b>Play and watch</b>
+              <small>Follows the log as it is written, so a crash on load is in front of you.</small>
+            </button>
+          </div>
+        )}
+      </span>
       {status && <span className="game-status">{status}</span>}
     </div>
   );
