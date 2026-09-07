@@ -703,7 +703,7 @@ fn folder_mtime(folder: &Path) -> Option<String> {
 /// Format a `SystemTime` as an RFC 3339 / ISO 8601 UTC string, e.g.
 /// `2026-09-06T12:34:56.789Z`, using only integer arithmetic. No date/time crate is
 /// available here, and one mtime stamp per mod does not justify adding one.
-fn iso8601(time: SystemTime) -> Option<String> {
+pub fn iso8601(time: SystemTime) -> Option<String> {
     let duration = time.duration_since(std::time::UNIX_EPOCH).ok()?;
     let secs = duration.as_secs() as i64;
     let millis = 0;

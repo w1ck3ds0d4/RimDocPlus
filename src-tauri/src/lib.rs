@@ -1,4 +1,5 @@
 mod scan;
+mod vault;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -74,6 +75,11 @@ pub struct RunReport {
     /// Where the untouched copies went, so a rollback knows what to read.
     backup_dir: String,
     outcomes: Vec<ActionOutcome>,
+}
+
+/// Now, in the same ISO shape everything else in this app records a time with.
+fn now_iso() -> String {
+    scan::iso8601(std::time::SystemTime::now()).unwrap_or_default()
 }
 
 fn backups_root() -> Result<PathBuf, String> {
@@ -588,6 +594,44 @@ fn launch_game(game_dir: String) -> Result<String, String> {
 /// exactly the sort of thing an unattended search must not do.
 static GAME_PID: Mutex<Option<u32>> = Mutex::new(None);
 
+/// Take a mod's current build into the vault.
+///
+/// Cheap to call over a whole modpack: a build already held is recognised by its hash and
+/// costs one walk and no copy, so only what has actually changed is written.
+#[tauri::command(async)]
+fn vault_capture(
+    folder: String,
+    package_id: String,
+    name: String,
+) -> Result<vault::VaultEntry, String> {
+    vault::capture(Path::new(&folder), &package_id, &name, now_iso())
+}
+
+#[tauri::command(async)]
+fn vault_list() -> Result<Vec<vault::VaultEntry>, String> {
+    vault::list()
+}
+
+/// Put a vaulted build back, backing up what it replaces.
+#[tauri::command(async)]
+fn vault_restore(package_id: String, hash: String, target: String) -> Result<String, String> {
+    vault::restore(&package_id, &hash, Path::new(&target))
+}
+
+#[tauri::command(async)]
+fn vault_forget(package_id: String, hash: String) -> Result<String, String> {
+    vault::forget(&package_id, &hash)
+}
+
+/// What is in a mod folder right now, as one hash, without copying anything.
+///
+/// This is how a pin is checked: the modpack records the hash it was built against, and a
+/// mismatch means the mod on disk is not the one it was tested with.
+#[tauri::command(async)]
+fn hash_mod(folder: String) -> Result<String, String> {
+    vault::hash_folder(Path::new(&folder)).map(|(hash, _, _)| hash)
+}
+
 /// Stop the run this app started, if it is still going.
 ///
 /// Used by a search that decides for itself: once the log has said whether the mod list
@@ -790,7 +834,12 @@ pub fn run() {
             is_steam_running,
             list_saves,
             launch_supervised,
-            stop_game
+            stop_game,
+            vault_capture,
+            vault_list,
+            vault_restore,
+            vault_forget,
+            hash_mod
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");
@@ -961,6 +1010,62 @@ mod tests {
                 denied.display()
             );
         }
+    }
+
+    /// Vault a real mod, twice, and check the second is recognised rather than re-copied.
+    ///
+    /// Run with `cargo test --lib -- --ignored vault_roundtrip --nocapture`.
+    #[test]
+    #[ignore]
+    fn vault_roundtrip() {
+        let scanned = scan::scan_install(None).expect("scan");
+        // A small one: the point is the addressing, not how fast a gigabyte copies.
+        let target = scanned
+            .mods
+            .iter()
+            .filter(|m| m.size_bytes > 100_000 && m.size_bytes < 4_000_000)
+            .min_by_key(|m| m.size_bytes)
+            .expect("a small mod");
+        println!(
+            "vaulting {} ({:.1} MB)",
+            target.name,
+            target.size_bytes as f64 / 1024.0 / 1024.0
+        );
+
+        let first = vault::capture(
+            Path::new(&target.folder),
+            &target.package_id,
+            &target.name,
+            now_iso(),
+        )
+        .expect("capture");
+        println!("  hash {} over {} files", first.hash, first.files);
+
+        let again = vault::capture(
+            Path::new(&target.folder),
+            &target.package_id,
+            &target.name,
+            now_iso(),
+        )
+        .expect("recapture");
+        assert_eq!(first.hash, again.hash, "same build must hash the same");
+        assert_eq!(
+            first.captured_at, again.captured_at,
+            "a build already held must be recognised, not re-copied"
+        );
+
+        // The same content hashes the same wherever it lives, which is what makes the vault
+        // addressable at all.
+        let copy = std::env::temp_dir().join("rimdoc-vault-probe");
+        let _ = fs::remove_dir_all(&copy);
+        vault::restore(&target.package_id, &first.hash, &copy).expect("restore");
+        let (copied, _, files) = vault::hash_folder(&copy).expect("hash the restored copy");
+        println!("  restored to {} files, hash {}", files, copied);
+        assert_eq!(copied, first.hash, "a restored build must hash identically");
+
+        let _ = fs::remove_dir_all(&copy);
+        vault::forget(&target.package_id, &first.hash).expect("forget");
+        println!("  vault now holds {} builds", vault::list().unwrap().len());
     }
 
     /// Read the real saves and report what each was made with. Ignored: needs RimWorld.

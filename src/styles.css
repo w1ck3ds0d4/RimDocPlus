@@ -207,8 +207,10 @@ body {
  */
 .tabs {
   display: flex;
-  gap: 2px;
-  padding: 0 12px;
+  /* No gap and no side padding: the tabs divide the bar between them, so the rules that
+     separate them have to meet top and bottom with nothing showing through. */
+  gap: 0;
+  padding: 0;
   background-color: var(--panel);
   background-image:
     linear-gradient(to right, var(--panel), var(--panel)),
@@ -239,13 +241,27 @@ body {
   display: none;
 }
 
+.tab:last-child {
+  border-right: 0;
+}
+
+/*
+ * Each tab takes an equal share of whatever is left over after its own content, so the strip
+ * spans the window instead of trailing off with dead space to the right. Sized from content
+ * rather than into equal columns, because the selected tab carries a label and the rest do
+ * not, and equal columns would squeeze it while leaving the icons swimming.
+ */
 .tab {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 9px 14px;
   background: none;
   border: none;
+  border-right: 1px solid var(--line-soft);
   border-bottom: 2px solid transparent;
   color: var(--dim);
   font: inherit;
