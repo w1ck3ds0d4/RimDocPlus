@@ -37,6 +37,14 @@ export interface ModEntry {
   /** XML patch operations that target an xpath, when the scan read the Patches folder. */
   patches?: PatchOperation[];
   /**
+   * How many PatchOperations the mod ships in total.
+   *
+   * Separate from `patches.length`, which stops at a cap so the list stays readable. A mod
+   * can ship tens of thousands, and reporting the truncated length as the count understated
+   * Combat Extended by twenty-eight times.
+   */
+  patchCount?: number;
+  /**
    * Assembly file names this mod ships, lowercased. No paths: the name is what identifies a
    * library, and it is what two mods shipping the same one have in common.
    */

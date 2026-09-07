@@ -114,6 +114,11 @@ pub struct ModEntry {
     /// implementation always populates both.
     pub textures: TextureStats,
     pub patches: Vec<PatchOperation>,
+    /// How many PatchOperations the mod ships in total.
+    ///
+    /// Separate from `patches.len()`, which stops at a cap so a list stays readable. A mod
+    /// can ship tens of thousands, and what that costs to load is a fact about the total.
+    pub patch_count: usize,
     /// Assembly file names this mod ships, lowercased and deduped.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub assemblies: Vec<String>,
@@ -314,7 +319,12 @@ fn is_backup(name: &std::ffi::OsStr) -> bool {
 }
 /// Patch files read per mod.
 const MAX_PATCH_FILES: usize = 400;
-/// Operations stored per mod. Past this a mod is patching too much to list usefully.
+/// Operations *stored* per mod. Past this a mod is patching too much to list usefully.
+///
+/// The total is counted regardless. Truncating the list and reporting its length as the
+/// number of patch operations understated Combat Extended by twenty-eight times, 1,500
+/// against 42,727 on disk, and did it silently: the only tell was several mods reporting
+/// exactly 1,500. A number that stops counting where the list stops is not a count.
 const MAX_PATCH_OPS: usize = 1500;
 
 /// Run the scan against either the auto-detected install or a caller-supplied override.
@@ -501,7 +511,9 @@ fn scan_mod_dir(dir: &Path, source: ModSource, progress: &mut dyn FnMut(&str)) -
         if let Some(mut mod_entry) = parse_about(input) {
             mod_entry.assemblies = measured.assemblies;
             mod_entry.textures = measured.textures;
-            mod_entry.patches = read_patches(&folder);
+            let scanned = read_patches(&folder);
+            mod_entry.patch_count = scanned.total;
+            mod_entry.patches = scanned.ops;
             mod_entry.preview_path = find_preview(&folder);
             progress(&mod_entry.name);
             mods.push(mod_entry);
@@ -863,6 +875,7 @@ fn parse_about(input: AboutInput) -> Option<ModEntry> {
             truncated: false,
         },
         patches: Vec::new(),
+        patch_count: 0,
         active: false,
         load_index: None,
     })
@@ -966,7 +979,17 @@ fn game_cycle_of(game_version: &str) -> String {
 /// def elements inside a `<value>` block, so matching `Class=` directly would pick up
 /// things that are not operations at all. Every xpath belongs to the nearest `Class`
 /// above it, whatever the nesting.
-fn read_patches(mod_folder: &Path) -> Vec<PatchOperation> {
+/// The operations a mod ships, and how many there really are.
+///
+/// Two numbers because they answer different questions. The list is for showing which
+/// targets collide with which; the total is for saying what a mod costs to load, and that
+/// one has to be right whether or not the list was cut short.
+struct PatchScan {
+    ops: Vec<PatchOperation>,
+    total: usize,
+}
+
+fn read_patches(mod_folder: &Path) -> PatchScan {
     // Versioned mods nest their payload under a cycle folder, so Patches lives at either
     // <mod>/Patches or <mod>/1.6/Patches. Looking only at the top level missed three
     // quarters of the mods that ship patches at all.
@@ -983,7 +1006,10 @@ fn read_patches(mod_folder: &Path) -> Vec<PatchOperation> {
 
     let mut stack: Vec<PathBuf> = roots.into_iter().filter(|r| r.exists()).collect();
     if stack.is_empty() {
-        return Vec::new();
+        return PatchScan {
+            ops: Vec::new(),
+            total: 0,
+        };
     }
 
     let mut files: Vec<PathBuf> = Vec::new();
@@ -1008,10 +1034,8 @@ fn read_patches(mod_folder: &Path) -> Vec<PatchOperation> {
     }
 
     let mut ops = Vec::new();
+    let mut total = 0usize;
     for file in files {
-        if ops.len() >= MAX_PATCH_OPS {
-            break;
-        }
         let Ok(bytes) = fs::read(&file) else { continue };
         let text = String::from_utf8_lossy(&bytes).into_owned();
         let rel = file
@@ -1021,8 +1045,11 @@ fn read_patches(mod_folder: &Path) -> Vec<PatchOperation> {
             .replace('\\', "/");
 
         for (op_start, content_start, content_end) in find_all_tag_matches(&text, "xpath") {
+            // Counted before the cap is consulted, so the total is of what the mod ships
+            // rather than of what this bothered to keep.
+            total += 1;
             if ops.len() >= MAX_PATCH_OPS {
-                break;
+                continue;
             }
             let op = last_class_attr(&text[..op_start]).unwrap_or_else(|| "unknown".to_string());
             ops.push(PatchOperation {
@@ -1032,7 +1059,7 @@ fn read_patches(mod_folder: &Path) -> Vec<PatchOperation> {
             });
         }
     }
-    ops
+    PatchScan { ops, total }
 }
 
 /// Same target written two ways must compare equal, or collisions go unnoticed.
@@ -1547,12 +1574,16 @@ mod tests {
             r#"<Patch><Operation Class="PatchOperationReplace"><xpath>/Defs/ThingDef[1]</xpath></Operation></Patch>"#,
         );
 
-        let ops = read_patches(&mod_dir);
-        assert_eq!(ops.len(), 2);
-        assert!(ops
+        let scanned = read_patches(&mod_dir);
+        assert_eq!(scanned.ops.len(), 2);
+        // The total counts what the mod ships, not what the list kept.
+        assert_eq!(scanned.total, 2);
+        assert!(scanned
+            .ops
             .iter()
             .any(|o| o.op == "PatchOperationAdd" && o.file == "Patches/Root.xml"));
-        assert!(ops
+        assert!(scanned
+            .ops
             .iter()
             .any(|o| o.op == "PatchOperationReplace" && o.file == "1.6/Patches/Versioned.xml"));
     }
