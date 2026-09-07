@@ -384,6 +384,34 @@ struct ScanProgressEvent {
     label: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionLog {
+    path: String,
+    text: String,
+}
+
+/// Read the game's current Player.log.
+///
+/// The browser build reads a fixture written at build time, which froze the Session tab at
+/// whenever the app was compiled: a fault the player had since fixed stayed on screen, and a
+/// new one never appeared. Read lossily on purpose, because logs carry raw bytes from mods
+/// with odd encodings and a strict decode would drop the whole file over one of them.
+#[tauri::command(async)]
+fn read_session_log() -> Result<Option<SessionLog>, String> {
+    let Some(path) = scan::discover().player_log else {
+        return Ok(None);
+    };
+    let bytes = match fs::read(&path) {
+        Ok(b) => b,
+        Err(_) => return Ok(None),
+    };
+    Ok(Some(SessionLog {
+        path,
+        text: bytes.iter().map(|&b| b as char).collect(),
+    }))
+}
+
 #[tauri::command(async)]
 fn scan_install(app: AppHandle) -> Result<scan::ScanResult, String> {
     scan::scan_install_with(None, &mut |p| {
@@ -461,7 +489,8 @@ pub fn run() {
             rollback,
             launch_game,
             read_mod_preview,
-            scan_install
+            scan_install,
+            read_session_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");

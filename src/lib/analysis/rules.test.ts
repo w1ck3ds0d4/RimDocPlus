@@ -329,6 +329,23 @@ describe("log analysis", () => {
     });
   });
 
+  describe("the ghost-subscription complaint", () => {
+    const GHOST = "Created WorkshopItem for 3092936341 but there is no folder for it.";
+
+    const ghost = (mods: ModEntry[]) =>
+      findingsFromLog(analyzeLog(GHOST), mods).find((f) => f.rule === "log:ghost-subscription");
+
+    it("stands while nothing carrying that file id is installed", () => {
+      expect(ghost([mod("other.mod", { steamId: "999" })])?.stale).toBeUndefined();
+    });
+
+    /** Resubscribing is meant to make the folder arrive; the scan finding it is the proof. */
+    it("is settled once the download has arrived", () => {
+      const arrived = [mod("cabbage.rimcities", { name: "RimCities", steamId: "3092936341" })];
+      expect(ghost(arrived)?.stale).toContain("RimCities");
+    });
+  });
+
   it("attributes a stack trace back to the mod that owns the namespace", () => {
     const mods = [mod("dankpyon.medieval.overhaul", { name: "Medieval Overhaul" })];
     const findings = findingsFromLog(analyzeLog(log), mods);

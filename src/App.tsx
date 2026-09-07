@@ -27,7 +27,7 @@ import { Settings, loadDevMode, loadOversizePx, saveOversizePx } from "./compone
 import { GameControls } from "./components/GameControls";
 import { Logo } from "./components/Logo";
 import { Splash } from "./components/Splash";
-import { inShell, scanInstall, watchScan, type ScanProgress } from "./lib/shell";
+import { inShell, readSessionLog, scanInstall, watchScan, type ScanProgress } from "./lib/shell";
 
 type Tab = "home" | "doctor" | "session" | "packs" | "order" | "library" | "settings";
 
@@ -65,7 +65,13 @@ export default function App() {
     });
 
     // The shell scans the install itself; the browser has only the build-time fixture.
-    Promise.all([inShell() ? scanInstall() : loadScan(), loadSession(), loadWorkshop()])
+    // Both the install and the log are read live in the shell. The browser has only the
+    // fixtures `pnpm scan` wrote.
+    Promise.all([
+      inShell() ? scanInstall() : loadScan(),
+      inShell() ? readSessionLog() : loadSession(),
+      loadWorkshop(),
+    ])
       .then(([s, l, w]) => {
         setScan(s);
         setSession(l);
@@ -150,7 +156,12 @@ export default function App() {
     setScanning(true);
     const stop = await watchScan(setScanProgress);
     try {
-      setScan(await scanInstall());
+      // The log is retaken alongside the install. A rescan that refreshed only the files
+      // left the Session tab reporting faults from a run the player had already dealt with,
+      // with no way to clear them short of restarting the app.
+      const [next, log] = await Promise.all([scanInstall(), readSessionLog()]);
+      setScan(next);
+      setSession(log);
     } catch (e) {
       console.error("Rescan failed", e);
     } finally {

@@ -400,6 +400,11 @@ export function findingsFromLog(analysis: SessionAnalysis, mods: ModEntry[]): Fi
   });
 }
 
+/** The Workshop file id a ghost-subscription complaint names. */
+function ghostIdOf(event: LogEvent): string | undefined {
+  return /WorkshopItem for (\d+)/.exec(event.message)?.[1];
+}
+
 /**
  * Whether the scan proves a logged fault has already been dealt with.
  *
@@ -409,15 +414,30 @@ export function findingsFromLog(analysis: SessionAnalysis, mods: ModEntry[]): Fi
  * genuinely decisive: most faults leave no trace on disk, and silence is not proof.
  */
 function settledSince(event: LogEvent, mods: ModEntry[]): string | undefined {
-  if (event.category !== "duplicate-package-id") return undefined;
-  const id = duplicateIdOf(event)?.toLowerCase();
-  if (!id) return undefined;
-  // Exactly one copy is proof it was resolved. None is not: the id may be from a mod since
-  // uninstalled, or one this parser read wrongly, and neither is grounds for a claim.
-  const copies = mods.filter((m) => m.packageId === id).length;
-  return copies === 1
-    ? `Only one copy of ${id} is installed now, so this was resolved after the log was written.`
-    : undefined;
+  if (event.category === "duplicate-package-id") {
+    const id = duplicateIdOf(event)?.toLowerCase();
+    if (!id) return undefined;
+    // Exactly one copy is proof it was resolved. None is not: the id may be from a mod since
+    // uninstalled, or one this parser read wrongly, and neither is grounds for a claim.
+    const copies = mods.filter((m) => m.packageId === id).length;
+    return copies === 1
+      ? `Only one copy of ${id} is installed now, so this was resolved after the log was written.`
+      : undefined;
+  }
+
+  if (event.category === "ghost-subscription") {
+    // The complaint is that Steam registered a subscription and no folder arrived. A mod
+    // carrying that file id in the scan is the folder having arrived since, which is what
+    // resubscribing is meant to achieve and the only way to know it worked.
+    const id = ghostIdOf(event);
+    if (!id) return undefined;
+    const arrived = mods.find((m) => m.steamId === id);
+    return arrived
+      ? `${arrived.name} has downloaded since, so the subscription is no longer a ghost.`
+      : undefined;
+  }
+
+  return undefined;
 }
 
 /**

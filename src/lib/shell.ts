@@ -113,6 +113,15 @@ export function scanInstall(): Promise<ScanResult> {
   return invoke<ScanResult>("scan_install", {});
 }
 
+/**
+ * Read the game's current Player.log.
+ *
+ * Null when the game has never been run, or the log has been cleared away.
+ */
+export function readSessionLog(): Promise<{ path: string; text: string } | null> {
+  return invoke<{ path: string; text: string } | null>("read_session_log", {});
+}
+
 /** Start RimWorld from its install folder. */
 export function launchGame(gameDir: string): Promise<string> {
   return invoke<string>("launch_game", { gameDir });
