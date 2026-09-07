@@ -757,6 +757,81 @@ fn read_session_log(previous: Option<bool>) -> Result<Option<SessionLog>, String
     }))
 }
 
+/// Hosts a shared log may be fetched from.
+///
+/// An allowlist rather than a scheme check, because this is the only outbound request the
+/// app makes and the point is that it can reach exactly two places. Matched on the whole
+/// host segment and never on a suffix: `gist.github.com.example.com` and
+/// `gist.github.com@example.com` both have a host that is not equal to either of these, so
+/// both are refused without needing to reason about them.
+const LOG_HOSTS: &[&str] = &["gist.github.com", "gist.githubusercontent.com"];
+
+/// A shared log is text. Well past any real log and far short of anything worth streaming.
+const MAX_SHARED_LOG: usize = 24 * 1024 * 1024;
+
+/// The host of an https URL, exactly as written.
+///
+/// Hand-parsed rather than pulled through a URL crate, because the only question being asked
+/// is whether the host is one of two literal strings, and equality against the raw segment
+/// answers it without a dependency that could disagree with the browser about what a host is.
+fn https_host(url: &str) -> Option<&str> {
+    let rest = url.strip_prefix("https://")?;
+    let host = rest.split(['/', '?', '#']).next()?;
+    (!host.is_empty()).then_some(host)
+}
+
+/// The raw form of a gist link, which is what actually holds the log.
+///
+/// A gist page is HTML. Its `/raw` path redirects to the file itself, and ureq follows that.
+fn raw_gist_url(url: &str) -> String {
+    let trimmed = url.trim_end_matches('/');
+    if trimmed.contains("gist.githubusercontent.com") || trimmed.ends_with("/raw") {
+        trimmed.to_string()
+    } else {
+        format!("{trimmed}/raw")
+    }
+}
+
+/// Fetch a log someone shared, from a gist link.
+///
+/// The one request this app makes, and it only happens because a player pasted a link and
+/// pressed a button. RimWorld's Share logs uploads to a gist and writes nothing to disk, so
+/// there is no local file to read instead; the alternative to this is asking someone to
+/// fetch the page themselves and paste it, which is what the paste box is for.
+///
+/// Nothing is sent but the URL that was pasted. No identifier of the machine goes with it.
+#[tauri::command(async)]
+fn fetch_shared_log(url: String) -> Result<SessionLog, String> {
+    let url = url.trim();
+    let Some(host) = https_host(url) else {
+        return Err("That is not an https link. A shared log link starts with https://".into());
+    };
+    if !LOG_HOSTS.contains(&host) {
+        return Err(format!(
+            "RimDoc+ only fetches from {}. Paste the log itself instead, which needs no request at all.",
+            LOG_HOSTS.join(" and ")
+        ));
+    }
+
+    let target = raw_gist_url(url);
+    let mut response = ureq::get(&target)
+        .call()
+        .map_err(|e| format!("Could not fetch that link: {e}"))?;
+
+    let text = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_SHARED_LOG as u64)
+        .read_to_string()
+        .map_err(|e| format!("Could not read what came back: {e}"))?;
+
+    if text.trim().is_empty() {
+        return Err("That link returned nothing.".into());
+    }
+
+    Ok(SessionLog { path: target, text })
+}
+
 /// Every save RimWorld has written, newest first, with the mod list each was made with.
 ///
 /// Only the head of each file is read: the mod list sits in a meta block at the very top,
@@ -1095,6 +1170,7 @@ pub fn run() {
             read_mod_preview,
             scan_install,
             read_session_log,
+            fetch_shared_log,
             is_steam_running,
             list_saves,
             launch_supervised,
@@ -1397,6 +1473,60 @@ mod tests {
 
     /// An id Steam has no record of installing is not an error: the folder removal beside it
     /// is the part that matters, and a manifest that never mentioned it is already correct.
+    #[test]
+    fn a_shared_log_link_is_matched_on_the_whole_host() {
+        assert_eq!(
+            https_host("https://gist.github.com/x/abc"),
+            Some("gist.github.com")
+        );
+        assert_eq!(
+            https_host("https://gist.githubusercontent.com/x/abc/raw"),
+            Some("gist.githubusercontent.com")
+        );
+
+        // Every one of these has a host that is not equal to an allowed one, which is the
+        // whole reason the check is equality on the segment rather than a suffix test.
+        for hostile in [
+            "https://gist.github.com.example.com/x",
+            "https://gist.github.com@example.com/x",
+            "https://evil.gist.github.com.co/x",
+            "https://gist.github.com:8443/x",
+        ] {
+            let host = https_host(hostile).expect("a host");
+            assert!(
+                !LOG_HOSTS.contains(&host),
+                "{hostile} resolved to {host}, which was allowed"
+            );
+        }
+
+        // Not https at all, so there is nothing to check against.
+        assert_eq!(https_host("http://gist.github.com/x"), None);
+        assert_eq!(https_host("file:///etc/passwd"), None);
+        assert_eq!(https_host("https://"), None);
+    }
+
+    #[test]
+    fn a_gist_page_link_becomes_the_raw_one() {
+        assert_eq!(
+            raw_gist_url("https://gist.github.com/HugsLibRecordKeeper/abc123"),
+            "https://gist.github.com/HugsLibRecordKeeper/abc123/raw"
+        );
+        // Already raw, or already the content host: left as it is rather than doubled up.
+        assert_eq!(
+            raw_gist_url("https://gist.github.com/x/abc/raw"),
+            "https://gist.github.com/x/abc/raw"
+        );
+        assert_eq!(
+            raw_gist_url("https://gist.githubusercontent.com/x/abc/raw/f/Player.log"),
+            "https://gist.githubusercontent.com/x/abc/raw/f/Player.log"
+        );
+        // A trailing slash is a link someone copied out of a browser bar.
+        assert_eq!(
+            raw_gist_url("https://gist.github.com/x/abc/"),
+            "https://gist.github.com/x/abc/raw"
+        );
+    }
+
     #[test]
     fn steam_paths_survive_the_spaces_in_them() {
         // Exactly what `reg query` printed here: lower case, forward slashes, and a space

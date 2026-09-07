@@ -2200,6 +2200,31 @@ tr.row-off td:not(.toggle-cell) {
   flex-wrap: wrap;
 }
 
+.log-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.log-link-url {
+  flex: 1 1 320px;
+  min-width: 0;
+  padding: 8px 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.log-link-url:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .log-paste {
   display: block;
   width: 100%;

@@ -133,7 +133,7 @@ Every installed mod in one table, sortable by the things that actually differ:
 
 **Cleanup candidates** narrows it to mods that are enabled, carrying real texture weight, and that nothing else depends on. Deliberately conservative, and a shortlist to look at rather than a recommendation: "nothing depends on it" and "you do not want it" are different statements, and only one of them is measurable.
 
-Workshop data is the only thing RimDoc+ ever sends off the machine, so it is a separate opt-in command:
+Workshop data is one of only two things that ever leave the machine, and it is a separate opt-in command:
 
 ```bash
 pnpm workshop          # fetch anything missing or older than a week

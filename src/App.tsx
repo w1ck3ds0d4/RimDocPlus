@@ -177,7 +177,9 @@ export default function App() {
         scanInstall(),
         // Retaken from whichever log is being read, so a rescan does not quietly switch the
         // Session tab back to the live run while the picker still says otherwise.
-        logSource === "pasted" ? Promise.resolve(session) : readSessionLog(logSource === "previous"),
+        logSource === "pasted" || logSource === "link"
+          ? Promise.resolve(session)
+          : readSessionLog(logSource === "previous"),
       ]);
       setScan(next);
       setSession(log);
@@ -237,6 +239,12 @@ export default function App() {
   useEffect(() => {
     if (logSource === "pasted") {
       setSession(pasted.trim() ? { path: "pasted from RimWorld", text: pasted } : null);
+      return;
+    }
+    // A fetched log arrives through the picker's own button, so switching to this source
+    // clears what was there rather than reading a file over it.
+    if (logSource === "link") {
+      setSession(null);
       return;
     }
     if (!inShell()) return;
@@ -423,7 +431,13 @@ export default function App() {
         {tab === "session" && active && <GameWatch scan={workingScan} modpack={active} />}
         {tab === "session" && (
           <>
-            <LogSourcePicker value={logSource} onChange={setLogSource} pasted={pasted} onPasted={setPasted} />
+            <LogSourcePicker
+              value={logSource}
+              onChange={setLogSource}
+              pasted={pasted}
+              onPasted={setPasted}
+              onFetched={setSession}
+            />
             {sessionAnalysis ? (
               <SessionReport
                 analysis={sessionAnalysis}
@@ -436,7 +450,9 @@ export default function App() {
                   ? "No previous run. RimWorld keeps one only once the game has been launched twice."
                   : logSource === "pasted"
                     ? "Nothing pasted yet."
-                    : "No session log loaded."}
+                    : logSource === "link"
+                      ? "Paste a gist link and press Fetch."
+                      : "No session log loaded."}
               </p>
             )}
           </>

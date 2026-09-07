@@ -6,6 +6,7 @@ import { useRepairApi } from "./Repair";
 import { buildReport, describeReport } from "../lib/shareLog";
 import { download } from "../lib/download";
 import { formatMs } from "../lib/format";
+import { fetchSharedLog, inShell } from "../lib/shell";
 
 /**
  * The session, and a report of it written for someone else to read.
@@ -15,7 +16,7 @@ import { formatMs } from "../lib/format";
  * so what leaves is the environment, the clustered faults with their attribution, and the
  * mod list, which is what anyone helping actually needs.
  */
-export type LogSource = "current" | "previous" | "pasted";
+export type LogSource = "current" | "previous" | "pasted" | "link";
 
 const SOURCES: { value: LogSource; label: string; note: string }[] = [
   { value: "current", label: "This run", note: "Player.log, as it stands now" },
@@ -25,6 +26,7 @@ const SOURCES: { value: LogSource; label: string; note: string }[] = [
     note: "Player-prev.log. After a crash this is the run that crashed",
   },
   { value: "pasted", label: "Pasted", note: "The log RimWorld's debug window copies out" },
+  { value: "link", label: "From a link", note: "A gist link, which is what Share logs gives you" },
 ];
 
 /**
@@ -45,12 +47,31 @@ export function LogSourcePicker({
   onChange,
   pasted,
   onPasted,
+  onFetched,
 }: {
   value: LogSource;
   onChange: (next: LogSource) => void;
   pasted: string;
   onPasted: (next: string) => void;
+  onFetched: (log: { path: string; text: string } | null) => void;
 }) {
+  const [url, setUrl] = useState("");
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function fetchIt() {
+    setFetching(true);
+    setError(null);
+    try {
+      onFetched(await fetchSharedLog(url));
+    } catch (e) {
+      onFetched(null);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFetching(false);
+    }
+  }
+
   return (
     <div className="log-source">
       <div className="log-source-tabs">
@@ -75,6 +96,33 @@ export function LogSourcePicker({
           placeholder="Paste a RimWorld log here. In the game's debug window, Copy to clipboard puts the whole thing on your clipboard, mod list included."
           onChange={(e) => onPasted(e.target.value)}
         />
+      )}
+      {value === "link" && (
+        <div className="log-link">
+          <input
+            className="log-link-url"
+            type="url"
+            value={url}
+            spellCheck={false}
+            placeholder="https://gist.github.com/..."
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && url.trim() && void fetchIt()}
+          />
+          <button
+            className="btn primary"
+            type="button"
+            disabled={fetching || !url.trim() || !inShell()}
+            title={inShell() ? undefined : "Needs the desktop app"}
+            onClick={() => void fetchIt()}
+          >
+            {fetching ? "Fetching..." : "Fetch"}
+          </button>
+          <span className="repair-note">
+            The only request RimDoc+ makes, and only when you press this. It fetches from gist.github.com and
+            nowhere else.
+          </span>
+          {error && <span className="prompt-error">{error}</span>}
+        </div>
       )}
     </div>
   );

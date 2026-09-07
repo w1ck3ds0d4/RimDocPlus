@@ -138,6 +138,17 @@ export function isSteamRunning(): Promise<boolean> {
   return invoke<boolean>("is_steam_running", {});
 }
 
+/**
+ * Fetch a log someone shared, from a gist link.
+ *
+ * The only outbound request this app makes, and only because a link was pasted and a button
+ * pressed. The shell refuses any host but gist.github.com and gist.githubusercontent.com, so
+ * this cannot be turned into a general fetcher by whatever ends up in the box.
+ */
+export function fetchSharedLog(url: string): Promise<{ path: string; text: string }> {
+  return invoke<{ path: string; text: string }>("fetch_shared_log", { url });
+}
+
 export interface SteamShutdown {
   /** True only when this call closed a Steam that was actually running. */
   closed: boolean;
