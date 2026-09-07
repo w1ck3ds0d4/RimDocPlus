@@ -206,7 +206,7 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
 
   if (!session) {
     return (
-      <section className="bisect">
+      <section className="bisect offer">
         {dialog}
         {/*
           Louder than a section label. This is the way out when the rules have named nothing,
