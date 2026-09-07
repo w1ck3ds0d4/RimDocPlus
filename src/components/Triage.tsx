@@ -39,6 +39,7 @@ export function Triage({
   modpack,
   workshop,
   applyModpack,
+  onPrepare,
   onApplied,
 }: {
   findings: Finding[];
@@ -46,6 +47,15 @@ export function Triage({
   modpack: Modpack;
   workshop?: WorkshopCache | null;
   applyModpack: (modpack: Modpack, label: string) => void;
+  /**
+   * Anything that has to be gathered before triage can judge, and the findings it produces.
+   *
+   * The Harmony check reads every mod's assemblies and raises real errors, but it was opt in
+   * and behind its own button, so a triage run made before pressing it reported "nothing
+   * blocking" while four broken patches sat unlooked-for. A run that quietly skips a check
+   * it could have made is not triage.
+   */
+  onPrepare?: () => Promise<Finding[]>;
   /** Called once a run has changed files on disk, so the scan can be retaken. */
   onApplied?: () => void;
 }) {
@@ -72,20 +82,24 @@ export function Triage({
    * blocks the frame, so the button never gets to change and the window simply stops for a
    * moment. Yielding once lets the busy state land first.
    */
-  function run() {
+  async function run() {
     if (busy) return;
     setBusy(true);
-    setTimeout(() => {
-      try {
-        plan();
-      } finally {
-        setBusy(false);
-      }
-    }, 0);
+    try {
+      // Gathered first, so the run judges everything the app could have known rather than
+      // everything it happened to already know.
+      const gathered = onPrepare ? await onPrepare() : [];
+      // Yielded once so the button repaints as busy before a synchronous plan blocks it.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      plan(gathered);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function plan() {
-    const triage = runTriage(findings, { scan, modpack }, { auto, workshop });
+  function plan(gathered: Finding[]) {
+    const all = gathered.length > 0 ? [...findings, ...gathered] : findings;
+    const triage = runTriage(all, { scan, modpack }, { auto, workshop });
     if (triage.applied.length) {
       applyModpack(
         triage.modpack,
@@ -153,7 +167,7 @@ export function Triage({
           className={`triage-btn${findings.length === 0 ? " clean" : ""}${busy ? " busy" : ""}`}
           type="button"
           disabled={busy}
-          onClick={run}
+          onClick={() => void run()}
         >
           <span className="cross" aria-hidden="true">
             <svg width="30" height="30" viewBox="0 0 16 16" focusable="false">

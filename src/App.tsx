@@ -35,7 +35,14 @@ import { GameControls } from "./components/GameControls";
 import { Logo } from "./components/Logo";
 import { TabIcon } from "./components/TabIcon";
 import { Splash } from "./components/Splash";
-import { inShell, readSessionLog, scanInstall, watchScan, type ScanProgress } from "./lib/shell";
+import {
+  inShell,
+  probePatches,
+  readSessionLog,
+  scanInstall,
+  watchScan,
+  type ScanProgress,
+} from "./lib/shell";
 
 type Tab = "home" | "doctor" | "session" | "saves" | "packs" | "order" | "library" | "settings";
 
@@ -247,6 +254,35 @@ export default function App() {
    */
   const [probe, setProbe] = useState<ProbeReport | null>(null);
 
+  /**
+   * Run the Harmony check before triage, unless it has already been run.
+   *
+   * It reads every mod's assemblies and raises real errors, but it lived behind its own
+   * button, so a triage run made before pressing it reported "nothing blocking" while
+   * broken patches sat unlooked-for. Its findings are returned rather than only stored,
+   * because the state that stores them will not have updated by the time the run reads it.
+   *
+   * A failure here is not a failure of the run. The probe may not be installed beside a
+   * development build, and triage still has everything else to say.
+   */
+  async function prepareTriage(): Promise<Finding[]> {
+    if (probe || !inShell() || !workingScan || !active) return [];
+    const code = workingScan.mods.filter(
+      (mod) => active.activeOrder.includes(mod.packageId) && mod.hasAssemblies,
+    );
+    if (code.length === 0) return [];
+    try {
+      const report = await probePatches(
+        code.map((mod) => mod.folder),
+        workingScan.gameCycle,
+      );
+      setProbe(report);
+      return findingsFromProbe(report, workingScan.mods, workingScan.gameCycle);
+    } catch {
+      return [];
+    }
+  }
+
   const staticFindings = useMemo<Finding[]>(() => {
     if (!workingScan) return [];
     const rules = runStaticRules(workingScan, { oversizePx, workshop });
@@ -436,6 +472,7 @@ export default function App() {
                 modpack={active}
                 workshop={workshop}
                 applyModpack={applyModpack}
+                onPrepare={prepareTriage}
                 onApplied={() => void rescan()}
               />
             )}
