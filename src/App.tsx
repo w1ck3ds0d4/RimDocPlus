@@ -293,8 +293,34 @@ export default function App() {
 
       <nav className="tabs" role="tablist">
         <TabButton id="home" tab={tab} setTab={setTab} label="Home" />
-        <TabButton id="doctor" tab={tab} setTab={setTab} label="Doctor" count={staticFindings.length} />
-        <TabButton id="session" tab={tab} setTab={setTab} label="Session" count={sessionFindings.length} />
+        <TabButton
+          id="doctor"
+          tab={tab}
+          setTab={setTab}
+          label="Doctor"
+          count={staticFindings.length}
+          tone={
+            staticFindings.some((f) => f.severity === "critical" || f.severity === "error")
+              ? "critical"
+              : staticFindings.some((f) => f.severity === "warning")
+                ? "warning"
+                : undefined
+          }
+        />
+        <TabButton
+          id="session"
+          tab={tab}
+          setTab={setTab}
+          label="Session"
+          count={sessionFindings.length}
+          tone={
+            sessionFindings.some((f) => f.severity === "critical" || f.severity === "error")
+              ? "critical"
+              : sessionFindings.some((f) => f.severity === "warning")
+                ? "warning"
+                : "info"
+          }
+        />
         {/* Only counts that mean "something needs attention" are shown. Modpack, load order
             and library sizes are inventory, they are on Home and in the header already, and
             three extra pills were most of what pushed the tab bar off a narrow window. */}
@@ -476,12 +502,21 @@ function TabButton({
   setTab,
   label,
   count,
+  tone,
 }: {
   id: Tab;
   tab: Tab;
   setTab: (t: Tab) => void;
   label: string;
   count?: number;
+  /**
+   * What the count means, which decides its colour.
+   *
+   * A count is only on a tab because something in there wants looking at, so it is coloured
+   * by how much: red for anything blocking, amber for a warning, blue for a fact. A number
+   * that is the same colour whatever it says is just a number.
+   */
+  tone?: "critical" | "warning" | "info";
 }) {
   return (
     <button
@@ -494,7 +529,7 @@ function TabButton({
     >
       <TabIcon name={id} />
       <span className="tab-label">{label}</span>
-      {count !== undefined && <span className="pill">{count}</span>}
+      {count !== undefined && <span className={`pill${tone ? ` pill-${tone}` : ""}`}>{count}</span>}
     </button>
   );
 }

@@ -292,6 +292,29 @@ body {
   color: var(--accent);
 }
 
+/*
+ * Coloured by what the count means rather than by which tab it is on, and kept when that tab
+ * is selected: the number is the reason to look, so it should not go quiet at the moment you
+ * do. Backgrounds are mixed low so a row of counts stays a row of counts.
+ */
+.tab .pill-critical,
+.tab[aria-selected="true"] .pill-critical {
+  color: var(--critical);
+  background: color-mix(in srgb, var(--critical) 16%, transparent);
+}
+
+.tab .pill-warning,
+.tab[aria-selected="true"] .pill-warning {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.tab .pill-info,
+.tab[aria-selected="true"] .pill-info {
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 16%, transparent);
+}
+
 /* Layout ------------------------------------------------------------------ */
 
 main {
