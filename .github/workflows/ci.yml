@@ -54,6 +54,32 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      # The shell bundles the patch probe as a sidecar, so Tauri's build script needs the
+      # binary present. It is built rather than committed: 13 MB does not belong in a git
+      # history. Built here through the same pnpm scripts a contributor runs, so a change
+      # that breaks them fails the build rather than being found by hand later.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the patch probe
+        run: pnpm probe:build
+
+      - name: Stage it as a sidecar
+        run: pnpm probe:stage
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
