@@ -169,6 +169,16 @@ export function runPatchRulesWithIntents(scan: ScanResult): {
           (paths.length > 8 ? `\n  and ${paths.length - 8} more` : ""),
         packageIds: [later.packageId, earlier.packageId],
         count: paths.length,
+        // Still info, and still usually deliberate. The repair is offered because the one
+        // thing a reader cannot do from a note is act on it, not because the app thinks
+        // the override is wrong. It needs a decision, so it is never automatic.
+        fix: {
+          kind: "disable-overriding-mod",
+          label: `Disable ${later.name}`,
+          tier: 2 as const,
+          auto: false,
+          params: { overriding: later.packageId, overridden: earlier.packageId },
+        },
       } satisfies Finding;
     });
 

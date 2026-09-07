@@ -192,6 +192,56 @@ const REPAIRS: Record<string, RepairFn> = {
     };
   },
 
+  /**
+   * Switch off the mod that is winning a patch collision.
+   *
+   * Offered as a choice with one option rather than as an automatic repair, because
+   * overriding is how content layers in RimWorld and this is usually the system working
+   * rather than a fault. The app must not decide it, and the summary carries what disabling
+   * would cost so the decision is made against something rather than against a hunch.
+   */
+  "disable-overriding-mod": (ctx) => {
+    const packageId = str(ctx, "overriding");
+    if (!packageId) return null;
+
+    const byId = modsById(ctx.scan);
+    const mod = byId.get(packageId);
+    if (!mod) return null;
+    // Already off: there is nothing to offer, and a button that would do nothing is worse
+    // than no button.
+    if (!ctx.modpack.activeOrder.includes(packageId)) return null;
+
+    const overridden = byId.get(str(ctx, "overridden") ?? "");
+    const dependents = dependentsOf(ctx).get(packageId) ?? 0;
+
+    return {
+      kind: "choice",
+      summary:
+        `Switching ${mod.name} off leaves ${overridden?.name ?? "the other mod"}'s version of the ` +
+        `patched nodes in effect. ` +
+        (dependents > 0
+          ? `${dependents} enabled mod${dependents === 1 ? "" : "s"} declare${dependents === 1 ? "s" : ""} ` +
+            `${mod.name} as a dependency and would be left without it.`
+          : "Nothing enabled declares it as a dependency.") +
+        " Overriding is usually deliberate, so this is offered rather than recommended.",
+      choices: [
+        {
+          label: `Disable ${mod.name}`,
+          detail: packageId,
+          recommended: false,
+          plan: (): RepairPlan => ({
+            kind: "modpack",
+            modpack: {
+              ...ctx.modpack,
+              activeOrder: ctx.modpack.activeOrder.filter((other) => other !== packageId),
+            },
+            summary: `Removes ${mod.name} from the modpack.`,
+          }),
+        },
+      ],
+    };
+  },
+
   "pick-duplicate-winner": (ctx) => {
     const packageId = str(ctx, "packageId");
     if (!packageId) return null;

@@ -19,7 +19,7 @@ export const RELEASES: Release[] = [
     version: "0.1.0",
     date: "2026-09-07",
     changes: [
-      "Doctor: nine static rules over the load order, from orphaned entries and missing dependencies to bootstrap position and patch overrides",
+      "Doctor: eleven static rules over the load order, from orphaned entries and missing dependencies to bootstrap position and patch overrides",
       "Perform triage applies every repair it can defend, then re-runs the rules to count what actually resolved",
       "Desktop shell applies repairs directly, writes the load order into ModsConfig.xml and launches the game",
       "The desktop build scans your install itself, so the numbers are what is on disk rather than what was there when the app was built",
@@ -46,11 +46,16 @@ export const RELEASES: Release[] = [
       "Modpacks can be pinned to exact mod builds, and the vault keeps a copy of each so a pin still refers to something",
       "Settings: choose the size at which a texture counts as oversized, from 1024px down to anything above the 512px target",
       "Every change is backed up first, and every repair that touches disk can be rolled back",
+      "A repair Steam would undo is held back on its own, so the rest of a run still applies instead of the whole thing being refused",
+      "One button closes Steam, applies the repair and starts it again, refusing while Steam is running a game",
+      "Reset the app, under developer mode, clears everything it remembers and leaves your install, backups and vault alone",
     ],
     known: [
-      "Launching the game is not yet supervised: no live log streaming or crash capture",
-      "Nothing here can tell you the game boots, only that the load order is structurally sound",
-      "Harmony patch analysis needs a C# sidecar that is not built yet",
+      "Harmony patch analysis stops at the stack trace: a patch is named, but whether its target method still exists in this build of the game needs a C# sidecar that is not built yet",
+      "Tier 2 to 4 repairs are specified and not implemented: XML patch repair, stub defs, assembly-level neutralisation",
+      "What a mod costs per tick is not measured. Load time and memory are read from outside the process; attributing simulation time needs code running inside the game",
+      "The search judges itself only for faults that stop the mod list loading. A crash an hour into a colony looks the same as a healthy boot from out here",
+      "Subscribing to something new needs the Steamworks SDK. Re-fetching an item you already subscribe to is covered without it",
     ],
   },
 ];

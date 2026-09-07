@@ -73,6 +73,64 @@ function findingWith(fix: ProposedFix, over: Partial<Finding> = {}): Finding {
 const auto = { tier: 1 as const, auto: true, label: "Fix" };
 const manual = { tier: 1 as const, auto: false, label: "Fix" };
 
+describe("disable-overriding-mod", () => {
+  const winner = mod("later.mod", { name: "Later Mod" });
+  const loser = mod("earlier.mod", { name: "Earlier Mod" });
+  const finding = findingWith(
+    {
+      ...manual,
+      kind: "disable-overriding-mod",
+      params: { overriding: "later.mod", overridden: "earlier.mod" },
+    },
+    { severity: "info" },
+  );
+
+  it("offers disabling the winner and nothing else", () => {
+    const plan = planRepair({
+      scan: scanOf([winner, loser], ["earlier.mod", "later.mod"]),
+      modpack: profileOf(["earlier.mod", "later.mod"]),
+      finding,
+    });
+
+    expect(plan?.kind).toBe("choice");
+    const choice = plan?.kind === "choice" ? plan : null;
+    expect(choice?.choices).toHaveLength(1);
+    expect(choice?.choices[0].label).toBe("Disable Later Mod");
+    // Never recommended: overriding is usually the system working, so the app offers the
+    // action without taking a view on it.
+    expect(choice?.choices[0].recommended).toBe(false);
+
+    const applied = choice?.choices[0].plan();
+    expect(applied?.kind).toBe("modpack");
+    if (applied?.kind === "modpack") {
+      expect(applied.modpack.activeOrder).toEqual(["earlier.mod"]);
+    }
+  });
+
+  it("counts what would be left without it", () => {
+    const dependent = mod("needs.later", {
+      dependencies: [{ packageId: "later.mod", displayName: "Later Mod" }],
+    });
+    const plan = planRepair({
+      scan: scanOf([winner, loser, dependent], ["earlier.mod", "later.mod", "needs.later"]),
+      modpack: profileOf(["earlier.mod", "later.mod", "needs.later"]),
+      finding,
+    });
+    expect(plan?.summary).toContain("1 enabled mod declares Later Mod as a dependency");
+  });
+
+  it("offers nothing when the mod is already switched off", () => {
+    // A button that would do nothing is worse than no button.
+    expect(
+      planRepair({
+        scan: scanOf([winner, loser], ["earlier.mod"]),
+        modpack: profileOf(["earlier.mod"]),
+        finding,
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("planRepair", () => {
   it("returns null for a fix kind with no implementation", () => {
     const ctx = {
