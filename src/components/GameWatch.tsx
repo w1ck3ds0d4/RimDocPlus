@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScanResult } from "../lib/types";
 import { analyzeLog } from "../lib/analysis/logParser";
-import { inShell, launchSupervised, watchGame, type GameExit } from "../lib/shell";
+import { inShell, launchSupervised, stopGame, watchGame, type GameExit } from "../lib/shell";
 import { record } from "../lib/history";
 import { download } from "../lib/download";
 import type { Modpack } from "../lib/modpacks";
@@ -21,13 +21,28 @@ type Phase = "idle" | "running" | "done";
  * Nothing here decides the game is broken. A non-zero exit and a quiet stretch are facts
  * about the run; what they mean is for the player and the rules to say.
  */
-export function GameWatch({ scan, modpack }: { scan: ScanResult; modpack: Modpack }) {
+export function GameWatch({
+  scan,
+  modpack,
+  startSignal = 0,
+}: {
+  scan: ScanResult;
+  modpack: Modpack;
+  /**
+   * Bumped when something elsewhere asks for a watched run.
+   *
+   * A counter rather than a boolean, because asking twice is a real thing to want and a
+   * boolean that is already true says nothing the second time.
+   */
+  startSignal?: number;
+}) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [lines, setLines] = useState<string[]>([]);
   const [exit, setExit] = useState<GameExit | null>(null);
   const [quiet, setQuiet] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pinned, setPinned] = useState(true);
+  const [stopping, setStopping] = useState(false);
   const [runs, setRuns] = useState<RunMeasurement[]>(loadRuns);
 
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -68,6 +83,33 @@ export function GameWatch({ scan, modpack }: { scan: ScanResult; modpack: Modpac
       : !log
         ? "No Player.log yet: run the game once first"
         : null;
+
+  // Asked for from the header, which cannot start a watched run itself: this is where the
+  // console and the phases live. Ignored while a run is already going, since the header's
+  // menu is not a way to start a second one.
+  useEffect(() => {
+    if (startSignal > 0 && phase === "idle" && !blocked) void play();
+    // Only the signal: re-running because the phase settled would start an unasked run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startSignal]);
+
+  /**
+   * End the run this app started.
+   *
+   * There was no way to. A watched run could be started from here and from the header's
+   * menu, and then only ended by finding the game and closing it, which is a poor answer
+   * from a window that is already following the process.
+   */
+  async function stopRun() {
+    setStopping(true);
+    try {
+      await stopGame();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStopping(false);
+    }
+  }
 
   async function play() {
     if (!scan.paths.game || !log) return;
@@ -153,6 +195,24 @@ export function GameWatch({ scan, modpack }: { scan: ScanResult; modpack: Modpac
 
       {phase !== "idle" && (
         <>
+          {phase === "running" && (
+            <div className="repair-actions">
+              <button
+                className="btn danger"
+                type="button"
+                disabled={stopping}
+                title="Ends the run this app started. Nothing else is touched."
+                onClick={() => void stopRun()}
+              >
+                {stopping ? "Stopping..." : "Stop the game"}
+              </button>
+              <span className="repair-note">
+                Only the run this app started, by the id it kept. A copy of the game it did not launch is left
+                alone.
+              </span>
+            </div>
+          )}
+
           {quiet !== null && phase === "running" && (
             <p className="warn-line">
               Nothing written for {quiet} seconds. A big load has quiet stretches, so this is not proof of a
