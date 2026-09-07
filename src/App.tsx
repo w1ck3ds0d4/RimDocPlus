@@ -353,11 +353,6 @@ export default function App() {
           <Fact label="Game" value={scan.gameVersion} />
           <Fact label="Installed" value={String(scan.mods.length)} optional />
           <Fact label="In modpack" value={String(workingScan.activeOrder.length)} optional />
-          <Fact
-            label="Issues"
-            value={String(staticFindings.length + sessionFindings.length)}
-            alert={staticFindings.length + sessionFindings.length > 0}
-          />
         </div>
       </header>
 

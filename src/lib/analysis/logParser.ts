@@ -41,6 +41,20 @@ export interface LogEvent {
     /** Each distinct source file named beneath one. */
     files: string[];
   };
+  /**
+   * For a def fault: what is missing, and which defs are affected.
+   *
+   * RimWorld names both on the line. Reading them turns "a def points at another def that
+   * does not exist" into the def that is absent and the ones that wanted it.
+   */
+  defs?: {
+    /** The absent def, as "Verse.SoundDef RT_T72VehicleEngine". Absent for config errors. */
+    missing?: string;
+    /** Defs implicated, each named once. */
+    affected: string[];
+    /** For a config error, what the game objected to. */
+    reason?: string;
+  };
 }
 
 export interface SessionAnalysis {
@@ -211,6 +225,7 @@ export function analyzeLog(text: string): SessionAnalysis {
     if (existing) {
       existing.count++;
       rememberPatch(existing, line, lines, i);
+      rememberDefs(existing, line);
     } else {
       clusters.set(fingerprint, {
         fingerprint,
@@ -223,8 +238,13 @@ export function analyzeLog(text: string): SessionAnalysis {
         count: 1,
         firstLine: i + 1,
         patch: matcher.category === "xml-patch-failure" ? { owner, xpaths: [], files: [] } : undefined,
+        defs:
+          matcher.category === "cross-reference" || matcher.category === "config-error"
+            ? { affected: [] }
+            : undefined,
       });
       rememberPatch(clusters.get(fingerprint)!, line, lines, i);
+      rememberDefs(clusters.get(fingerprint)!, line);
     }
     // Jump past the trace we just consumed so none of it is re-examined.
     i = next - 1;
@@ -260,6 +280,18 @@ const PATCH_XPATH = /xpath="([^"]*(?:"[^"]*"[^"]*)*)"\)/;
 
 /** RimWorld names the file a few lines under the failure. */
 const PATCH_FILE = /^Source file:\s*(.+)$/i;
+
+/**
+ * `Could not resolve cross-reference: No Verse.SoundDef named RT_T72VehicleEngine found to
+ * give to Vehicles.VehicleTurretDef SiegeTank_Turret_TankBreaker`
+ *
+ * The missing thing and the def that wanted it, both named. Reporting neither, which is what
+ * this did, leaves "a def points at another def that does not exist" ten times over.
+ */
+const CROSS_REF = /No\s+(\S+)\s+named\s+(\S+)\s+found to give to\s+(\S+)(?:\s+(\S+))?/;
+
+/** `Config error in WD_Quard: no parts vulnerable to frostbite` */
+const CONFIG_ERROR = /^Config error in\s+([^:]+):\s*(.+)$/;
 
 /** `[The Dead Man's Switch-more dozer] Patch operation ...` names its mod inline. */
 const PATCH_OWNER_INLINE = /^\[([^\]]+)\]\s+Patch operation/;
@@ -329,9 +361,43 @@ function fingerprintOf(category: string, message: string, frames: string[], patc
   if (category === "xml-patch-failure" && patchOwner) {
     return [category, patchOwner].join("|");
   }
+  // One row per absent def, however many things wanted it. Three defs reaching for the same
+  // missing sound is one thing to fix, not three.
+  if (category === "cross-reference") {
+    const found = CROSS_REF.exec(message);
+    if (found) return [category, found[1], found[2]].join("|");
+  }
+  // One row per kind of complaint. The def name is normalised out, because "same research
+  // view coords" affecting four defs is one collision described four times.
+  if (category === "config-error") {
+    const found = CONFIG_ERROR.exec(message);
+    if (found) return [category, found[2].replace(/\d+(\.\d+)?/g, "#").slice(0, 120)].join("|");
+  }
   const normalised = message.replace(/\d+/g, "#").slice(0, 200);
   const top = frames.slice(0, 3).map((f) => f.replace(/\s*\[0x[0-9a-f]+\].*$/i, ""));
   return [category, normalised, ...top].join("|");
+}
+
+/** Add this occurrence's def names to the row it was grouped into. */
+function rememberDefs(event: LogEvent, line: string): void {
+  if (!event.defs) return;
+  const cross = CROSS_REF.exec(line);
+  if (cross) {
+    event.defs.missing ??= `${cross[1]} ${cross[2]}`;
+    const wanted = [cross[3], cross[4]].filter(Boolean).join(" ");
+    if (wanted && !event.defs.affected.includes(wanted) && event.defs.affected.length < 40) {
+      event.defs.affected.push(wanted);
+    }
+    return;
+  }
+  const config = CONFIG_ERROR.exec(line.trim());
+  if (config) {
+    event.defs.reason ??= config[2].trim();
+    const def = config[1].trim();
+    if (!event.defs.affected.includes(def) && event.defs.affected.length < 40) {
+      event.defs.affected.push(def);
+    }
+  }
 }
 
 /** Add this occurrence's xpath and file to the row it was grouped into. */
@@ -439,6 +505,9 @@ interface Explanation {
   params?: (e: LogEvent) => Record<string, string | string[]>;
 }
 
+/** A real newline, spelled so no escaping layer between here and the file can eat it. */
+const NEWLINE = String.fromCharCode(10);
+
 /** Human-readable explanation and repair for each recognised category. */
 const EXPLANATIONS: Record<string, Explanation> = {
   "playdata-reset": {
@@ -513,8 +582,18 @@ const EXPLANATIONS: Record<string, Explanation> = {
     fixKind: "repair-xpath",
   },
   "cross-reference": {
-    title: () => "Unresolved cross-reference",
-    detail: "A def points at another def that does not exist, usually a missing or disabled dependency.",
+    title: (e) =>
+      e.defs?.missing
+        ? `Missing ${e.defs.missing}, wanted by ${e.count} def${e.count === 1 ? "" : "s"}`
+        : "Unresolved cross-reference",
+    detail: (e) => {
+      const said =
+        "A def points at another def that does not exist, usually because the mod defining it " +
+        "is missing, disabled, or loading after the mod that needs it.";
+      const affected = e.defs?.affected ?? [];
+      if (affected.length === 0) return said;
+      return said + NEWLINE + NEWLINE + "Wanted by:" + NEWLINE + affected.map((d) => "  " + d).join(NEWLINE);
+    },
   },
   "missing-type": {
     title: () => "Missing type",
@@ -526,7 +605,20 @@ const EXPLANATIONS: Record<string, Explanation> = {
     title: () => "Def not found",
     detail: "Referenced content does not exist in this load.",
   },
-  "config-error": { title: () => "Def config error", detail: "A def failed validation and was rejected." },
+  "config-error": {
+    title: (e) =>
+      e.defs?.reason
+        ? `${e.count} def${e.count === 1 ? "" : "s"} rejected: ${e.defs.reason.slice(0, 70)}`
+        : "Def config error",
+    detail: (e) => {
+      const said =
+        "The game validated these defs and refused them, so whatever they describe is not in " +
+        "your game. The reason is the game's own words.";
+      const affected = e.defs?.affected ?? [];
+      if (affected.length === 0) return said;
+      return said + NEWLINE + NEWLINE + "Rejected:" + NEWLINE + affected.map((d) => "  " + d).join(NEWLINE);
+    },
+  },
 };
 
 /**

@@ -236,8 +236,10 @@ function readPatches(modFolder) {
   }
 
   const ops = [];
+  // Counted separately from the list, which stops at the cap. Reporting the truncated
+  // length as the number of operations understated Combat Extended by twenty-eight times.
+  let total = 0;
   for (const file of files) {
-    if (ops.length >= MAX_PATCH_OPS) break;
     let text;
     try {
       text = readFileSync(file, "utf8");
@@ -245,7 +247,8 @@ function readPatches(modFolder) {
       continue;
     }
     for (const match of text.matchAll(/<xpath>([\s\S]*?)<\/xpath>/gi)) {
-      if (ops.length >= MAX_PATCH_OPS) break;
+      total++;
+      if (ops.length >= MAX_PATCH_OPS) continue;
       const preceding = text.slice(0, match.index);
       const classes = [...preceding.matchAll(/Class\s*=\s*"([^"]+)"/g)];
       ops.push({
@@ -258,7 +261,7 @@ function readPatches(modFolder) {
       });
     }
   }
-  return ops;
+  return { ops, total };
 }
 
 /** Same target written two ways must compare equal, or collisions go unnoticed. */
@@ -347,7 +350,7 @@ function scanModDir(dir, source) {
         ...mod,
         assemblies: measured.assemblies,
         textures: measured.textures,
-        patches: readPatches(folder),
+        ...(({ ops, total }) => ({ patches: ops, patchCount: total }))(readPatches(folder)),
         previewPath: findPreview(folder),
       });
   }

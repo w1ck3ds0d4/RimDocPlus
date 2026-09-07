@@ -181,23 +181,16 @@ export function GameWatch({
 
       {phase === "idle" && (
         <>
+          {/*
+            No button here. Play and watch is in the header's Play menu, which is on screen
+            whatever tab you are on, so having both put two controls with the same label and
+            the same effect side by side the first time anyone opened this tab.
+          */}
           <p className="muted">
-            Starts RimWorld and follows its log as it is written, so a crash on load is in front of you rather
-            than something to go looking for afterwards.
+            Start one from <b>Play</b> in the header. The log streams in here as it is written.
           </p>
-          <div className="repair-actions">
-            <button
-              className="btn play"
-              type="button"
-              disabled={!!blocked}
-              title={blocked ?? "Start RimWorld and follow the log"}
-              onClick={() => void play()}
-            >
-              <span aria-hidden="true">&#9654;</span> Play and watch
-            </button>
-            {blocked && <span className="repair-note">{blocked}</span>}
-            {error && <span className="prompt-error">{error}</span>}
-          </div>
+          {blocked && <span className="repair-note">{blocked}</span>}
+          {error && <span className="prompt-error">{error}</span>}
         </>
       )}
 

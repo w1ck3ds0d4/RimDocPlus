@@ -3,6 +3,7 @@ import type { Finding, ScanResult, WorkshopCache } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
 import {
   configDir,
+  needsSteamClosed,
   planRepair,
   toPowerShell,
   toRollbackPowerShell,
@@ -10,6 +11,7 @@ import {
   type RepairPlan,
 } from "../lib/repair/repairs";
 import { download } from "../lib/download";
+import { ApplyActions } from "./ApplyActions";
 
 export interface RepairApi {
   scan: ScanResult;
@@ -78,12 +80,23 @@ export function RepairAction({ finding }: { finding: Finding }) {
         <span className="tier">T{finding.fix.tier}</span>
         <span className="caret">{open ? "▾" : "▸"}</span>
       </button>
-      {open && <RepairPanel plan={plan} api={api} onDone={() => setOpen(false)} />}
+      {open && <RepairPanel plan={plan} api={api} onDone={() => setOpen(false)} title={finding.title} />}
     </div>
   );
 }
 
-function RepairPanel({ plan, api, onDone }: { plan: RepairPlan; api: RepairApi; onDone: () => void }) {
+function RepairPanel({
+  plan,
+  api,
+  onDone,
+  title,
+}: {
+  plan: RepairPlan;
+  api: RepairApi;
+  onDone: () => void;
+  /** The finding's own title, so a held-back repair can say which one it was. */
+  title: string;
+}) {
   const [chosen, setChosen] = useState<RepairPlan | null>(null);
   const active = chosen ?? plan;
 
@@ -107,7 +120,14 @@ function RepairPanel({ plan, api, onDone }: { plan: RepairPlan; api: RepairApi; 
         </div>
       )}
 
-      {active.kind === "files" && <FilePlan actions={active.actions} config={configDir(api.scan)} />}
+      {active.kind === "files" && (
+        <FilePlan
+          actions={active.actions}
+          config={configDir(api.scan)}
+          workshop={api.scan.paths.workshop ?? null}
+          title={title}
+        />
+      )}
 
       {active.kind === "external" && (
         <div className="repair-actions">
@@ -144,9 +164,31 @@ function RepairPanel({ plan, api, onDone }: { plan: RepairPlan; api: RepairApi; 
  * a script. Every path is listed before anything is generated, because this is the only
  * class of repair that touches the player's install.
  */
-function FilePlan({ actions, config }: { actions: FileAction[]; config: string | null }) {
+/**
+ * One repair's file changes: what they are, and every way to carry them out.
+ *
+ * The same apply the Doctor's triage uses, rather than a second implementation of it. This
+ * panel used to offer only a script to download, so a single repair was the one place in the
+ * app that could not just do the thing, and the Steam-aware path did not exist here at all.
+ */
+function FilePlan({
+  actions,
+  config,
+  workshop,
+  title,
+  onApplied,
+}: {
+  actions: FileAction[];
+  config: string | null;
+  workshop: string | null;
+  title: string;
+  onApplied?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const script = toPowerShell(actions, config);
+  // A repair moves whole: if any part of it needs Steam closed, all of it waits. The pieces
+  // are paired, and half of this one leaves a mod deleted that Steam still thinks it has.
+  const held = needsSteamClosed(actions);
 
   return (
     <>
@@ -160,7 +202,16 @@ function FilePlan({ actions, config }: { actions: FileAction[]; config: string |
         {actions.length > 12 && <li className="muted">and {actions.length - 12} more</li>}
       </ol>
       <div className="repair-actions">
-        <button className="btn primary" type="button" onClick={() => download("rimdoc-repair.ps1", script)}>
+        <ApplyActions
+          actions={actions}
+          now={held ? [] : actions}
+          deferred={held ? actions : []}
+          deferredFor={held ? [title] : []}
+          config={config}
+          workshop={workshop}
+          onApplied={onApplied}
+        />
+        <button className="btn" type="button" onClick={() => download("rimdoc-repair.ps1", script)}>
           Download .ps1
         </button>
         <button
