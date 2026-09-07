@@ -1,9 +1,16 @@
+/** One group of changes, so a release reads as parts of an app rather than a list. */
+export interface ReleaseSection {
+  /** What this group is about, as a verb the reader recognises. */
+  title: string;
+  items: string[];
+}
+
 export interface Release {
   version: string;
   /** ISO date. */
   date: string;
-  /** What this build added, in the order it matters to someone using it. */
-  changes: string[];
+  /** What this build is, grouped by the part of the app it belongs to. */
+  sections: ReleaseSection[];
   /** Anything that is still not true, so the notes cannot oversell the build. */
   known?: string[];
 }
@@ -11,53 +18,64 @@ export interface Release {
 /**
  * RimDoc+'s own version history.
  *
- * Held here rather than parsed from git so the notes say what changed for the player,
- * which is rarely what the commits say. Newest first.
+ * Held here rather than parsed from git so the notes say what changed for the player, which
+ * is rarely what the commits say. Newest first.
+ *
+ * Grouped, and shorter than the work behind it. A first release is not a list of every
+ * change made on the way to it: thirty-three flat bullets in one column, some of them about
+ * eleven diagnostic rules and some about tab icons, is a changelog nobody finishes. What
+ * belongs here is what the build does, in the shape someone would go looking for it.
  */
 export const RELEASES: Release[] = [
   {
     version: "0.1.0",
-    date: "2026-09-07",
-    changes: [
-      "Doctor: eleven static rules over the load order, from orphaned entries and missing dependencies to bootstrap position and patch overrides",
-      "Perform triage applies every repair it can defend, then re-runs the rules to count what actually resolved",
-      "Desktop shell applies repairs directly, writes the load order into ModsConfig.xml and launches the game",
-      "The desktop build scans your install itself, so the numbers are what is on disk rather than what was there when the app was built",
-      "Applying a repair shows a live transcript, one line per file, and rescans when it finishes",
-      "Modpacks: build, rename, compare and switch between load orders, with the original setup kept as a baseline",
-      "Library: what each mod costs you and what breaks without it, beside Steam's public Workshop signals",
-      "Session: reads the last Player.log, clusters faults by fingerprint and attributes them to a mod",
-      "Mod details: click any mod for its banner, description, cost, relationships and findings",
-      "The Doctor separates what it can repair from what it merely observed, so a finished triage does not look like it achieved nothing",
-      "Triage covers the faults read out of your log too, which is where the most severe findings are",
-      "A logged fault the scan can prove was fixed since is marked settled rather than offered a repair that would do nothing",
-      "Findings are outlined in their severity, so a list can be read by shape before it is read as words",
-      "Retry download on any Workshop mod: removes it and Steam's record of having downloaded it, keeping the subscription, so Steam fetches it again",
-      "Warns when two mods ship the same library, which is how one gets silently bound to the other's build",
-      "Reports mods the Workshop has updated more recently than the copy on disk",
-      "Find the culprit: halves the mod list, runs the game, and halves again on your verdict until one mod is left",
-      "Saves: compares the mod list each colony was made with against the one that would load today",
-      "Harmony patches in a stack trace are named above it, with their kind and the mod that owns them",
-      "A session report you can copy or save: the environment, the faults and the mod list, without the raw log",
-      "Play and watch: the game's log streams in live, and the run reports how it ended",
-      "Every watched run is measured, so two modpacks can be compared on load time, memory and faults",
-      "The search can judge its own trials for a load failure, running each one and reading the log itself",
-      "Tabs carry icons, so the strip stops truncating when the window is narrow",
-      "Modpacks can be pinned to exact mod builds, and the vault keeps a copy of each so a pin still refers to something",
-      "Settings: choose the size at which a texture counts as oversized, from 1024px down to anything above the 512px target",
-      "Every change is backed up first, and every repair that touches disk can be rolled back",
-      "A repair Steam would undo is held back on its own, so the rest of a run still applies instead of the whole thing being refused",
-      "One button closes Steam, applies the repair and starts it again, refusing while Steam is running a game",
-      "Reset the app, under developer mode, clears everything it remembers and leaves your install, backups and vault alone",
-      "Check Harmony patches reads every mod's assemblies and reports the ones patching a method the game no longer has, without launching anything",
-      "The Session tab reads the previous run's log too, or one pasted out of the game, or one shared as a gist",
+    date: "2026-09-08",
+    sections: [
+      {
+        title: "Diagnose",
+        items: [
+          "Reads your install directly: every mod's metadata, assemblies, textures and place in the load order",
+          "Eleven rules over that load order, from orphaned entries and missing dependencies to bootstrap position, duplicate libraries and patch overrides",
+          "Reads the last run's Player.log, groups faults by RimWorld's own reference id, and names the mods whose Harmony patches were on the way to each one",
+          "Also reads the previous run's log, one pasted out of the game, or one shared as a gist",
+          "Checks every mod's assemblies for Harmony patches aiming at methods the game no longer has, without launching anything",
+          "Separates what it can repair from what it only observed, so a finished triage does not read as work waiting",
+        ],
+      },
+      {
+        title: "Repair",
+        items: [
+          "Triage applies every repair it can defend, then re-runs the rules to count what actually resolved",
+          "Every repair is a plan you read before it runs, graded by how much can go wrong, and nothing above the safest tier is silent",
+          "Every change is backed up first, and anything that touched disk can be rolled back in one click",
+          "Writes the load order into ModsConfig.xml and starts the game, or closes Steam, applies and starts it again",
+          "Subscribes to a mod you are missing, and re-fetches one Steam recorded but never downloaded",
+          "Find the culprit halves the mod list, runs the game and halves again, judging its own trials where the fault stops the list loading",
+        ],
+      },
+      {
+        title: "Compare",
+        items: [
+          "Modpacks: build, rename, compare and switch between load orders, with your original setup kept as a baseline",
+          "A modpack can be pinned to exact mod builds, and the vault keeps a copy of each so a pin still refers to something",
+          "Saves: what each colony was made with, against what would load today",
+          "Library: what each mod costs you and what breaks without it, beside Steam's public Workshop signals",
+        ],
+      },
+      {
+        title: "Measure",
+        items: [
+          "Play and watch: the log streams in live, and the run reports how it ended",
+          "Every watched run is measured, so two modpacks can be compared on load time, memory and faults",
+          "A small companion mod times the ticking from inside the game and reports what each mod costs per tick",
+          "A session report you can copy or save: the environment, the faults and the mod list, without the raw log",
+        ],
+      },
     ],
     known: [
       "Harmony patches registered in code rather than declared with an attribute cannot be checked. The target is built while the game runs, so nothing outside it can say whether it still resolves",
-      "Tier 2 to 4 repairs are specified and not implemented: XML patch repair, stub defs, assembly-level neutralisation",
-      "What a mod costs per tick is not measured. Load time and memory are read from outside the process; attributing simulation time needs code running inside the game",
+      "Assembly-level repairs and stub defs for an absent dependency are specified and not implemented",
       "The search judges itself only for faults that stop the mod list loading. A crash an hour into a colony looks the same as a healthy boot from out here",
-      "Subscribing to something new needs the Steamworks SDK. Re-fetching an item you already subscribe to is covered without it",
     ],
   },
 ];

@@ -138,11 +138,21 @@ export function Home({ scan, modpack, findings, sessionFindings, diff, onGo, onO
             <h4>
               {release.version} <time dateTime={release.date}>{release.date}</time>
             </h4>
-            <ul>
-              {release.changes.map((change) => (
-                <li key={change}>{change}</li>
-              ))}
-            </ul>
+            {/*
+              Grouped rather than one column of everything. A first release covers the whole
+              app, and read as a flat list its diagnostic rules and its tab icons carried the
+              same weight.
+            */}
+            {release.sections.map((section) => (
+              <section key={section.title} className="release-group">
+                <h5>{section.title}</h5>
+                <ul>
+                  {section.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            ))}
             {release.known && release.known.length > 0 && (
               <>
                 <p className="muted release-known">Not yet true of this build:</p>
