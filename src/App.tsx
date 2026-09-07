@@ -221,8 +221,8 @@ export default function App() {
         {active && <GameControls scan={scan} modpack={active} />}
         <div className="facts">
           <Fact label="Game" value={scan.gameVersion} />
-          <Fact label="Installed" value={String(scan.mods.length)} />
-          <Fact label="In modpack" value={String(workingScan.activeOrder.length)} />
+          <Fact label="Installed" value={String(scan.mods.length)} optional />
+          <Fact label="In modpack" value={String(workingScan.activeOrder.length)} optional />
           <Fact
             label="Issues"
             value={String(staticFindings.length + sessionFindings.length)}
@@ -235,15 +235,12 @@ export default function App() {
         <TabButton id="home" tab={tab} setTab={setTab} label="Home" />
         <TabButton id="doctor" tab={tab} setTab={setTab} label="Doctor" count={staticFindings.length} />
         <TabButton id="session" tab={tab} setTab={setTab} label="Session" count={sessionFindings.length} />
-        <TabButton id="packs" tab={tab} setTab={setTab} label="Modpacks" count={modpacks.length} />
-        <TabButton
-          id="order"
-          tab={tab}
-          setTab={setTab}
-          label="Load order"
-          count={workingScan.activeOrder.length}
-        />
-        <TabButton id="library" tab={tab} setTab={setTab} label="Library" count={scan.mods.length} />
+        {/* Only counts that mean "something needs attention" are shown. Modpack, load order
+            and library sizes are inventory, they are on Home and in the header already, and
+            three extra pills were most of what pushed the tab bar off a narrow window. */}
+        <TabButton id="packs" tab={tab} setTab={setTab} label="Modpacks" />
+        <TabButton id="order" tab={tab} setTab={setTab} label="Load order" />
+        <TabButton id="library" tab={tab} setTab={setTab} label="Library" />
         <TabButton id="settings" tab={tab} setTab={setTab} label="Settings" />
       </nav>
 
@@ -361,9 +358,26 @@ function Logo() {
   );
 }
 
-function Fact({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
+/**
+ * One number in the header.
+ *
+ * `optional` marks a fact that is inventory rather than a signal, and is dropped when the
+ * header is short of room. The game version and the issue count are worth a row of their
+ * own on any window; how many mods are installed is not.
+ */
+function Fact({
+  label,
+  value,
+  alert,
+  optional,
+}: {
+  label: string;
+  value: string;
+  alert?: boolean;
+  optional?: boolean;
+}) {
   return (
-    <div className={`fact${alert ? " alert" : ""}`}>
+    <div className={`fact${alert ? " alert" : ""}${optional ? " optional" : ""}`}>
       <b>{value}</b>
       <small>{label}</small>
     </div>

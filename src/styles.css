@@ -196,14 +196,41 @@ body {
 
 /* Tabs -------------------------------------------------------------------- */
 
+/*
+ * The tab strip scrolls when it runs out of room, with a shadow at whichever edge has more
+ * tabs behind it. Without that cue a narrow window simply loses Settings off the right and
+ * nothing on screen says it is still there.
+ *
+ * The four layers are the standard scroll-shadow trick: two panel-coloured covers attached
+ * `local` so they travel with the content and sit over the shadow only while that edge is
+ * reached, and two shadows attached `scroll` so they stay pinned to the element.
+ */
 .tabs {
   display: flex;
   gap: 2px;
   padding: 0 12px;
-  background: var(--panel);
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(to right, var(--panel), var(--panel)),
+    linear-gradient(to left, var(--panel), var(--panel)),
+    linear-gradient(to right, rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0));
+  background-position:
+    left center,
+    right center,
+    left center,
+    right center;
+  background-repeat: no-repeat;
+  background-size:
+    24px 100%,
+    24px 100%,
+    14px 100%,
+    14px 100%;
+  background-attachment: local, local, scroll, scroll;
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior-x: contain;
   flex: none;
   scrollbar-width: none;
 }
@@ -1042,6 +1069,72 @@ tr.row-off td:not(.toggle-cell) {
   }
 }
 
+/*
+ * Below this the header cannot hold four chips and the controls on one row. The two dropped
+ * facts are inventory rather than signal: both are on Home, and the mod count is in the
+ * scan line beneath the verdict. The game version and the issue count stay, because those
+ * are the two worth seeing from whichever tab you happen to be on.
+ */
+@media (max-width: 760px) {
+  .fact.optional {
+    display: none;
+  }
+
+  /*
+   * Wrapping put each of the four header pieces on its own row, 188px of chrome above a
+   * 660px window. Two explicit rows instead: identity and status on top, what you act with
+   * underneath. Grid rather than flex because the placement has to be certain, not the
+   * result of whatever happens to fit.
+   */
+  .hdr {
+    display: grid;
+    /*
+     * The right column is sized by its own contents and the left takes the rest, so the
+     * facts and the buttons line up on the right edge and the modpack name gets every
+     * pixel that is left over. Sizing the left column instead pinned it to the width of
+     * the modpack badge and left the facts stranded in the middle of the row.
+     */
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand facts"
+      "badge controls";
+    align-items: center;
+    gap: 8px 10px;
+  }
+
+  .brand {
+    grid-area: brand;
+  }
+
+  .facts {
+    grid-area: facts;
+    justify-self: end;
+    margin-left: 0;
+    width: auto;
+    flex-wrap: nowrap;
+  }
+
+  .brand {
+    justify-self: start;
+  }
+
+  .modpack-badge {
+    grid-area: badge;
+    min-width: 0;
+  }
+
+  .game-controls {
+    grid-area: controls;
+    justify-self: end;
+  }
+
+  /* Buys back the last few pixels so the seventh tab clears the edge rather than sitting
+     just behind it. */
+  .tab {
+    padding: 9px 11px;
+  }
+}
+
 @media (max-width: 620px) {
   main {
     padding: 12px;
@@ -1049,15 +1142,6 @@ tr.row-off td:not(.toggle-cell) {
 
   .hdr {
     padding: 9px 12px;
-  }
-
-  .facts {
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .modpack-badge {
-    flex: 1 1 100%;
   }
 
   .mod-table :is(th, td):nth-child(5) {
@@ -1363,22 +1447,29 @@ tr.row-off td:not(.toggle-cell) {
   font-weight: 600;
 }
 
+/*
+ * A bounded card per section rather than a stripe down one side. The stripe left each
+ * section's extent ambiguous where two ran together, and read as decoration rather than as
+ * the outcome it is actually reporting.
+ */
 .triage-section {
   margin-bottom: 12px;
-  padding-left: 11px;
-  border-left: 2px solid var(--line);
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
 }
 
 .triage-section.ok {
-  border-left-color: var(--ok);
+  border-color: rgba(78, 201, 139, 0.55);
 }
 
 .triage-section.warn {
-  border-left-color: var(--warning);
+  border-color: rgba(217, 171, 65, 0.6);
 }
 
 .triage-section.info {
-  border-left-color: var(--info);
+  border-color: var(--accent-soft);
 }
 
 .triage-section-title {
@@ -2329,10 +2420,26 @@ tr.dev-error td {
   font-size: 16px;
 }
 
+/*
+ * A package id is one unbroken token and CSS will not break at a dot, so the longest on the
+ * reference install (oskarpotocki.vanillafactionsexpanded.settlersmodule, 51 characters)
+ * held the title block at its own min-content width and pushed the close button clean off
+ * the drawer at 360px. min-width:0 lets the block shrink; the wrap gives the id somewhere
+ * to go, matching what .drawer-body .path already does with paths.
+ */
+.drawer-head-titles {
+  min-width: 0;
+}
+
 .drawer-head .pid {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+.drawer-head h2 {
+  overflow-wrap: anywhere;
 }
 
 .drawer-body {
@@ -2556,16 +2663,19 @@ tr.clickable:hover td {
   border-left-width: 3px;
 }
 
+/* The whole outline carries the verdict, not just the left edge, so the state is legible
+   from the shape of the card rather than from a stripe that reads as decoration. */
 .verdict.good {
-  border-left-color: var(--ok);
+  border-color: var(--ok);
 }
 
 .verdict.warn {
-  border-left-color: var(--warning);
+  border-color: var(--warning);
 }
 
 .verdict.bad {
-  border-left-color: var(--critical);
+  border-color: var(--critical);
+  box-shadow: 0 0 0 1px rgba(240, 97, 109, 0.16);
 }
 
 .verdict h2 {
@@ -2578,10 +2688,27 @@ tr.clickable:hover td {
   color: var(--text-soft);
 }
 
+/*
+ * Four cards, so the column count is set rather than fitted. auto-fit gave three across
+ * with one stranded underneath at most window sizes, which reads as a card that failed to
+ * load rather than as a row.
+ */
 .home-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .home-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .home-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .home-card {
@@ -2599,9 +2726,49 @@ tr.clickable:hover td {
   cursor: pointer;
 }
 
-.home-card:hover {
+/*
+ * The outline carries the card's state. Hover therefore lifts the surface and adds a ring
+ * rather than recolouring the border, which would wipe out the very thing the colour says.
+ */
+.home-card.critical {
+  border-color: var(--critical);
+}
+
+.home-card.critical .home-card-value {
+  color: var(--critical);
+}
+
+.home-card.warning {
+  border-color: var(--warning);
+}
+
+.home-card.warning .home-card-value {
+  color: var(--warning);
+}
+
+.home-card.info {
+  border-color: var(--info);
+}
+
+.home-card.info .home-card-value {
+  color: var(--info);
+}
+
+.home-card.ok {
+  border-color: rgba(78, 201, 139, 0.55);
+}
+
+.home-card.ok .home-card-value {
+  color: var(--ok);
+}
+
+.home-card.accent {
   border-color: var(--accent-soft);
+}
+
+.home-card:hover {
   background: var(--panel-2);
+  box-shadow: 0 0 0 1px currentColor inset;
 }
 
 .home-card-value {
@@ -2617,9 +2784,15 @@ tr.clickable:hover td {
   color: var(--dim);
 }
 
+/*
+ * min() rather than a bare 340px: auto-fit changes how many tracks there are, never how
+ * narrow one may get, so a hard floor keeps the single remaining column at 340px inside a
+ * 336px parent. main hides horizontal overflow, so that surplus is clipped rather than
+ * scrollable and the right edge of both panels is silently cut off below about 364px.
+ */
 .home-columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
   gap: 14px;
   align-items: start;
 }

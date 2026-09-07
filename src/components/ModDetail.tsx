@@ -50,7 +50,7 @@ export function ModDetail({ mod, scan, workshop, findings, onOpen, onClose }: Mo
     <div className="drawer-scrim" onClick={onClose}>
       <aside className="drawer" role="dialog" aria-label={mod.name} onClick={(e) => e.stopPropagation()}>
         <header className="drawer-head">
-          <div>
+          <div className="drawer-head-titles">
             <h2>{mod.name}</h2>
             <code className="pid">{mod.packageId}</code>
           </div>

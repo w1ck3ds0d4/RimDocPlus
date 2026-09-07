@@ -54,29 +54,35 @@ export function Home({ scan, modpack, findings, sessionFindings, diff, onGo, onO
         </button>
       </section>
 
+      {/* Each card is coloured by its own state rather than by what it counts, so a healthy
+          install reads green at a glance and only a real number pulls the eye. */}
       <div className="home-cards">
         <Card
           label="Blocking"
           value={String(blocking)}
           note="Critical and error findings"
+          tone={blocking > 0 ? "critical" : "ok"}
           onGo={() => onGo("doctor")}
         />
         <Card
           label="Warnings"
           value={String(counts.warning)}
           note="Worth a look, not urgent"
+          tone={counts.warning > 0 ? "warning" : "ok"}
           onGo={() => onGo("doctor")}
         />
         <Card
           label="From the last session"
           value={String(sessionFindings.length)}
           note="Faults read out of Player.log"
+          tone={sessionFindings.length > 0 ? "info" : "ok"}
           onGo={() => onGo("session")}
         />
         <Card
           label="Texture memory"
           value={formatBytes(vram)}
           note="Decoded cost of every active mod's textures"
+          tone="accent"
           onGo={() => onGo("library")}
         />
       </div>
@@ -216,19 +222,23 @@ function ChangeGroup({
   );
 }
 
+type Tone = "critical" | "warning" | "info" | "ok" | "accent";
+
 function Card({
   label,
   value,
   note,
+  tone,
   onGo,
 }: {
   label: string;
   value: string;
   note: string;
+  tone: Tone;
   onGo: () => void;
 }) {
   return (
-    <button className="home-card" type="button" onClick={onGo} title={note}>
+    <button className={`home-card ${tone}`} type="button" onClick={onGo} title={note}>
       <span className="home-card-value">{value}</span>
       <span className="home-card-label">{label}</span>
     </button>
