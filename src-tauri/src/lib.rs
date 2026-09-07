@@ -718,16 +718,34 @@ struct SessionLog {
     text: String,
 }
 
-/// Read the game's current Player.log.
+/// Read one of the game's two logs.
+///
+/// RimWorld truncates Player.log on launch and moves what was there to Player-prev.log, so
+/// after a crash the run being diagnosed is the previous one and the live file describes the
+/// relaunch that went looking for it. Reading only the current file meant the crash was
+/// gone by the time anyone opened the app.
+///
+/// Named rather than given a path, because a command taking an arbitrary path is a
+/// file-read primitive and this app does not have one.
 ///
 /// The browser build reads a fixture written at build time, which froze the Session tab at
 /// whenever the app was compiled: a fault the player had since fixed stayed on screen, and a
 /// new one never appeared. Read lossily on purpose, because logs carry raw bytes from mods
 /// with odd encodings and a strict decode would drop the whole file over one of them.
 #[tauri::command(async)]
-fn read_session_log() -> Result<Option<SessionLog>, String> {
-    let Some(path) = scan::discover().player_log else {
+fn read_session_log(previous: Option<bool>) -> Result<Option<SessionLog>, String> {
+    let Some(current) = scan::discover().player_log else {
         return Ok(None);
+    };
+    let path = if previous.unwrap_or(false) {
+        // Sits beside the live one under the name RimWorld gives it.
+        let renamed = current.replace("Player.log", "Player-prev.log");
+        if renamed == current {
+            return Ok(None);
+        }
+        renamed
+    } else {
+        current
     };
     let bytes = match fs::read(&path) {
         Ok(b) => b,

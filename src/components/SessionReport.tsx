@@ -15,6 +15,71 @@ import { formatMs } from "../lib/format";
  * so what leaves is the environment, the clustered faults with their attribution, and the
  * mod list, which is what anyone helping actually needs.
  */
+export type LogSource = "current" | "previous" | "pasted";
+
+const SOURCES: { value: LogSource; label: string; note: string }[] = [
+  { value: "current", label: "This run", note: "Player.log, as it stands now" },
+  {
+    value: "previous",
+    label: "Previous run",
+    note: "Player-prev.log. After a crash this is the run that crashed",
+  },
+  { value: "pasted", label: "Pasted", note: "The log RimWorld's debug window copies out" },
+];
+
+/**
+ * Which log the Session tab reads.
+ *
+ * Three sources rather than one, because the live Player.log is often the wrong file.
+ * RimWorld truncates it on launch and keeps what was there as Player-prev.log, so by the
+ * time anyone opens this app after a crash the run they want to read has already been
+ * moved aside. And the log RimWorld's own debug window copies out carries the mod list and
+ * the Harmony patches that Player.log alone does not, which is worth being able to read
+ * whether or not it was ever uploaded anywhere.
+ *
+ * Rendered beside the report rather than inside it, so a source with nothing to show still
+ * offers the way back to one that has.
+ */
+export function LogSourcePicker({
+  value,
+  onChange,
+  pasted,
+  onPasted,
+}: {
+  value: LogSource;
+  onChange: (next: LogSource) => void;
+  pasted: string;
+  onPasted: (next: string) => void;
+}) {
+  return (
+    <div className="log-source">
+      <div className="log-source-tabs">
+        {SOURCES.map((source) => (
+          <button
+            key={source.value}
+            className={`btn small ${value === source.value ? "primary" : ""}`}
+            type="button"
+            title={source.note}
+            onClick={() => onChange(source.value)}
+          >
+            {source.label}
+          </button>
+        ))}
+        <span className="repair-note">{SOURCES.find((s) => s.value === value)?.note}</span>
+      </div>
+      {value === "pasted" && (
+        <textarea
+          className="log-paste"
+          value={pasted}
+          spellCheck={false}
+          placeholder="Paste a RimWorld log here. In the game's debug window, Copy to clipboard puts the whole thing on your clipboard, mod list included."
+          onChange={(e) => onPasted(e.target.value)}
+        />
+      )}
+    </div>
+  );
+}
+
 export function SessionReport({
   analysis,
   findings,

@@ -2187,6 +2187,40 @@ tr.row-off td:not(.toggle-cell) {
 /* A setting whose control sits beside its explanation rather than under it. The toggles
    lead with the control because a switch is small; a button needs room, so it goes to the
    end and the text takes what is left. */
+/* The Session tab's log picker. Sits above the report and stays visible when the chosen
+   source has nothing in it, since that is exactly when a way back matters. */
+.log-source {
+  margin-bottom: 14px;
+}
+
+.log-source-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.log-paste {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  min-height: 130px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.log-paste:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
