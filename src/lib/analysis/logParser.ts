@@ -218,6 +218,33 @@ const MATCHERS: Matcher[] = [
     severity: "warning",
     test: /^Direct3D: detected that using refresh rate/,
   },
+  // A mod announcing that its own compatibility patch did not attach. Nothing else
+  // matched this: it is not XML-shaped, does not start with "Error", and has no
+  // "Exception" in it, so Combat Extended saying its Vanilla Events patch failed produced
+  // no finding at all. Two installed mods failing to cooperate, named by one of them, is
+  // the thing this app exists to surface.
+  {
+    category: "patch-injection-failed",
+    severity: "error",
+    test: /^.+\s::\s(?:Failed to find injection point|Could not find method) /,
+  },
+  // Thrown at the end of a session, not during one. Unity aborts worker threads when the
+  // process closes, and the trace is a thread parked in Monitor.Wait waiting for work it
+  // will never get. Scored critical, it told someone who had just quit the game that it
+  // could not recover from something.
+  {
+    category: "thread-teardown",
+    severity: "info",
+    test: /ThreadAbortException|^Exception thrown from thread=\d+\.?$/,
+  },
+  // Mono failing to preload a dependency while scanning types in the ReflectionOnly
+  // context. The load carries on: in the reference log the next thing written is Unity
+  // unloading unused assets, and the save finishes loading.
+  {
+    category: "reflection-probe",
+    severity: "info",
+    test: /Cannot resolve dependency to assembly .* because it has not been preloaded/,
+  },
   { category: "exception", severity: "critical", test: /Exception|^Error |^\[ERROR\]/ },
 ];
 
@@ -406,6 +433,14 @@ function fingerprintOf(
   if (category === "xml-patch-failure" && patchOwner) {
     return [category, patchOwner].join("|");
   }
+  // One row per Workshop item. Ids are digits, and the fallback normalises digits out, so
+  // two items that never downloaded became one row counted twice, with a Retry button that
+  // could only ever act on whichever id happened to be first. The second was not named
+  // anywhere in the app.
+  if (category === "ghost-subscription") {
+    const id = /WorkshopItem for (\d+)/.exec(message)?.[1];
+    if (id) return [category, id].join("|");
+  }
   // One row per absent def, however many things wanted it. Three defs reaching for the same
   // missing sound is one thing to fix, not three.
   if (category === "cross-reference") {
@@ -562,8 +597,38 @@ const EXPLANATIONS: Record<string, Explanation> = {
       "retried. Any load order you had is gone. Restore it from a modpack before launching again.",
     fixKind: "restore-mods-config",
   },
+  "patch-injection-failed": {
+    title: (e) => {
+      const who = /^(.+?)\s::\s/.exec(e.message)?.[1];
+      return who ? `${who} could not apply one of its patches` : "A mod patch did not attach";
+    },
+    detail:
+      "The mod says so itself: it went looking for a method to patch and did not find it. The patch " +
+      "simply does not run, so whatever it was compensating for is not compensated. Usually the mod " +
+      "it was patching changed, or updated, or is not the version this patch was written against.",
+  },
+  "thread-teardown": {
+    title: (e) => {
+      const where = e.namespaces[0];
+      return where ? `${where} thread stopped when the game closed` : "Worker thread stopped at shutdown";
+    },
+    detail:
+      "Unity aborts worker threads when the process closes, and a thread parked waiting for work " +
+      "reports the abort on its way out. Read rather than fixed: it says the game shut down, not " +
+      "that anything went wrong while you were playing.",
+  },
+  "reflection-probe": {
+    title: () => "An assembly scan could not preload a dependency",
+    detail:
+      "Something scanned types without loading the assemblies they refer to, which is what the " +
+      "ReflectionOnly APIs do. The load carries on afterwards. Read rather than fixed: it is a " +
+      "scan reporting what it could not see, not the game failing to start something.",
+  },
   "ghost-subscription": {
-    title: () => "Subscribed Workshop items never downloaded",
+    title: (e) => {
+      const id = ghostIdOf(e);
+      return id ? `Workshop item ${id} never downloaded` : "A subscribed Workshop item never downloaded";
+    },
     detail:
       "Steam registered the subscription but no folder arrived. The mod is not actually installed, so " +
       "anything depending on it fails. Usually fixed by unsubscribing and resubscribing.",

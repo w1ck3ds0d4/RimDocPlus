@@ -344,6 +344,53 @@ describe("log analysis", () => {
     expect(titles).toContain("Missing ThingDef VFEM_Longsword");
   });
 
+  it("does not call the game closing a fault it could not recover from", () => {
+    // Verbatim from the end of a real session, right before Unity's shutdown dump.
+    const shutdown = [
+      "Exception thrown from thread=1317.",
+      "System.Threading.ThreadAbortException: Thread was being aborted.",
+      "[Ref 54CF78B3]",
+      "  at SmashTools.Performance.DedicatedThread.Execute () [0x0000c] in <x>:0 ",
+    ].join(NEWLINE);
+    const finding = findingsFromLog(analyzeLog(shutdown), [])[0];
+    expect(finding.severity).toBe("info");
+    expect(finding.title).toContain("when the game closed");
+  });
+
+  it("does not call a type scan's unloaded dependency a crash", () => {
+    const probe =
+      "FileNotFoundException: Cannot resolve dependency to assembly 'UnityEngine.InputLegacyModule, " +
+      "Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' because it has not been preloaded. When " +
+      "using the ReflectionOnly APIs, dependent assemblies must be pre-loaded or loaded on demand " +
+      "through the ReflectionOnlyAssemblyResolve event.";
+    expect(findingsFromLog(analyzeLog(probe), [])[0].severity).toBe("info");
+  });
+
+  it("reports a mod saying its own patch did not attach", () => {
+    // Matched nothing before: not XML-shaped, no leading "Error", no "Exception" in it.
+    const said =
+      "Combat Extended :: Failed to find injection point when applying Patch: Harmony_Compat_VanillaEventExpanded";
+    const finding = findingsFromLog(analyzeLog(said), [])[0];
+    expect(finding.severity).toBe("error");
+    expect(finding.title).toBe("Combat Extended could not apply one of its patches");
+  });
+
+  it("keeps two Workshop items that never downloaded as two things to fix", () => {
+    // Ids are digits, and the fallback fingerprint normalises digits out, so both became
+    // one row whose Retry button could only ever act on the first.
+    const ghosts = [
+      "Created WorkshopItem for 3092936341 but there is no folder for it.",
+      "Created WorkshopItem for 753498552 but there is no folder for it.",
+      "Created WorkshopItem for 3092936341 but there is no folder for it.",
+    ].join(NEWLINE);
+    const found = findingsFromLog(analyzeLog(ghosts), []);
+    expect(found).toHaveLength(2);
+    expect(found.map((f) => f.title).sort()).toEqual([
+      "Workshop item 3092936341 never downloaded",
+      "Workshop item 753498552 never downloaded",
+    ]);
+  });
+
   it("collapses repeats of the same fault into one counted event", () => {
     const spam = Array(50).fill("Created WorkshopItem for 123 but there is no folder for it.").join("\n");
     const events = analyzeLog(spam).events;
@@ -600,7 +647,8 @@ describe("log analysis", () => {
   it("explains a recognised condition instead of echoing the raw line", () => {
     const findings = findingsFromLog(analyzeLog(log), []);
     const ghost = findings.find((f) => f.rule === "log:ghost-subscription");
-    expect(ghost?.title).toBe("Subscribed Workshop items never downloaded");
+    // Named, because the repair acts on one item and two of them can be missing at once.
+    expect(ghost?.title).toBe("Workshop item 3092936341 never downloaded");
   });
 
   it("titles an unrecognised fault with its exception type and location", () => {
