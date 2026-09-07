@@ -84,11 +84,19 @@ export function GameWatch({
         ? "No Player.log yet: run the game once first"
         : null;
 
-  // Asked for from the header, which cannot start a watched run itself: this is where the
-  // console and the phases live. Ignored while a run is already going, since the header's
-  // menu is not a way to start a second one.
+  /**
+   * Start when the header asks, and only then.
+   *
+   * The signal is compared with the last one acted on rather than merely being non-zero.
+   * Reading "greater than zero" meant every mount was a request, so leaving the tab and
+   * coming back launched the game again. This component is kept mounted now, which is the
+   * real fix, but the guard is what makes a second mount harmless whatever causes it.
+   */
+  const handledSignal = useRef(startSignal);
   useEffect(() => {
-    if (startSignal > 0 && phase === "idle" && !blocked) void play();
+    if (startSignal === handledSignal.current) return;
+    handledSignal.current = startSignal;
+    if (phase === "idle" && !blocked) void play();
     // Only the signal: re-running because the phase settled would start an unasked run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startSignal]);
