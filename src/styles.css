@@ -1627,15 +1627,6 @@ tr.row-off td:not(.toggle-cell) {
   border-color: rgba(217, 171, 65, 0.45);
 }
 
-/* A quiet marker that hovering the name will say what the mod does. */
-.has-desc {
-  margin-left: 5px;
-  color: var(--dim);
-  font-size: 9px;
-  vertical-align: super;
-  cursor: help;
-}
-
 /* Library ----------------------------------------------------------------- */
 
 .segmented.sorts {

@@ -128,7 +128,6 @@ export function PackEditor({
                     <button type="button" className="link" onClick={() => onOpenMod(mod.packageId)}>
                       {mod.name}
                     </button>
-                    {mod.description && <span className="has-desc">?</span>}
                   </td>
                   <td className="pid">{mod.packageId}</td>
                   <td>
