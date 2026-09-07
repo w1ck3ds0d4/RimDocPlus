@@ -1,5 +1,6 @@
 import type { FileAction } from "./repair/repairs";
 import type { ScanResult } from "./types";
+import type { SaveMeta } from "./saves";
 
 export interface ActionOutcome {
   target: string;
@@ -130,6 +131,16 @@ export function readSessionLog(): Promise<{ path: string; text: string } | null>
  */
 export function isSteamRunning(): Promise<boolean> {
   return invoke<boolean>("is_steam_running", {});
+}
+
+/**
+ * Every save RimWorld has written, newest first, with the mod list each was made with.
+ *
+ * Only the head of each file is read, so listing a dozen saves does not mean reading a
+ * gigabyte of world data to find twenty kilobytes of metadata.
+ */
+export function listSaves(): Promise<SaveMeta[]> {
+  return invoke<SaveMeta[]>("list_saves", {});
 }
 
 /** Start RimWorld from its install folder. */

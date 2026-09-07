@@ -499,6 +499,22 @@ fn read_session_log() -> Result<Option<SessionLog>, String> {
     }))
 }
 
+/// Every save RimWorld has written, newest first, with the mod list each was made with.
+///
+/// Only the head of each file is read: the mod list sits in a meta block at the very top,
+/// and a save runs to a hundred megabytes of world data below it that nothing here needs.
+#[tauri::command(async)]
+fn list_saves() -> Result<Vec<scan::SaveMeta>, String> {
+    let Some(save_data) = scan::discover().save_data else {
+        return Ok(Vec::new());
+    };
+    Ok(scan::list_saves(Path::new(&save_data))
+        .iter()
+        // A save being unreadable is not a reason to report none of them.
+        .filter_map(|p| scan::read_save_meta(p).ok())
+        .collect())
+}
+
 #[tauri::command(async)]
 fn scan_install(app: AppHandle) -> Result<scan::ScanResult, String> {
     scan::scan_install_with(None, &mut |p| {
@@ -578,7 +594,8 @@ pub fn run() {
             read_mod_preview,
             scan_install,
             read_session_log,
-            is_steam_running
+            is_steam_running,
+            list_saves
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");
@@ -748,6 +765,29 @@ mod tests {
                 "{} should not be readable",
                 denied.display()
             );
+        }
+    }
+
+    /// Read the real saves and report what each was made with. Ignored: needs RimWorld.
+    ///
+    /// Run with `cargo test --lib -- --ignored dump_saves --nocapture`.
+    #[test]
+    #[ignore]
+    fn dump_saves() {
+        let save_data = scan::discover().save_data.expect("save folder");
+        let paths = scan::list_saves(Path::new(&save_data));
+        println!("{} saves", paths.len());
+        for p in &paths {
+            match scan::read_save_meta(p) {
+                Ok(m) => println!(
+                    "  {:<44} {:>4} mods  {}  {}",
+                    m.name.chars().take(44).collect::<String>(),
+                    m.mod_ids.len(),
+                    m.game_version,
+                    m.saved_at.unwrap_or_default()
+                ),
+                Err(e) => println!("  {} FAILED: {e}", p.display()),
+            }
         }
     }
 

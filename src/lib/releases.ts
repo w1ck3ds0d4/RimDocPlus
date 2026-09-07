@@ -36,6 +36,7 @@ export const RELEASES: Release[] = [
       "Warns when two mods ship the same library, which is how one gets silently bound to the other's build",
       "Reports mods the Workshop has updated more recently than the copy on disk",
       "Find the culprit: halves the mod list, runs the game, and halves again on your verdict until one mod is left",
+      "Saves: compares the mod list each colony was made with against the one that would load today",
       "Settings: choose the size at which a texture counts as oversized, from 1024px down to anything above the 512px target",
       "Every change is backed up first, and every repair that touches disk can be rolled back",
     ],

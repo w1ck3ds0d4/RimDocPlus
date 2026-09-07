@@ -22,6 +22,7 @@ import { Library } from "./components/Library";
 import { ModDetail } from "./components/ModDetail";
 import { Home } from "./components/Home";
 import { Bisect } from "./components/Bisect";
+import { Saves } from "./components/Saves";
 import { record } from "./lib/history";
 import { installDiff } from "./lib/installDiff";
 import { Settings, loadDevMode, loadOversizePx, saveOversizePx } from "./components/Settings";
@@ -30,7 +31,7 @@ import { Logo } from "./components/Logo";
 import { Splash } from "./components/Splash";
 import { inShell, readSessionLog, scanInstall, watchScan, type ScanProgress } from "./lib/shell";
 
-type Tab = "home" | "doctor" | "session" | "packs" | "order" | "library" | "settings";
+type Tab = "home" | "doctor" | "session" | "saves" | "packs" | "order" | "library" | "settings";
 
 export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
@@ -294,6 +295,7 @@ export default function App() {
         {/* Only counts that mean "something needs attention" are shown. Modpack, load order
             and library sizes are inventory, they are on Home and in the header already, and
             three extra pills were most of what pushed the tab bar off a narrow window. */}
+        <TabButton id="saves" tab={tab} setTab={setTab} label="Saves" />
         <TabButton id="packs" tab={tab} setTab={setTab} label="Modpacks" />
         <TabButton id="order" tab={tab} setTab={setTab} label="Load order" />
         <TabButton id="library" tab={tab} setTab={setTab} label="Library" />
@@ -367,6 +369,12 @@ export default function App() {
             />
           ) : (
             <p className="muted">No session log loaded.</p>
+          ))}
+        {tab === "saves" &&
+          (active ? (
+            <Saves scan={workingScan} modpack={active} />
+          ) : (
+            <p className="muted">Create a modpack first.</p>
           ))}
         {tab === "packs" && (
           <Modpacks

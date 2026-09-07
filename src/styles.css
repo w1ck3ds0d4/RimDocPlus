@@ -3364,3 +3364,81 @@ tr.clickable:hover td {
 .bisect-trials .good {
   color: var(--ok);
 }
+
+/* Saves -------------------------------------------------------------------- */
+
+.save-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.save {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Only a mod the save expects and the list lacks is worth colouring for. */
+.save.risky {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--line));
+}
+
+.save > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.save > summary::-webkit-details-marker {
+  display: none;
+}
+
+.save > summary:hover {
+  background: var(--panel-2);
+}
+
+.save .sev-dot {
+  background: var(--ok);
+}
+
+.save.risky .sev-dot {
+  background: var(--warning);
+}
+
+.save-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.save-summary {
+  flex: none;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.save-when {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.save-body {
+  padding: 4px 13px 13px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.warn-line {
+  margin: 10px 0;
+  color: var(--warning);
+}

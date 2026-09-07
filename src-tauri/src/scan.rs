@@ -1188,6 +1188,93 @@ fn find_all_tag_matches(text: &str, tag: &str) -> Vec<(usize, usize, usize)> {
 /// a dependency entry nests its own `<packageId>`, so a mod whose About.xml declares
 /// `<modDependencies>` above its own `<packageId>` would otherwise report its
 /// dependency's id as its identity.
+// ---------------------------------------------------------------------------------
+// Saves
+// ---------------------------------------------------------------------------------
+
+/// A save's own record of the mods it was made with.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveMeta {
+    pub path: String,
+    pub name: String,
+    /// File modification time, ISO 8601, to the second.
+    pub saved_at: Option<String>,
+    pub game_version: String,
+    /// packageIds in the order the save recorded them, lowercased to match the scan.
+    pub mod_ids: Vec<String>,
+    /// Display names as they were then, so a mod since uninstalled can still be named.
+    pub mod_names: Vec<String>,
+}
+
+/// How much of a save to read looking for its metadata.
+///
+/// The mod list lives in a `<meta>` block at the very top: 20 KB of it in a 102 MB save on
+/// the reference install. Reading the whole file to find the first twenty kilobytes would
+/// make listing a dozen saves a gigabyte of IO for nothing.
+const SAVE_META_BYTES: usize = 512 * 1024;
+
+/// Every save RimWorld has written, newest first.
+///
+/// `.rws.old` files are RimWorld's own backup of the previous write and are deliberately
+/// skipped: they would double the list with an older copy of every save.
+pub fn list_saves(save_data: &Path) -> Vec<PathBuf> {
+    let dir = save_data.join("Saves");
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut saves: Vec<(SystemTime, PathBuf)> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("rws"))
+        })
+        .filter_map(|p| {
+            let when = fs::metadata(&p).and_then(|m| m.modified()).ok()?;
+            Some((when, p))
+        })
+        .collect();
+    saves.sort_by(|a, b| b.0.cmp(&a.0));
+    saves.into_iter().map(|(_, p)| p).collect()
+}
+
+/// Read a save's mod list without reading the save.
+pub fn read_save_meta(path: &Path) -> Result<SaveMeta, String> {
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut buffer = vec![0u8; SAVE_META_BYTES];
+    let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
+    buffer.truncate(read);
+    let text = String::from_utf8_lossy(&buffer);
+
+    // Bounded to the meta block. A packageId also appears throughout the world data below,
+    // and an unbounded search would pick up whatever the colony happens to contain.
+    let meta = match text.find("</meta>") {
+        Some(end) => &text[..end],
+        None => return Err("No <meta> block in the first part of this save".into()),
+    };
+
+    Ok(SaveMeta {
+        path: path.display().to_string(),
+        name: path
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or("save")
+            .to_string(),
+        saved_at: fs::metadata(path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(iso8601),
+        game_version: tag_text(meta, "gameVersion").unwrap_or_default(),
+        mod_ids: tag_list(meta, "modIds")
+            .into_iter()
+            .map(|id| id.to_lowercase())
+            .collect(),
+        mod_names: tag_list(meta, "modNames"),
+    })
+}
+
 fn strip_blocks(xml: &str, tags: &[&str]) -> String {
     tags.iter()
         .fold(xml.to_string(), |acc, tag| strip_tag(&acc, tag))

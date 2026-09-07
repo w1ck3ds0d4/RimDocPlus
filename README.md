@@ -216,6 +216,24 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Saves
+
+Every save carries its own list of the mods it was made with. Opening one against a different list is
+a kind of breakage nothing on disk shows: the install is fine, it simply is not the install this
+colony was built on. RimWorld drops whatever content it cannot resolve, which is how a colony opens
+with its buildings gone.
+
+Only mods the save expects and the load order lacks are treated as a problem, and a missing one is
+distinguished between installed-but-disabled, which is one click away, and not installed at all. A
+mod uninstalled since is named from the save's own record, which is the only thing left that knows
+what it was called. Mods added since are ordinary and shown quietly; reordering is counted rather
+than listed, because order matters far less than presence and RimWorld sorts it at load.
+
+Only the head of each file is read. The mod list sits in a meta block at the top: 20 KB of it in a
+102 MB save on the reference install, so listing saves does not mean reading a gigabyte of world
+data. RimWorld's own `.rws.old` backups are skipped, since they would double the list with an older
+copy of every save.
+
 ### Find the culprit
 
 Triage repairs what the rules can name. This is for the rest: the game crashes, or drags, and
