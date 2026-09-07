@@ -129,10 +129,21 @@ export function TickCost({
         said. The full argument for why this exists at all is on hover.
       */}
       <header className="panel-head">
-        <h3 title="Everything else RimDoc+ measures is read from outside the game, which is why load time and memory are known and simulation time is not. This installs a small mod that times the ticking from inside and writes down what it saw. It measures and changes nothing else.">
-          What each mod costs per tick
-        </h3>
+        <h3>What each mod costs per tick</h3>
       </header>
+
+      {/*
+        What the buttons are about. Moving the whole explanation into the heading's tooltip
+        left three buttons saying "it" with nothing on screen naming what "it" was. The
+        argument for why this is the only way stays on hover; the subject does not.
+      */}
+      <p
+        className="muted"
+        title="Load time and memory can be read from outside the process. Simulation time cannot be attributed to a mod from out there at all, which is why this is the one part of RimDoc+ that needs code running in the game."
+      >
+        Simulation time can only be measured from inside the game, so RimDoc+ installs a small mod there to do
+        it. It times ticking and changes nothing else.
+      </p>
 
       {/* One state, from one place. Never the load order's answer and the report's at once. */}
       <p className="probe-status" data-ready={rows.length > 0 ? "yes" : "no"}>
@@ -142,24 +153,30 @@ export function TickCost({
       <div className="repair-actions">
         {!state?.installed && (
           <button className="btn go" type="button" disabled={busy} onClick={() => void install()}>
-            {busy ? "Installing..." : "Install the probe"}
+            {busy ? "Installing..." : "Install it in the game"}
           </button>
         )}
         {state?.installed && !state.current && (
-          <button className="btn go" type="button" disabled={busy} onClick={() => void install()}>
-            Update it
+          <button
+            className="btn go"
+            type="button"
+            disabled={busy}
+            title="Overwrites the copy in your Mods folder with the one this build ships"
+            onClick={() => void install()}
+          >
+            Update it in the game
           </button>
         )}
         {state?.installed && !enabled && onModpack && modpack && (
           <button
             className="btn go"
             type="button"
-            title="Adds it to the end of the load order. Apply to game in the header writes that out."
+            title="Adds it to the end of your load order. Apply to game, in the header, writes that out."
             onClick={() => {
               onModpack({ ...modpack, activeOrder: [...modpack.activeOrder, state.packageId] }, "probe");
             }}
           >
-            Enable it
+            Add it to the load order
           </button>
         )}
         {/* Last, because it undoes the rest and should not sit between two things that do. */}
@@ -171,7 +188,7 @@ export function TickCost({
             title={`Deletes it from ${state.path}`}
             onClick={() => void remove()}
           >
-            Remove it
+            Delete it from the game
           </button>
         )}
         {error && <span className="prompt-error">{error}</span>}
