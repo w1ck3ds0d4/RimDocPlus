@@ -1469,17 +1469,26 @@ fn memory_mb(pid: u32) -> Option<u64> {
         .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
         .output()
         .ok()?;
-    let text = String::from_utf8_lossy(&out.stdout);
-    // "name","pid","session","n","27,900 K"
-    let field = text.split(',').next_back()?.trim().trim_matches('"');
-    let kb: u64 = field
-        .trim_end_matches(" K")
-        .chars()
-        .filter(|c| c.is_ascii_digit())
-        .collect::<String>()
-        .parse()
-        .ok()?;
-    Some(kb / 1024)
+    memory_kb(&String::from_utf8_lossy(&out.stdout)).map(|kb| kb / 1024)
+}
+
+/// The kilobytes out of one CSV row of `tasklist`.
+///
+/// Split on the quoted separator, not on the comma. `tasklist` writes the memory field with
+/// thousands separators inside the quotes, so splitting on `,` took the last group of a
+/// three-group number: `"3,214,880 K"` read as 880 KB, and every run recorded 0 MB because
+/// anything under a megabyte truncates to nothing. Only a process using less than 1000 KB
+/// ever parsed correctly, which no game does.
+fn memory_kb(text: &str) -> Option<u64> {
+    // "name","pid","session","n","3,214,880 K". A line with no quoted field at all is
+    // tasklist saying it matched nothing, and has no number in it worth reading.
+    let row = text.lines().find(|l| l.starts_with('"'))?;
+    let field = row.rsplit("\",\"").next()?.trim_end_matches('"').trim();
+    let digits: String = field.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse().ok()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2103,5 +2112,31 @@ mod tests {
         assert_eq!(report.skipped, 1);
         assert_eq!(report.failed, 0);
         assert_eq!(report.outcomes[0].detail, "no backup");
+    }
+
+    /// The parse that made every recorded run report 0 MB.
+    ///
+    /// tasklist puts thousands separators inside the quoted memory field, so splitting the
+    /// row on `,` returned the last group of the number rather than the number.
+    #[test]
+    fn memory_reads_the_whole_number_not_its_last_group() {
+        assert_eq!(
+            memory_kb(r#""RimWorldWin64.exe","76652","Console","1","3,214,880 K""#),
+            Some(3_214_880)
+        );
+        assert_eq!(
+            memory_kb(r#""RimWorldWin64.exe","76652","Console","1","60 K""#),
+            Some(60)
+        );
+    }
+
+    /// tasklist matching nothing prints a sentence, not a row. There is no number in it.
+    #[test]
+    fn memory_of_a_process_that_is_gone_is_unknown_not_zero() {
+        assert_eq!(
+            memory_kb("INFO: No tasks are running which match the specified criteria."),
+            None
+        );
+        assert_eq!(memory_kb(""), None);
     }
 }
