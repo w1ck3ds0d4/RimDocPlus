@@ -29,6 +29,7 @@ import { installDiff } from "./lib/installDiff";
 import { Settings, loadDevMode, loadOversizePx, saveOversizePx } from "./components/Settings";
 import { GameControls } from "./components/GameControls";
 import { Logo } from "./components/Logo";
+import { TabIcon } from "./components/TabIcon";
 import { Splash } from "./components/Splash";
 import { inShell, readSessionLog, scanInstall, watchScan, type ScanProgress } from "./lib/shell";
 
@@ -459,6 +460,14 @@ function Fact({
   );
 }
 
+/**
+ * One tab: an icon, its name, and a count when the count means something.
+ *
+ * The name is dropped when the strip runs out of room, leaving the icon. Eight labels do not
+ * fit a narrow window, and a label sliced to "Setti" is worse than no label at all. The full
+ * name stays in the title and the accessible name either way, so nothing is lost to anything
+ * but the eye.
+ */
 function TabButton({
   id,
   tab,
@@ -473,8 +482,16 @@ function TabButton({
   count?: number;
 }) {
   return (
-    <button className="tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-      {label}
+    <button
+      className="tab"
+      role="tab"
+      aria-selected={tab === id}
+      aria-label={label}
+      title={label}
+      onClick={() => setTab(id)}
+    >
+      <TabIcon name={id} />
+      <span className="tab-label">{label}</span>
       {count !== undefined && <span className="pill">{count}</span>}
     </button>
   );

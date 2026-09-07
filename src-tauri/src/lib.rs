@@ -3,6 +3,7 @@ mod scan;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -581,6 +582,35 @@ fn launch_game(game_dir: String) -> Result<String, String> {
     Ok(exe.display().to_string())
 }
 
+/// The supervised run's process id, so it can be stopped without guessing at one.
+///
+/// Killing by image name would take down a copy of the game the app did not start, which is
+/// exactly the sort of thing an unattended search must not do.
+static GAME_PID: Mutex<Option<u32>> = Mutex::new(None);
+
+/// Stop the run this app started, if it is still going.
+///
+/// Used by a search that decides for itself: once the log has said whether the mod list
+/// loads, the run has answered its question and sitting at the main menu answers nothing
+/// more. Never touches a game the app did not launch.
+#[tauri::command(async)]
+fn stop_game() -> Result<String, String> {
+    let pid = { *GAME_PID.lock().map_err(|e| e.to_string())? };
+    let Some(pid) = pid else {
+        return Ok("No supervised run to stop".into());
+    };
+    let out = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/F"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    Ok(if out.status.success() {
+        format!("Stopped {pid}")
+    } else {
+        // Already gone is the common case, and not a failure worth surfacing.
+        format!("{pid} was no longer running")
+    })
+}
+
 /// How long the game may write nothing before the run is called quiet.
 ///
 /// Loading a large mod list has genuinely silent stretches, so this is well past anything a
@@ -646,6 +676,9 @@ fn launch_supervised(app: AppHandle, game_dir: String, log_path: String) -> Resu
 
     let log = PathBuf::from(&log_path);
     let started = std::time::Instant::now();
+    if let Ok(mut slot) = GAME_PID.lock() {
+        *slot = Some(child.id());
+    }
     let _ = app.emit("game:started", exe.display().to_string());
 
     // A thread rather than the command's own body: the command returns as soon as the game
@@ -693,6 +726,9 @@ fn launch_supervised(app: AppHandle, game_dir: String, log_path: String) -> Resu
             }
 
             if let Some(status) = exited {
+                if let Ok(mut slot) = GAME_PID.lock() {
+                    *slot = None;
+                }
                 let _ = app.emit(
                     "game:exited",
                     GameExit {
@@ -753,7 +789,8 @@ pub fn run() {
             read_session_log,
             is_steam_running,
             list_saves,
-            launch_supervised
+            launch_supervised,
+            stop_game
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");

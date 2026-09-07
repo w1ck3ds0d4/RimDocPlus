@@ -1145,10 +1145,28 @@ tr.row-off td:not(.toggle-cell) {
     justify-self: end;
   }
 
-  /* Buys back the last few pixels so the seventh tab clears the edge rather than sitting
-     just behind it. */
+  /*
+   * The labels go and the icons stay. Eight names do not fit a narrow window, and a label
+   * sliced to "Setti" is worse than none: the icon is recognisable, and the full name is
+   * still in the title and the accessible name.
+   */
+  .tab-label {
+    display: none;
+  }
+
+  /* Except on the tab you are on. One label costs about fifty pixels and is what stops a
+     row of icons being a guessing game about where you currently are. */
+  .tab[aria-selected="true"] .tab-label {
+    display: inline;
+  }
+
   .tab {
     padding: 9px 11px;
+  }
+
+  /* A count still matters when it means something needs attention, so it stays. */
+  .tab .pill {
+    margin-left: 0;
   }
 }
 
@@ -3641,4 +3659,16 @@ tr.clickable:hover td {
 
 .bench-table .better {
   color: var(--ok);
+}
+
+/* Tab icons ---------------------------------------------------------------- */
+
+.tab-icon {
+  flex: none;
+  opacity: 0.75;
+}
+
+.tab[aria-selected="true"] .tab-icon,
+.tab:hover .tab-icon {
+  opacity: 1;
 }

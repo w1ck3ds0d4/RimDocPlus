@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ScanResult } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
 import { toModsConfigXml } from "../lib/modpacks";
 import { configDir } from "../lib/repair/repairs";
-import { applyModsConfig, inShell, launchGame } from "../lib/shell";
+import { applyModsConfig, inShell, launchGame, launchSupervised, stopGame, watchGame } from "../lib/shell";
+import { bootVerdict, describeVerdict, isBootFailure, isDecided, type BootResult } from "../lib/bootCheck";
 import { record } from "../lib/history";
 import { useConfirm } from "./Confirm";
 import {
@@ -34,6 +35,10 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
   const [session, setSession] = useState<BisectSession | null>(loadBisect);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [auto, setAuto] = useState(false);
+  const [boot, setBoot] = useState<BootResult | null>(null);
+  const watching = useRef<(() => void) | null>(null);
+  const transcript = useRef<string[]>([]);
   const { confirm, dialog } = useConfirm();
   const shell = inShell();
   const config = configDir(scan);
@@ -41,6 +46,83 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
   function commit(next: BisectSession | null) {
     setSession(next);
     saveBisect(next);
+  }
+
+  useEffect(() => () => watching.current?.(), []);
+
+  /**
+   * Run a trial and judge it from the log, without asking.
+   *
+   * Only sound for a fault that stops the mod list loading, because that is the only thing
+   * the log states plainly: the game either reaches mod construction or writes its own
+   * admission that it gave up. Anything that goes wrong after the main menu looks identical
+   * to a healthy boot from out here, which is why this is offered rather than assumed.
+   *
+   * The game is stopped as soon as the verdict lands. A trial has answered its question by
+   * then, and sitting at the main menu answers nothing more.
+   */
+  async function runTrialAuto(order: string[], label: string): Promise<boolean> {
+    if (!config || !scan.paths.game || !scan.paths.playerLog) return false;
+    setBusy(true);
+    setBoot(null);
+    setStatus(`${label}: writing ${order.length} mods`);
+    transcript.current = [];
+
+    await applyModsConfig(`${config}/ModsConfig.xml`, toModsConfigXml(order, scan.gameVersion));
+
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (failed: boolean) => {
+        if (settled) return;
+        settled = true;
+        watching.current?.();
+        watching.current = null;
+        setBusy(false);
+        void stopGame();
+        resolve(failed);
+      };
+
+      void watchGame({
+        onLines: (batch) => {
+          transcript.current.push(...batch);
+          const result = bootVerdict(transcript.current);
+          setStatus(`${label}: ${transcript.current.length} lines`);
+          if (isDecided(result.verdict)) {
+            setBoot(result);
+            finish(isBootFailure(result.verdict));
+          }
+        },
+        // The process going first is its own answer: gone without loading is a failure.
+        onExited: (exit) => {
+          const result = bootVerdict(transcript.current, exit.code);
+          setBoot(result);
+          finish(isBootFailure(result.verdict));
+        },
+      }).then((off) => {
+        watching.current = off;
+        void launchSupervised(scan.paths.game!, scan.paths.playerLog!).catch((e) => {
+          setStatus(e instanceof Error ? e.message : String(e));
+          finish(false);
+        });
+      });
+    });
+  }
+
+  /** Drive the whole search, one trial at a time, until a single suspect is left. */
+  async function runUnattended(from: BisectSession) {
+    let current = from;
+    while (!isSettled(current)) {
+      const failed = await runTrialAuto(trialOrder(current, scan.mods), `Trial ${current.step}`);
+      current = applyVerdict(current, failed ? "still-there" : "gone");
+      commit(current);
+    }
+    record({
+      kind: "order",
+      summary: current.suspects.length
+        ? `Narrowed a load failure to ${nameOf(current.suspects[0], scan)}`
+        : "Narrowed a load failure to nothing in the mod list",
+      detail: `${current.trials.length} trials, judged from the log`,
+    });
   }
 
   /** Write a load order and hand the player the game to judge it with. */
@@ -84,9 +166,12 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
     record({
       kind: "order",
       summary: `Started narrowing ${next.suspects.length} mods`,
-      detail: "Halving the load order to find what is causing a fault",
+      detail: auto
+        ? "Halving the load order, judging each trial from the log"
+        : "Halving the load order to find what is causing a fault",
     });
-    await runTrial(trialOrder(next, scan.mods), "Trial 1");
+    if (auto) await runUnattended(next);
+    else await runTrial(trialOrder(next, scan.mods), "Trial 1");
   }
 
   async function answer(verdict: "still-there" | "gone") {
@@ -151,6 +236,19 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
             Your order is restored when the search ends.
           </span>
         </div>
+        <label className="setting-toggle bisect-auto">
+          <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
+          <span>
+            <b>Judge it for me</b>
+            <span className="muted">
+              Runs every trial itself, reads the log, and stops the game as soon as it knows. Only sound for a
+              fault that stops the mod list loading: the log says plainly whether the game reached mod
+              construction or gave up. Anything that goes wrong after the main menu looks the same as a
+              healthy boot from out here, so leave this off for those.
+            </span>
+          </span>
+        </label>
+        <div className="repair-actions" hidden></div>
       </section>
     );
   }
@@ -226,6 +324,13 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
             </button>
           </div>
         </>
+      )}
+
+      {boot && (
+        <p className={isBootFailure(boot.verdict) ? "warn-line" : ""}>
+          {describeVerdict(boot)}
+          {boot.evidence && <span className="muted"> {boot.evidence}</span>}
+        </p>
       )}
 
       {status && <p className="repair-note">{status}</p>}

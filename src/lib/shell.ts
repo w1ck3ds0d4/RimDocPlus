@@ -184,6 +184,16 @@ export function launchSupervised(gameDir: string, logPath: string): Promise<stri
   return invoke<string>("launch_supervised", { gameDir, logPath });
 }
 
+/**
+ * Stop the run this app started.
+ *
+ * For a search that judges its own trials: once the log has said whether the mod list loads,
+ * the run has answered its question. Never touches a game the app did not launch.
+ */
+export function stopGame(): Promise<string> {
+  return invoke<string>("stop_game", {});
+}
+
 /** Start RimWorld from its install folder. */
 export function launchGame(gameDir: string): Promise<string> {
   return invoke<string>("launch_game", { gameDir });

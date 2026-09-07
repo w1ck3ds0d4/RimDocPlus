@@ -41,6 +41,8 @@ export const RELEASES: Release[] = [
       "A session report you can copy or save: the environment, the faults and the mod list, without the raw log",
       "Play and watch: the game's log streams in live, and the run reports how it ended",
       "Every watched run is measured, so two modpacks can be compared on load time, memory and faults",
+      "The search can judge its own trials for a load failure, running each one and reading the log itself",
+      "Tabs carry icons, so the strip stops truncating when the window is narrow",
       "Settings: choose the size at which a texture counts as oversized, from 1024px down to anything above the 512px target",
       "Every change is backed up first, and every repair that touches disk can be rolled back",
     ],

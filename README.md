@@ -216,6 +216,31 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Judging a run without being asked
+
+A run is classified from what it wrote, using markers taken from two real logs on the reference
+install: a failed load of 43 lines and a successful one of 2,689.
+
+The decisive failure is RimWorld's own admission. When loading throws with mods active it writes
+that it is resetting ModsConfig.xml back to Core and retrying, which is both the clearest signal
+there is and destructive, since any load order not saved elsewhere is gone by then. Everything after
+that line describes the recovery attempt with Core only, so the verdict returns at it rather than
+letting the recovery read as a success.
+
+Success is reaching mod construction, which only happens once every def has loaded. That is not the
+main menu and the verdict does not claim the game is playable; it claims the mod list loaded.
+
+Nothing is inferred from silence. A run still going, or one that ended in a way these markers do not
+describe, is reported as unknown.
+
+With that, the search can judge its own trials: it runs each one, reads the log, and stops the game
+as soon as the verdict lands, because a trial has answered its question by then and sitting at the
+main menu answers nothing more. It stops only the run it started, never a copy of the game it did
+not launch.
+
+Offered rather than assumed, and only sound for a fault that stops the mod list loading. Anything
+that goes wrong after the main menu looks identical to a healthy boot from outside the process.
+
 ### Watching a run
 
 Play and watch starts the game and follows it. The log streams in as it is written, so a crash on
@@ -401,9 +426,9 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 
 - **Version pinning in modpacks**: a modpack records package ids, not exact mod versions, so it is repeatable but not yet reproducible. Pinning arrives with the vault.
 - **Mod vault**: content-addressed local store so Steam updates land as new versions instead of overwriting a working setup
-- **Unattended bisect**: the search is assisted, and needs you to judge each trial. Deciding automatically whether a fault is present means the headless boot check and a definition of "broken", neither of which exists yet
+- **Unattended bisect for faults after the main menu**: the search judges itself for anything that stops the mod list loading. A crash an hour into a colony, or a slowdown, still needs you, because from outside the process those look exactly like a healthy boot
 - **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
-- **L2 and L3 testing**: headless boot check and scripted soak run. The soak run needs the tick measurement above
+- **Scripted soak run**: a long unattended session with faults attributed over time. Needs the tick measurement above
 - **Frame and tick measurement**: load time and memory are measured from outside the process, but what a mod costs per tick is not. Attributing simulation time to a method needs code running inside the game, which is an in-game companion mod and a separate deliverable
 - **Subscribing from inside the app**: the anonymous Web API is read-only, and changing a subscription needs the Steamworks SDK, a native binding and a running Steam client. Re-fetching an item is covered without any of that (see Retry download); subscribing to something new is not.
 - **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path
