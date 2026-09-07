@@ -157,8 +157,8 @@ export function fetchSharedLog(url: string): Promise<{ path: string; text: strin
  * install and is why it is asked for rather than done on every scan. Nothing in any mod
  * executes: the probe reads metadata and never loads an assembly.
  */
-export function probePatches(folders: string[]): Promise<ProbeReport> {
-  return invoke<ProbeReport>("probe_patches", { folders });
+export function probePatches(folders: string[], cycle: string): Promise<ProbeReport> {
+  return invoke<ProbeReport>("probe_patches", { folders, cycle });
 }
 
 export interface SteamShutdown {

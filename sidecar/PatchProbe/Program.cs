@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Mono.Cecil;
+using Mono.Cecil.Cil;
 
 namespace RimDoc.PatchProbe;
 
@@ -310,6 +311,19 @@ public static class Program
         var report = (string verdict, string detail) =>
             new PatchReport(assembly, type.FullName, targetType, targetMethod, kinds, verdict, detail, []);
 
+        if (targetType is null || targetMethod is null)
+        {
+            // Nothing usable from the attribute. The class may still build its target out
+            // of literals, which is metadata even though it is written as code.
+            var (codeType, codeMethod) = ReadCodeTarget(type);
+            if (codeType is not null && codeMethod is not null)
+            {
+                targetType = codeType;
+                targetMethod = codeMethod;
+                declared = true;
+            }
+        }
+
         if (!declared)
         {
             // A bare [HarmonyPatch] with a TargetMethod() that computes what to patch at
@@ -374,6 +388,94 @@ public static class Program
                     : $"{targetType} has no {targetMethod}, and no game type does. This patch cannot apply to this build.",
             elsewhere
         );
+    }
+
+    /// <summary>Reflection lookups whose result is a method worth resolving.</summary>
+    /// <summary>
+    /// How far back from a lookup call its arguments can be.
+    /// </summary>
+    /// <remarks>
+    /// `AccessTools.Method(typeof(Pawn), "Tick")` puts both a handful of instructions before
+    /// the call. A window keeps the search on this call's own arguments rather than drifting
+    /// into whatever the method was doing beforehand.
+    /// </remarks>
+    private const int ArgumentWindow = 10;
+
+    private static readonly string[] Lookups =
+    [
+        "Method",
+        "DeclaredMethod",
+        "GetMethod",
+        "PropertyGetter",
+        "PropertySetter",
+        "DeclaredPropertyGetter",
+        "DeclaredPropertySetter",
+    ];
+
+    /// <summary>
+    /// The target a TargetMethod() builds, when it builds it out of literals.
+    /// </summary>
+    /// <remarks>
+    /// Harmony lets a patch class compute what it patches, and the usual shape of that is
+    /// `AccessTools.Method(typeof(Pawn), "Tick")`. Both halves are constants in the IL, so
+    /// they can be read without running anything: a `ldtoken` carrying the type, a `ldstr`
+    /// carrying the name, and a call to a lookup that turns them into a method.
+    ///
+    /// Only that shape. A target assembled from a variable, a loop or another method's
+    /// return value stays unreadable, and is left as runtime-only rather than guessed at.
+    /// The first pair wins, because a body that looks up several methods is choosing between
+    /// them and this cannot say which.
+    /// </remarks>
+    private static (string? Type, string? Method) ReadCodeTarget(TypeDefinition type)
+    {
+        var builder = type.Methods.FirstOrDefault(m =>
+            m.IsStatic && m.Name is "TargetMethod" && m.HasBody
+        );
+        if (builder is null)
+        {
+            return (null, null);
+        }
+
+        var code = builder.Body.Instructions;
+
+        for (var i = 0; i < code.Count; i++)
+        {
+            if (code[i].OpCode != OpCodes.Call && code[i].OpCode != OpCodes.Callvirt)
+            {
+                continue;
+            }
+            if (code[i].Operand is not MethodReference call || !Lookups.Contains(call.Name))
+            {
+                continue;
+            }
+
+            // Read the call's arguments by walking back from it, rather than forward from
+            // the type. Forward was wrong: it took the first string after the type token,
+            // and a method that loads an error message before looking anything up handed
+            // back "Multiple CompIngredients fields found" as a method name. The arguments
+            // are the values pushed immediately before the call, so that is where to look.
+            TypeReference? owner = null;
+            string? name = null;
+            for (var back = i - 1; back >= 0 && back >= i - ArgumentWindow; back--)
+            {
+                if (name is null && code[back].OpCode == OpCodes.Ldstr && code[back].Operand is string text)
+                {
+                    name = text;
+                }
+                if (owner is null
+                    && code[back].OpCode == OpCodes.Ldtoken
+                    && code[back].Operand is TypeReference token)
+                {
+                    owner = token;
+                }
+                if (owner is not null && name is not null)
+                {
+                    return (owner.FullName, name);
+                }
+            }
+        }
+
+        return (null, null);
     }
 
     /// <summary>

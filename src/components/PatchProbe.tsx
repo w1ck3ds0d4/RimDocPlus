@@ -33,7 +33,12 @@ export function PatchProbe({
     setRunning(true);
     setError(null);
     try {
-      onReport(await probePatches(active.map((mod) => mod.folder)));
+      onReport(
+        await probePatches(
+          active.map((mod) => mod.folder),
+          scan.gameCycle,
+        ),
+      );
     } catch (e) {
       onReport(null);
       setError(e instanceof Error ? e.message : String(e));

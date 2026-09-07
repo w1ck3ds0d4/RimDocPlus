@@ -51,6 +51,8 @@ export default function App() {
    */
   const [logSource, setLogSource] = useState<LogSource>("current");
   const [pasted, setPasted] = useState("");
+  /** Bumped when the header asks for a watched run. */
+  const [watchRequest, setWatchRequest] = useState(0);
   const [openMod, setOpenMod] = useState<string | null>(null);
   const [workshop, setWorkshop] = useState<WorkshopCache | null>(null);
   const [loading, setLoading] = useState(true);
@@ -332,7 +334,20 @@ export default function App() {
             {dirty && <span className="dot" title="Differs from the game's current load order" />}
           </div>
         )}
-        {active && <GameControls scan={scan} modpack={active} onRescan={rescan} scanning={scanning} />}
+        {active && (
+          <GameControls
+            scan={scan}
+            modpack={active}
+            onRescan={rescan}
+            scanning={scanning}
+            onPlayAndWatch={() => {
+              // The watched run lives on the Session tab, so the menu takes you there and
+              // starts it rather than starting something you cannot see.
+              setTab("session");
+              setWatchRequest((n) => n + 1);
+            }}
+          />
+        )}
         <div className="facts">
           <Fact label="Game" value={scan.gameVersion} />
           <Fact label="Installed" value={String(scan.mods.length)} optional />
@@ -446,7 +461,9 @@ export default function App() {
             {active && <Bisect scan={workingScan} modpack={active} />}
           </>
         )}
-        {tab === "session" && active && <GameWatch scan={workingScan} modpack={active} />}
+        {tab === "session" && active && (
+          <GameWatch scan={workingScan} modpack={active} startSignal={watchRequest} />
+        )}
         {tab === "session" && (
           <>
             <LogSourcePicker

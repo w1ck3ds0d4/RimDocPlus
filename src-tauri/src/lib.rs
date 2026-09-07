@@ -901,28 +901,36 @@ fn patch_probe() -> Option<PathBuf> {
     None
 }
 
-/// Every assembly the given mod folders ship.
+/// The assemblies a mod actually loads, and only those.
 ///
-/// Walked here rather than sent from the frontend, because it is a thousand paths and the
-/// shell is already the side that reads directories. The folders come from the caller, so
-/// the probe covers the mods in the modpack rather than everything ever downloaded.
-fn mod_assemblies(folders: &[String]) -> Vec<String> {
+/// RimWorld loads `<mod>/Assemblies` and `<mod>/<cycle>/Assemblies`. Nothing else, however
+/// it is named.
+///
+/// This was a walk of everything under the mod with exclusions bolted on, and every pass
+/// found another thing to exclude: folders for older game versions, then build output under
+/// a shipped `Source` tree, then SimpleSidearms' own `v1.5` archive folders which look
+/// nothing like `1.5`. Each one reported faults in code the game never runs. Naming the two
+/// folders that load is a rule that cannot be surprised by a naming convention nobody
+/// thought of.
+///
+/// A mod with a LoadFolders.xml can redirect this, which is rare and not read here. The
+/// cost of missing one is a patch that goes unchecked, which the report already accounts
+/// for; the cost of guessing wrongly was telling someone their mods were broken.
+fn mod_assemblies(folders: &[String], cycle: &str) -> Vec<String> {
     let mut found = Vec::new();
     for folder in folders {
-        let mut stack = vec![PathBuf::from(folder)];
-        while let Some(dir) = stack.pop() {
+        let root = PathBuf::from(folder);
+        for dir in [root.join("Assemblies"), root.join(cycle).join("Assemblies")] {
             let Ok(entries) = fs::read_dir(&dir) else {
                 continue;
             };
             for entry in entries.flatten() {
                 let path = entry.path();
-                let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-                if path.is_dir() {
-                    // This app's own backups are not part of the install.
-                    if !name.ends_with(".rimdocbak") {
-                        stack.push(path);
-                    }
-                } else if name.ends_with(".dll") {
+                if path
+                    .extension()
+                    .map(|e| e.eq_ignore_ascii_case("dll"))
+                    .unwrap_or(false)
+                {
                     found.push(path.display().to_string());
                 }
             }
@@ -939,7 +947,7 @@ fn mod_assemblies(folders: &[String]) -> Vec<String> {
 /// on every scan. Nothing in any mod executes: the probe reads metadata and never loads an
 /// assembly.
 #[tauri::command(async)]
-fn probe_patches(folders: Vec<String>) -> Result<ProbeReport, String> {
+fn probe_patches(folders: Vec<String>, cycle: String) -> Result<ProbeReport, String> {
     let exe = patch_probe().ok_or(
         "The patch probe is not installed beside the app. Build it with `pnpm probe:build` \
          and stage it with `pnpm probe:stage`.",
@@ -956,7 +964,7 @@ fn probe_patches(folders: Vec<String>) -> Result<ProbeReport, String> {
         })
         .ok_or("No RimWorld install found to check against.")?;
 
-    let assemblies = mod_assemblies(&folders);
+    let assemblies = mod_assemblies(&folders, &cycle);
     if assemblies.is_empty() {
         return Err("None of these mods ship an assembly, so there is nothing to check.".into());
     }
@@ -1695,6 +1703,37 @@ mod tests {
             raw_gist_url("https://gist.github.com/x/abc/"),
             "https://gist.github.com/x/abc/raw"
         );
+    }
+
+    #[test]
+    fn only_the_assemblies_the_game_would_load_are_read() {
+        let tmp = tempdir().unwrap();
+        let m = tmp.path().join("mod");
+        // The two the game loads.
+        write(&m.join("Assemblies/Live.dll"), "");
+        write(&m.join("1.6/Assemblies/Also.dll"), "");
+        // A folder for an older game version.
+        write(&m.join("1.4/Assemblies/Old.dll"), "");
+        // SimpleSidearms' own archive convention, which is not a RimWorld version folder.
+        write(&m.join("v1.5/Assemblies/Archived.dll"), "");
+        // Build output inside a shipped source tree.
+        write(&m.join("Source/Thing/obj/Debug/Build.dll"), "");
+        // A DLL loose in the mod root, which the game does not load either.
+        write(&m.join("Loose.dll"), "");
+
+        let found = mod_assemblies(&[m.display().to_string()], "1.6");
+        let names: Vec<String> = found
+            .iter()
+            .map(|p| {
+                Path::new(p)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+
+        assert_eq!(names, vec!["Also.dll", "Live.dll"]);
     }
 
     #[test]
