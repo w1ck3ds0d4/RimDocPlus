@@ -2242,8 +2242,26 @@ tr.row-off td:not(.toggle-cell) {
 
 /* The tick-cost table. Numbers right-aligned so they can be compared down a column,
    which is the only reason anyone reads this. */
+/* Its own panel, matching the two above it. It sat outside one, so the tab read as two
+   boxes and then some loose text. */
 .tick-cost {
   margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+/* Where the probe has got to, said once. Dim until there are numbers, since until then it is
+   an instruction rather than a result. */
+.probe-status {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.probe-status[data-ready="yes"] {
+  color: var(--text);
 }
 
 .tick-table {

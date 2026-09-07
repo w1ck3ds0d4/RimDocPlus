@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import type { ScanResult } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
-import { parseTickReport, tickCostRows, tickCoverage, type TickReport } from "../lib/analysis/tickCost";
+import {
+  parseTickReport,
+  probeStatus,
+  tickCaveat,
+  tickCostRows,
+  type TickReport,
+} from "../lib/analysis/tickCost";
 import { formatMs } from "../lib/format";
 import {
   inShell,
@@ -106,19 +112,31 @@ export function TickCost({
   if (!inShell() || !game) return null;
 
   const rows = report ? tickCostRows(report) : [];
+  const status = probeStatus({
+    installed: state?.installed ?? false,
+    current: state?.current ?? true,
+    enabled,
+    ticksPlayed: report?.ticksPlayed ?? null,
+    patchedMethods: report?.patchedMethods ?? 0,
+  });
 
   return (
     <section className="tick-cost">
       {dialog}
+      {/*
+        The lead sentence belongs to the heading, not beside it. A coverage line sat to the
+        right of the title, ran off the panel, and repeated what the status line below already
+        said. The full argument for why this exists at all is on hover.
+      */}
       <header className="panel-head">
-        <h3>What each mod costs per tick</h3>
-        {report && <span className="muted">{tickCoverage(report)}</span>}
+        <h3 title="Everything else RimDoc+ measures is read from outside the game, which is why load time and memory are known and simulation time is not. This installs a small mod that times the ticking from inside and writes down what it saw. It measures and changes nothing else.">
+          What each mod costs per tick
+        </h3>
       </header>
 
-      <p className="muted">
-        Everything else here is measured from outside the game, which is why load time and memory are known
-        and simulation time is not. This installs a small mod that times the ticking from inside and writes
-        what it saw. It measures and changes nothing else.
+      {/* One state, from one place. Never the load order's answer and the report's at once. */}
+      <p className="probe-status" data-ready={rows.length > 0 ? "yes" : "no"}>
+        {status}
       </p>
 
       <div className="repair-actions">
@@ -130,11 +148,6 @@ export function TickCost({
         {state?.installed && !state.current && (
           <button className="btn go" type="button" disabled={busy} onClick={() => void install()}>
             Update it
-          </button>
-        )}
-        {state?.installed && (
-          <button className="btn danger" type="button" disabled={busy} onClick={() => void remove()}>
-            Remove it
           </button>
         )}
         {state?.installed && !enabled && onModpack && modpack && (
@@ -149,22 +162,20 @@ export function TickCost({
             Enable it
           </button>
         )}
+        {/* Last, because it undoes the rest and should not sit between two things that do. */}
         {state?.installed && (
-          <span className="repair-note">
-            {enabled
-              ? "Enabled. Apply to game, then load a colony."
-              : "Installed but not in the load order, so it does not run yet."}
-          </span>
+          <button
+            className="btn danger"
+            type="button"
+            disabled={busy}
+            title={`Deletes it from ${state.path}`}
+            onClick={() => void remove()}
+          >
+            Remove it
+          </button>
         )}
         {error && <span className="prompt-error">{error}</span>}
       </div>
-
-      {report && rows.length === 0 && (
-        <p className="note">
-          The probe is running and has timed nothing yet. Nothing ticks at the main menu: load a colony and
-          the numbers start.
-        </p>
-      )}
 
       {rows.length > 0 && (
         <table className="tick-table">
@@ -193,6 +204,8 @@ export function TickCost({
           </tbody>
         </table>
       )}
+
+      {rows.length > 0 && <p className="note">{tickCaveat()}</p>}
     </section>
   );
 }

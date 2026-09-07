@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTicking, parseTickReport, tickCostRows, tickCoverage, type TickReport } from "./tickCost";
+import { isTicking, parseTickReport, probeStatus, tickCostRows, type TickReport } from "./tickCost";
 
 function report(over: Partial<TickReport> = {}): TickReport {
   return {
@@ -74,14 +74,30 @@ describe("isTicking", () => {
   });
 });
 
-describe("tickCoverage", () => {
+describe("probeStatus", () => {
+  const at = (over: Partial<Parameters<typeof probeStatus>[0]>) =>
+    probeStatus({
+      installed: true,
+      current: true,
+      enabled: true,
+      ticksPlayed: 0,
+      patchedMethods: 846,
+      ...over,
+    });
+
   it("says the numbers are empty because nothing has ticked, not because nothing costs anything", () => {
-    expect(tickCoverage(report({ ticksPlayed: 0 }))).toContain("load a colony");
+    expect(at({})).toContain("load a colony");
   });
 
-  it("names what it cannot see", () => {
-    const said = tickCoverage(report());
-    expect(said).toContain("drawing");
-    expect(said).toContain("own threads");
+  it("separates on disk from in the load order, which is what made the panel contradict itself", () => {
+    expect(at({ enabled: false })).toContain("not in your load order");
+    expect(at({ enabled: false })).not.toContain("load a colony");
+  });
+
+  it("answers with one state at a time, never two", () => {
+    expect(at({ installed: false })).toBe("Not installed, so nothing is being timed.");
+    expect(at({ current: false })).toContain("Older than the build");
+    expect(at({ ticksPlayed: null })).toBe("Enabled. Apply to game, then play.");
+    expect(at({ ticksPlayed: 5000 })).toBe("846 tick methods timed across 5,000 ticks.");
   });
 });
