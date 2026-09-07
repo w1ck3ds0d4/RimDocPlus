@@ -108,9 +108,15 @@ describe("runPatchRules", () => {
     expect(runPatchRules(scanOf([mod("a.one", [op(TARGET)], 0)]))).toHaveLength(0);
   });
 
-  it("never proposes a repair, since the override is the intended behaviour", () => {
+  it("offers to disable the winner, and never does it unasked", () => {
+    // The override is usually the intended behaviour, so the repair exists to be available
+    // rather than to be recommended: it names the later mod, and it is never automatic.
     const findings = runPatchRules(scanOf([mod("a.one", [op(TARGET)], 0), mod("b.two", [op(TARGET)], 1)]));
-    expect(findings[0].fix).toBeUndefined();
+    expect(findings[0].severity).toBe("info");
+    expect(findings[0].fix?.kind).toBe("disable-overriding-mod");
+    expect(findings[0].fix?.auto).toBe(false);
+    // b.two loads later, so b.two is the one whose version takes effect.
+    expect(findings[0].fix?.params).toEqual({ overriding: "b.two", overridden: "a.one" });
   });
 });
 

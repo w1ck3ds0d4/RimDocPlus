@@ -2184,6 +2184,20 @@ tr.row-off td:not(.toggle-cell) {
   border-radius: var(--radius);
 }
 
+/* A setting whose control sits beside its explanation rather than under it. The toggles
+   lead with the control because a switch is small; a button needs room, so it goes to the
+   end and the text takes what is left. */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.setting-row .btn {
+  flex: none;
+}
+
 .setting-toggle {
   display: flex;
   align-items: flex-start;
@@ -2237,6 +2251,12 @@ tr.row-off td:not(.toggle-cell) {
 .setting-toggle input:focus-visible + .switch {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* The one toggle that sits under a row of buttons rather than in a list of settings, so
+   it has to make its own space where the list would have provided it. */
+.bisect-auto {
+  margin-top: 10px;
 }
 
 .setting-text {

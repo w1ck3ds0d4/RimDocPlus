@@ -167,7 +167,7 @@ function ResetApp({ modpacks }: { modpacks: Modpack[] }) {
   }
 
   return (
-    <div className="setting">
+    <div className="setting setting-row">
       {dialog}
       <span className="setting-text">
         <b>Reset the app</b>
@@ -178,7 +178,7 @@ function ResetApp({ modpacks }: { modpacks: Modpack[] }) {
         </small>
       </span>
       <button className="btn danger" type="button" onClick={() => void reset()}>
-        Reset the app
+        Reset
       </button>
     </div>
   );

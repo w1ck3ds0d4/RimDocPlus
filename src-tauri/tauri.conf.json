@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "RimDoc+ by w1ck3ds0d4",
-        "width": 1280,
+        "width": 1164,
         "height": 880,
-        "minWidth": 880,
-        "minHeight": 600
+        "minWidth": 1164,
+        "minHeight": 880
       }
     ],
     "security": {

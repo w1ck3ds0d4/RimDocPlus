@@ -236,19 +236,25 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
             Your order is restored when the search ends.
           </span>
         </div>
-        <label className="setting-toggle bisect-auto">
+        <label
+          className="setting-toggle bisect-auto"
+          title={
+            "The log says plainly whether the game reached mod construction or gave up, which is what " +
+            "makes an unattended verdict trustworthy. Anything that goes wrong after the main menu looks " +
+            "the same as a healthy boot from out here, so leave this off for those."
+          }
+        >
           <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
-          <span>
+          <span className="switch" aria-hidden="true">
+            <i />
+          </span>
+          <span className="setting-text">
             <b>Judge it for me</b>
-            <span className="muted">
-              Runs every trial itself, reads the log, and stops the game as soon as it knows. Only sound for a
-              fault that stops the mod list loading: the log says plainly whether the game reached mod
-              construction or gave up. Anything that goes wrong after the main menu looks the same as a
-              healthy boot from out here, so leave this off for those.
-            </span>
+            <small>
+              Runs each trial and reads the log itself. Only for faults that stop the mod list loading.
+            </small>
           </span>
         </label>
-        <div className="repair-actions" hidden></div>
       </section>
     );
   }
