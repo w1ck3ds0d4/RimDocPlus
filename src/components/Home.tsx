@@ -106,7 +106,7 @@ export function Home({ scan, modpack, findings, sessionFindings, diff, onGo, onO
             <ul className="feed">
               {history.slice(0, 12).map((entry) => (
                 <li key={entry.id}>
-                  <span className={`kind ${entry.kind}`}>{kindLabel(entry.kind)}</span>
+                  <span className={`kind kind-${entry.kind}`}>{kindLabel(entry.kind)}</span>
                   <div>
                     <span>{entry.summary}</span>
                     {entry.detail && <p className="muted">{entry.detail}</p>}

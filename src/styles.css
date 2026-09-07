@@ -2927,6 +2927,12 @@ tr.clickable:hover td {
 
 /* One badge per kind of change, so the journal can be skimmed for the destructive ones
    without reading every line. */
+/*
+ * Prefixed, because the modifier is a word other things in this app are already called.
+ * `.kind repair` also matched `.repair { display: contents }`, which belongs to the repair
+ * control, so the badge's box vanished and only its text showed; `.kind modpack` matched a
+ * card style meant for something else entirely.
+ */
 .kind {
   font-size: 10px;
   letter-spacing: 0.05em;
@@ -2939,17 +2945,17 @@ tr.clickable:hover td {
   color: var(--dim);
 }
 
-.kind.repair {
+.kind.kind-repair {
   color: var(--ok);
   border-color: rgba(78, 201, 139, 0.4);
 }
 
-.kind.rollback {
+.kind.kind-rollback {
   color: var(--warning);
   border-color: rgba(217, 171, 65, 0.4);
 }
 
-.kind.order {
+.kind.kind-order {
   color: var(--accent);
   border-color: var(--accent-soft);
 }
