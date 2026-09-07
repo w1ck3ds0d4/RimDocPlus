@@ -78,6 +78,9 @@ function isBackup(name) {
 /** Textures at or above this in either dimension are worth naming individually. */
 const OVERSIZE_PX = 1024;
 
+/** Named oversized textures kept per mod. Also the ceiling on one triage pass. */
+const MAX_OVERSIZED = 200;
+
 /**
  * Read a PNG's dimensions from its header.
  *
@@ -147,8 +150,11 @@ function measureMod(dir, budget = 6000) {
   }
 
   textures.oversized.sort((a, b) => b.width * b.height - a.width * a.height);
-  // A mod with hundreds of oversized textures needs the count, not every path.
-  textures.oversized = textures.oversized.slice(0, 25);
+  // This list is what the downscale repair works from, so the cap bounds how much of the
+  // problem one triage pass can fix rather than only how much is shown. At 25 a pass over
+  // the reference install resized 729 and left 476 behind with seven mods still at the
+  // limit; the heaviest carries 158, so 200 clears it while still bounding a pathological mod.
+  textures.oversized = textures.oversized.slice(0, MAX_OVERSIZED);
   return { sizeBytes: total, textures };
 }
 

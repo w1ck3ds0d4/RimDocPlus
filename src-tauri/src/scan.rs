@@ -64,7 +64,7 @@ pub struct TextureStats {
     /// never file size: Unity uploads textures decoded, so on-disk PNG compression buys
     /// nothing at runtime.
     pub estimated_vram_bytes: u64,
-    /// Textures at or above the oversize threshold, largest first, capped at 25.
+    /// Textures at or above the oversize threshold, largest first, capped at MAX_OVERSIZED.
     pub oversized: Vec<OversizedTexture>,
     /// True when the walk hit its directory-entry budget, so the numbers are a floor.
     pub truncated: bool,
@@ -288,7 +288,15 @@ pub fn discover() -> ScanPaths {
 /// Textures at or above this in either dimension are worth naming individually.
 const OVERSIZE_PX: u32 = 1024;
 /// Named oversized textures kept per mod. Past this, the count is what matters.
-const MAX_OVERSIZED: usize = 25;
+/// Named oversized textures kept per mod.
+///
+/// This is what the downscale repair works from, so the cap is a cap on how much of the
+/// problem one triage pass can fix, not just on how much is displayed. At 25 a pass over
+/// the reference install resized 729 textures and left 476 behind, seven mods still at the
+/// limit, which is not what a button called "fix all" should do. The heaviest single mod
+/// there carries 158, so 200 clears the install with room to spare while still bounding a
+/// pathological one.
+const MAX_OVERSIZED: usize = 200;
 /// Directory entries walked per mod for the size/texture pass. A mod that hits this is
 /// marked truncated rather than silently reported smaller than it is.
 const SIZE_WALK_BUDGET: usize = 6000;

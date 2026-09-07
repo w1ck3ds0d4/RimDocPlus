@@ -32,7 +32,6 @@ export const RELEASES: Release[] = [
     ],
     known: [
       "Launching the game is not yet supervised: no live log streaming or crash capture",
-      "A mod with more than 25 oversized textures only reports its first 25, so a very heavy mod needs more than one triage pass",
       "Nothing here can tell you the game boots, only that the load order is structurally sound",
       "Harmony patch analysis needs a C# sidecar that is not built yet",
     ],
