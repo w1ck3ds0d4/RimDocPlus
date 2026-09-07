@@ -87,6 +87,26 @@ const NOISE = [
  */
 const REF_MARKER = /^\[Ref [0-9A-Fa-f]+\]\s*$/;
 
+/**
+ * RimWorld's own id for a distinct fault, from either shape of the marker.
+ *
+ * The first occurrence gets `[Ref ABCD1234]` on its own line with the trace under it; every
+ * repeat gets `[Ref ABCD1234] Duplicate stacktrace, see ref for original` and no trace. The
+ * id is the game saying these are the same fault, which is a better answer than anything
+ * derived from the text: the message can carry a different pawn id each time and the stack
+ * can be absent on the repeats, and both of those split one fault into several rows.
+ */
+const REF_ID = /^\[Ref ([0-9A-Fa-f]+)\]/;
+
+/**
+ * An exception written on its own line, under a line saying where it happened.
+ *
+ * RimWorld logs some faults as two lines: "Error in PostExposeData of X" and then
+ * "System.NullReferenceException: ...". Both match the exception matcher, so one fault was
+ * reported twice, once with the stack trace and once without it.
+ */
+const BARE_EXCEPTION = /^[A-Za-z_][\w.]*(?:Exception|Error):\s/;
+
 /** Namespace roots that belong to the engine or the patch library, not to a mod. */
 const FRAMEWORK_ROOTS = new Set([
   "System",
@@ -217,13 +237,28 @@ export function analyzeLog(text: string): SessionAnalysis {
     const matcher = MATCHERS.find((m) => m.test.test(line));
     if (!matcher) continue;
 
+    // Where it happened and what was thrown are one fault written on two lines. Folded
+    // into one message, in the shape RimWorld itself uses when it writes both on one line.
+    let message = line.trim();
+    const under = lines[i + 1]?.trim();
+    if (under && !BARE_EXCEPTION.test(message) && BARE_EXCEPTION.test(under)) {
+      message = `${message}: ${under}`;
+      i++;
+    }
+
     const { frames, next } = collectFrames(lines, i + 1);
-    const message = line.trim();
+    const ref = REF_ID.exec(lines[i + 1]?.trim() ?? "")?.[1];
     const owner = matcher.category === "xml-patch-failure" ? patchOwnerOf(lines, i) : undefined;
-    const fingerprint = fingerprintOf(matcher.category, message, frames, owner);
+    const fingerprint = fingerprintOf(matcher.category, message, frames, owner, ref);
     const existing = clusters.get(fingerprint);
     if (existing) {
       existing.count++;
+      // A repeat carries "see ref for original" instead of the trace. Where the row it
+      // joins has none yet, this one's is the only one there will be.
+      if (!existing.frames.length && frames.length) {
+        existing.frames = frames;
+        existing.namespaces = namespacesOf(frames, existing.message);
+      }
       rememberPatch(existing, line, lines, i);
       rememberDefs(existing, line);
     } else {
@@ -353,7 +388,17 @@ function collectFrames(lines: string[], from: number): { frames: string[]; next:
  * normalised out of the message because ids, coordinates and tick counts vary per
  * occurrence while the underlying fault does not.
  */
-function fingerprintOf(category: string, message: string, frames: string[], patchOwner?: string): string {
+function fingerprintOf(
+  category: string,
+  message: string,
+  frames: string[],
+  patchOwner?: string,
+  ref?: string,
+): string {
+  // RimWorld has already decided which occurrences are the same fault. Taking its word for
+  // it collapses what no reading of the text can: a message that names a different pawn each
+  // time, and repeats that arrive with no stack to compare.
+  if (ref) return ["ref", ref].join("|");
   // A failing patch is grouped by the mod that shipped it, not by what it was looking for.
   // The message carries the defName, so one mod whose compatibility patches miss seven
   // different defs became seven identical-looking rows saying nothing seven times. What
