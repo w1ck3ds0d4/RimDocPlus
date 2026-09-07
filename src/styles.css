@@ -354,10 +354,12 @@ main {
   color: var(--accent);
 }
 
+/* Big enough to find. At 10px an uppercase label with wide tracking reads as a rule between
+   two lists rather than as the name of the one under it. */
 .section-title {
   margin: 20px 0 8px;
   color: var(--dim);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.9px;
@@ -3195,7 +3197,7 @@ tr.clickable:hover td {
 
 .panel-head h3 {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dim);
