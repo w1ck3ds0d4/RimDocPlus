@@ -4,6 +4,7 @@ import type { FileAction } from "./repair/repairs";
 export { targetsOf } from "./repair/repairs";
 import type { ScanResult } from "./types";
 import type { SaveMeta } from "./saves";
+import type { ProbeReport } from "./analysis/harmony";
 
 export interface ActionOutcome {
   target: string;
@@ -147,6 +148,17 @@ export function isSteamRunning(): Promise<boolean> {
  */
 export function fetchSharedLog(url: string): Promise<{ path: string; text: string }> {
   return invoke<{ path: string; text: string }>("fetch_shared_log", { url });
+}
+
+/**
+ * Ask the patch probe whether each mod's Harmony targets still exist.
+ *
+ * Runs a bundled program that reads .NET metadata, which takes a few seconds over a large
+ * install and is why it is asked for rather than done on every scan. Nothing in any mod
+ * executes: the probe reads metadata and never loads an assembly.
+ */
+export function probePatches(folders: string[]): Promise<ProbeReport> {
+  return invoke<ProbeReport>("probe_patches", { folders });
 }
 
 export interface SteamShutdown {

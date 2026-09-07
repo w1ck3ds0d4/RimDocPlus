@@ -25,3 +25,6 @@ src/dev-data/workshop.json
 # not committed: a 13 MB executable does not belong in a git history.
 sidecar/**/bin/
 sidecar/**/obj/
+
+# The published sidecar, copied in by `pnpm probe:stage`. Built, not committed.
+src-tauri/binaries/

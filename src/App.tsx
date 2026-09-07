@@ -22,6 +22,8 @@ import { Library } from "./components/Library";
 import { ModDetail } from "./components/ModDetail";
 import { Home } from "./components/Home";
 import { Bisect } from "./components/Bisect";
+import { PatchProbe } from "./components/PatchProbe";
+import { findingsFromProbe, type ProbeReport } from "./lib/analysis/harmony";
 import { Saves } from "./components/Saves";
 import { GameWatch } from "./components/GameWatch";
 import { Vault } from "./components/Vault";
@@ -183,6 +185,9 @@ export default function App() {
       ]);
       setScan(next);
       setSession(log);
+      // The assemblies may have changed with everything else, so the last report is no
+      // longer about what is on disk.
+      setProbe(null);
     } catch (e) {
       console.error("Rescan failed", e);
     } finally {
@@ -230,10 +235,20 @@ export default function App() {
     };
   }, [scan, active]);
 
-  const staticFindings = useMemo<Finding[]>(
-    () => (workingScan ? runStaticRules(workingScan, { oversizePx, workshop }) : []),
-    [workingScan, oversizePx, workshop],
-  );
+  /**
+   * What the patch probe last reported, if it has been asked.
+   *
+   * Kept apart from the static rules because it costs seconds and an external process, so
+   * it is asked for rather than run on every scan. Cleared on a rescan: a report about
+   * assemblies that may have changed is worse than no report.
+   */
+  const [probe, setProbe] = useState<ProbeReport | null>(null);
+
+  const staticFindings = useMemo<Finding[]>(() => {
+    if (!workingScan) return [];
+    const rules = runStaticRules(workingScan, { oversizePx, workshop });
+    return probe ? [...rules, ...findingsFromProbe(probe, workingScan.mods, workingScan.gameCycle)] : rules;
+  }, [workingScan, oversizePx, workshop, probe]);
 
   // Reloads when the picker moves. Pasted text needs no shell call: it is already here.
   useEffect(() => {
@@ -400,6 +415,9 @@ export default function App() {
               active={doctorFilter.active}
               onToggle={doctorFilter.toggle}
             />
+            {active && workingScan && (
+              <PatchProbe scan={workingScan} modpack={active} report={probe} onReport={setProbe} />
+            )}
             {active && (
               <Triage
                 // Both sets: the log's faults are the most severe the app finds, and a

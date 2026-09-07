@@ -196,7 +196,7 @@ run that also contained unrelated work.
 
 ## The command surface
 
-Twenty commands, and that is the whole of what the app can do to a machine. Anything not on
+Twenty-one commands, and that is the whole of what the app can do to a machine. Anything not on
 this list, it cannot do.
 
 **Writes to disk** (five, and only these):
@@ -216,10 +216,14 @@ the button pressed. Two hosts, matched on the whole host segment, https only. It
 because RimWorld's Share logs uploads to a gist and leaves nothing on disk to read instead.
 See [SECURITY-MODEL.md](SECURITY-MODEL.md#network).
 
+**Runs the patch probe:** `probe_patches`. A bundled .NET program that reads mod assemblies
+and reports whether each Harmony patch still has something to patch. It reads metadata and
+never loads an assembly, so no mod code executes. See [the sidecar](../sidecar/README.md).
+
 **Process control:** `launch_game`, `launch_supervised`, `stop_game` (only ever the process
 this app started, by stored pid, never by image name), `stop_steam`, `start_steam`.
 
-Eighteen of the twenty are `#[tauri::command(async)]`. That is not decoration. A synchronous
+Nineteen of the twenty-one are `#[tauri::command(async)]`. That is not decoration. A synchronous
 Tauri command runs on the thread that pumps the WebView2 message loop, so a long one freezes
 the window and an `emit` from inside it deadlocks outright. That happened: a repair run of 476
 texture resizes hung on the very first progress event with the process at zero CPU. Any
