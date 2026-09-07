@@ -176,10 +176,21 @@ export function Triage({
           onSkip={() => setQueue((q) => q.slice(1))}
         />
       )}
-      {steps.length > 0 && <TriageConsole steps={steps} />}
+      {/*
+        The report first, the transcript under it. The console runs to forty lines on a big
+        install, so what to do next was below the fold while a scrolling log of how the app
+        got there was the whole screen.
+      */}
       {result && (
-        <TriageReport result={result} scan={scan} onApplied={onApplied} onDismiss={() => setResult(null)} />
+        <TriageReport
+          result={result}
+          scan={scan}
+          onApplied={onApplied}
+          onDecide={() => setQueue(result.decisions)}
+          onDismiss={() => setResult(null)}
+        />
       )}
+      {steps.length > 0 && <TriageConsole steps={steps} />}
     </>
   );
 }
@@ -253,11 +264,21 @@ function TriageReport({
   result,
   scan,
   onApplied,
+  onDecide,
   onDismiss,
 }: {
   result: TriageResult;
   scan: ScanResult;
   onApplied?: () => void;
+  /**
+   * Ask the decisions this report is holding.
+   *
+   * They were already asked one at a time with Auto off, and simply filed away with it on,
+   * which left the report listing questions with no way to answer them. This hands them
+   * back to the same queue the modal reads, so there is one asking mechanism rather than
+   * two that could disagree.
+   */
+  onDecide: () => void;
   onDismiss: () => void;
 }) {
   const actions = allFileActions(result);
@@ -270,6 +291,7 @@ function TriageReport({
     <div className="triage-report">
       <div className="triage-head">
         <h2>{headline(result, resolved)}</h2>
+        <p className="triage-next">{nextStep(result, applied)}</p>
         <button className="btn" type="button" onClick={onDismiss}>
           Dismiss
         </button>
@@ -305,6 +327,22 @@ function TriageReport({
           </li>
         ))}
       </Section>
+
+      {result.decisions.length > 0 && (
+        <div className="repair-actions triage-decide">
+          <button
+            className="btn go"
+            type="button"
+            title="Asks each one in turn. Nothing is written to disk by answering."
+            onClick={onDecide}
+          >
+            Decide {result.decisions.length} thing{result.decisions.length === 1 ? "" : "s"} now
+          </button>
+          <span className="repair-note">
+            Answering moves each one into the file changes below, which you then apply.
+          </span>
+        </div>
+      )}
 
       <Section
         title="Needs your decision"
@@ -442,6 +480,30 @@ function TriageReport({
 }
 
 /** Say what actually happened, rather than reporting only the modpack-level repairs. */
+/**
+ * The one thing to do next, in a sentence.
+ *
+ * A report that lists seven buckets and offers four buttons is a description of a situation,
+ * not an instruction. This says which of them to touch, because after a run the question is
+ * never "what did you find" but "so what do I do".
+ */
+function nextStep(result: TriageResult, applied: boolean): string {
+  const actions = allFileActions(result).length;
+  if (applied) return "Done. Rescan to see the install as it is now.";
+  if (actions > 0) {
+    return `Apply the ${actions} file change${actions === 1 ? "" : "s"} below. Everything is backed up first, and the run can be undone.`;
+  }
+  if (result.decisions.length > 0) {
+    return `Answer the ${result.decisions.length} question${result.decisions.length === 1 ? "" : "s"} below, then apply what they stage.`;
+  }
+  if (result.external.length > 0) {
+    return "Nothing here can be applied for you. The remaining items need Steam, Windows or the mod's author.";
+  }
+  if (result.applied.length > 0)
+    return "The load order was changed. Apply to game in the header to write it.";
+  return "Nothing to do.";
+}
+
 function headline(result: TriageResult, resolved: number): string {
   if (resolved > 0) return `${resolved} of ${result.before} issues resolved`;
   if (result.autoDecided.length > 0 || result.files.length > 0) {

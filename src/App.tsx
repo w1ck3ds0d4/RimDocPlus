@@ -421,14 +421,11 @@ export default function App() {
         )}
         {tab === "doctor" && (
           <>
-            <SeveritySummary
-              findings={staticFindings}
-              active={doctorFilter.active}
-              onToggle={doctorFilter.toggle}
-            />
-            {active && workingScan && (
-              <PatchProbe scan={workingScan} modpack={active} report={probe} onReport={setProbe} />
-            )}
+            {/*
+              Triage first. It is the thing this tab exists for, and it sat under a filter
+              summary and an optional check, so the button someone came here to press was
+              the third thing they met.
+            */}
             {active && (
               <Triage
                 // Both sets: the log's faults are the most severe the app finds, and a
@@ -448,6 +445,14 @@ export default function App() {
                   Undo {undoStack[0].label}
                 </button>
               </div>
+            )}
+            <SeveritySummary
+              findings={staticFindings}
+              active={doctorFilter.active}
+              onToggle={doctorFilter.toggle}
+            />
+            {active && workingScan && (
+              <PatchProbe scan={workingScan} modpack={active} report={probe} onReport={setProbe} />
             )}
             <FindingList
               findings={doctorFilter.filtered}

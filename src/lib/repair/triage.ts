@@ -125,6 +125,14 @@ export function runTriage(
         }
         break;
       case "choice": {
+        // A single option the app does not recommend is something offered, not something
+        // asked. Twelve patch-override findings each became a "decision" reading
+        // "(1 options)", which buried the handful of real ones and made a report of things
+        // to look at read as a queue of things to answer.
+        if (plan.choices.length === 1 && !plan.choices[0].recommended) {
+          result.notes.push(finding);
+          break;
+        }
         const resolved = options.auto ? autoResolve(plan) : null;
         if (!resolved) {
           result.decisions.push({ finding, plan });
