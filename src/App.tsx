@@ -462,8 +462,16 @@ export default function App() {
             {active && <Bisect scan={workingScan} modpack={active} />}
           </>
         )}
-        {tab === "session" && active && (
-          <GameWatch scan={workingScan} modpack={active} startSignal={watchRequest} />
+        {/*
+          Kept mounted across tabs rather than rendered only on this one. It owns a running
+          game: its console, its phase, and the listener following the log. Unmounting on a
+          tab switch threw all of that away, and remounting re-ran the start signal, which
+          launched a second copy of the game.
+        */}
+        {active && (
+          <div hidden={tab !== "session"}>
+            <GameWatch scan={workingScan} modpack={active} startSignal={watchRequest} />
+          </div>
         )}
         {tab === "session" && <TickCost scan={workingScan} />}
         {tab === "session" && (
