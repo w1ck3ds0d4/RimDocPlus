@@ -39,6 +39,19 @@ export function RepairProvider({ value, children }: { value: RepairApi; children
 }
 
 /**
+ * What the number on a repair button means, for the tooltip.
+ *
+ * "T1" told a reader nothing on its own. The full model is in docs/SPEC.md; this is the one
+ * sentence per tier that answers the question the badge raises.
+ */
+const TIER_MEANING: Record<number, string> = {
+  1: "Tier 1: metadata and load order. Reversible, and nothing that loads changes.",
+  2: "Tier 2: XML patch repair. Diffed before it is applied.",
+  3: "Tier 3: missing or oversized content. Changes what the game loads.",
+  4: "Tier 4: assembly level. Never silent, always explained, undone in one click.",
+};
+
+/**
  * The repair control for one finding.
  *
  * A repair is always explained before it can be run, per the safety model: the button
@@ -69,7 +82,9 @@ export function RepairAction({ finding }: { finding: Finding }) {
     return (
       <button className="btn" type="button" disabled title="No automatic repair for this one yet">
         {finding.fix.label}
-        <span className="tier">T{finding.fix.tier}</span>
+        <span className="tier" title={TIER_MEANING[finding.fix.tier]}>
+          T{finding.fix.tier}
+        </span>
       </button>
     );
   }
@@ -78,7 +93,9 @@ export function RepairAction({ finding }: { finding: Finding }) {
     <div className="repair">
       <button className="btn primary" type="button" onClick={() => setOpen((v) => !v)}>
         {finding.fix.label}
-        <span className="tier">T{finding.fix.tier}</span>
+        <span className="tier" title={TIER_MEANING[finding.fix.tier]}>
+          T{finding.fix.tier}
+        </span>
         <span className="caret">{open ? "▾" : "▸"}</span>
       </button>
       {open && <RepairPanel plan={plan} api={api} onDone={() => setOpen(false)} title={finding.title} />}

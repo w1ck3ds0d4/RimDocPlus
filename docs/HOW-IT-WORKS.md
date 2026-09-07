@@ -176,9 +176,10 @@ would break the mod.
 
 ## 5. Performance
 
-Two measurements, no estimates of frame rate. Attributing frame time needs the in-game
-companion mod, which does not exist yet, and a number invented in its absence would be
-worse than none.
+Measured, never estimated. Frame rate is absent for the same reason it always was: what
+the renderer spends is not attributable to a mod, and a number invented in its absence
+would be worse than none. Per-mod tick cost is measured, by the companion mod that times
+the ticking from inside the game and writes down what it saw.
 
 **Texture footprint** sums width x height x 4 across every texture. This is an upper bound
 if everything were resident at once, not live usage, since RimWorld atlases and unloads.

@@ -498,10 +498,9 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 ## What's Not Yet Built
 
 - **Unattended bisect for faults after the main menu**: the search judges itself for anything that stops the mod list loading. A crash an hour into a colony, or a slowdown, still needs you, because from outside the process those look exactly like a healthy boot
-- **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
-- **Scripted soak run**: a long unattended session with faults attributed over time. Needs the tick measurement above
-- **Frame and tick measurement**: load time and memory are measured from outside the process, but what a mod costs per tick is not. Attributing simulation time to a method needs code running inside the game, which is an in-game companion mod and a separate deliverable
-- **Subscribing from inside the app**: the anonymous Web API is read-only, and changing a subscription needs the Steamworks SDK, a native binding and a running Steam client. Re-fetching an item is covered without any of that (see Retry download); subscribing to something new is not.
+- **Tier 4 repairs**: assembly-level neutralisation is specified but not implemented. Tier 2 ships as the patch-override repair and tier 3 as texture downscaling; stub defs for an absent dependency are still specified only
+- **Scripted soak run**: a long unattended session with faults attributed over time
+- **Frame measurement**: load time, memory and per-mod tick cost are measured, the last of them by the companion mod on the Performance tab. Frame time is not: what the renderer spends is not attributable to a mod by timing ticks
 - **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path
 - **Def audits**: unreachable def pruning
 

@@ -206,10 +206,14 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
 
   if (!session) {
     return (
-      <section className="bisect">
+      <section className="bisect offer">
         {dialog}
+        {/*
+          Louder than a section label. This is the way out when the rules have named nothing,
+          and it sat at the bottom of the tab styled like every other heading.
+        */}
         <header className="panel-head">
-          <h3>Nothing here explains it?</h3>
+          <h3 className="call">Nothing here explains it?</h3>
         </header>
         <p className="muted">
           Triage repairs what the rules can name. When the game crashes or drags and nothing on disk says why,
@@ -217,7 +221,7 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
         </p>
         <div className="repair-actions">
           <button
-            className="btn primary"
+            className="btn warn"
             type="button"
             disabled={!shell || !config || modpack.activeOrder.length < 4}
             title={

@@ -78,8 +78,10 @@ export function SeveritySummary({
  */
 export function FindingList({ findings, empty }: { findings: Finding[]; empty: string }) {
   const settled = findings.filter((f) => f.stale);
-  const actionable = findings.filter((f) => !f.stale && f.fix);
-  const notes = findings.filter((f) => !f.stale && !f.fix);
+  // An observation with a repair is still an observation. Sorting on `fix` alone put every
+  // patch override above the list of actual faults.
+  const actionable = findings.filter((f) => !f.stale && f.fix && !f.observation);
+  const notes = findings.filter((f) => !f.stale && (!f.fix || f.observation));
 
   if (!findings.length) return <p className="muted">{empty}</p>;
 

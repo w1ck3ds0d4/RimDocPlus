@@ -416,6 +416,32 @@ main {
   border-color: var(--ok);
 }
 
+/* Amber, for the search you run when the rules have named nothing. Not a warning about
+   danger: the halving search costs eight launches of the game, so it should not sit there
+   looking as routine as a button that stamps a version number. */
+.btn.warn {
+  background: rgba(217, 171, 65, 0.14);
+  border-color: rgba(217, 171, 65, 0.5);
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.btn.warn:hover:not(:disabled) {
+  background: rgba(217, 171, 65, 0.24);
+  border-color: var(--warning);
+}
+
+/* A panel heading that is asking the reader something, rather than labelling what is under
+   it. Bigger and not dimmed, because the rest of the tab is answers and this one is the
+   offer you reach for when none of them fit. */
+.panel-head h3.call {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--warning);
+}
+
 /* Destructive at rest, not only on hover: an action that cannot be undone should not
    look identical to Cancel until the pointer happens to be over it. */
 .btn.danger {
@@ -3523,6 +3549,14 @@ tr.clickable:hover td {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
+}
+
+/* The offer, before a search has started. Amber across the whole panel rather than only on
+   the heading and the button, so it reads as one block at the end of a tab of answers
+   instead of two coloured pieces inside a grey box. */
+.bisect.offer {
+  border-color: rgba(217, 171, 65, 0.4);
+  background: linear-gradient(180deg, rgba(217, 171, 65, 0.07), var(--panel));
 }
 
 /* A search in progress is the thing to look at, not a footnote under the findings. */

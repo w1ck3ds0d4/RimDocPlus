@@ -163,6 +163,15 @@ export interface Finding {
   /** Mods implicated, most-responsible first. */
   packageIds: string[];
   fix?: ProposedFix;
+  /**
+   * Set when this describes the install rather than reporting a fault with it.
+   *
+   * A repair being offered does not make something wrong. Patch overrides are how content
+   * layers in RimWorld, and twelve of them sat at the top of the Doctor looking like twelve
+   * things to fix. Carrying the distinction on the finding keeps the two lists honest without
+   * either of them guessing from the severity or from what the repair happens to look like.
+   */
+  observation?: true;
   /** Times this was observed. Log findings collapse duplicates into a count. */
   count?: number;
   /**
