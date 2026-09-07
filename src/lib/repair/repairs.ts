@@ -14,7 +14,8 @@ export type FileAction =
   | { op: "add-supported-version"; path: string; cycle: string; reason: string }
   | { op: "write"; path: string; contents: string; reason: string }
   | { op: "delete-matching"; directory: string; pattern: string; reason: string }
-  | { op: "downscale-png"; path: string; maxPx: number; fromPx: number; reason: string };
+  | { op: "downscale-png"; path: string; maxPx: number; fromPx: number; reason: string }
+  | { op: "forget-workshop-item"; path: string; steamId: string; reason: string };
 
 export interface RepairChoice {
   label: string;
@@ -74,6 +75,23 @@ function dependentsOf(ctx: RepairContext): Map<string, number> {
     }
   }
   return counts;
+}
+
+/**
+ * Steam's record of which Workshop items it has downloaded for RimWorld.
+ *
+ * Derived from the content folder the scan already found, which sits two levels below it, so
+ * a non-standard Steam library works without being configured anywhere.
+ */
+export function workshopManifest(scan: ScanResult): string | null {
+  const content = scan.paths.workshop;
+  if (!content) return null;
+  // Both separators, because the scan reports whatever the platform handed it and on Windows
+  // that is backslashes throughout.
+  const root = content.replace(/[\\/]+content[\\/]+\d+[\\/]*$/, "");
+  if (root === content) return null;
+  const sep = root.includes("\\") ? "\\" : "/";
+  return `${root}${sep}appworkshop_294100.acf`;
 }
 
 /** Config folder holding ModsConfig.xml and per-mod settings files. */
@@ -292,6 +310,54 @@ const REPAIRS: Record<string, RepairFn> = {
         `of decoded texture data, down from ${(before / 1024 ** 3).toFixed(2)} GB to ` +
         `${(after / 1024 ** 3).toFixed(2)} GB. Every file is copied to .rimdocbak first, so it is ` +
         "reversible. Tier 3: it changes mod content, so nothing here runs automatically.",
+    };
+  },
+
+  /**
+   * Make Steam fetch a Workshop item again.
+   *
+   * Steam's manifest keeps two lists: what it believes is downloaded, and what the account
+   * subscribes to. Dropping the installed record while leaving the subscription is what
+   * makes it fetch the item afresh, and is why this is not the same as unsubscribing.
+   *
+   * The folder goes too. Steam treats a present folder as proof of a good copy, so leaving
+   * a half-downloaded one behind is how an item stays broken through several retries.
+   */
+  "retry-workshop-download": (ctx) => {
+    const steamId = str(ctx, "steamId");
+    if (!steamId) return null;
+
+    const mod = ctx.scan.mods.find((m) => m.steamId === steamId);
+    const name = mod?.name ?? `item ${steamId}`;
+    const manifest = workshopManifest(ctx.scan);
+    const actions: FileAction[] = [];
+
+    if (mod) {
+      actions.push({
+        op: "delete-matching",
+        directory: mod.folder,
+        pattern: "*",
+        reason: `${name}: remove the copy on disk so Steam replaces it`,
+      });
+    }
+    if (manifest) {
+      actions.push({
+        op: "forget-workshop-item",
+        path: manifest,
+        steamId,
+        reason: `${name}: drop Steam's record of having downloaded it`,
+      });
+    }
+    if (!actions.length) return null;
+
+    return {
+      kind: "files",
+      actions,
+      summary:
+        `Removes ${name} and Steam's record of having downloaded it, leaving the subscription ` +
+        "intact, so Steam fetches it again on its next check. Close Steam first: it holds this " +
+        "record in memory and rewrites the file on exit, which would undo the change. Everything " +
+        "is backed up, so undoing puts the current copy back.",
     };
   },
 
@@ -526,6 +592,31 @@ export function toPowerShell(actions: FileAction[], configDir?: string | null): 
         "    $bmp.Dispose()",
         '    Write-Host "resized to $($w)x$($h): $p"',
         "  } else { $img.Dispose() }",
+        "}",
+      );
+    } else if (action.op === "forget-workshop-item") {
+      lines.push(
+        `$m = ${ps(action.path)}`,
+        `$id = ${ps(action.steamId)}`,
+        "if (Get-Process steam -ErrorAction SilentlyContinue) {",
+        '  Write-Host "Steam is running; close it or this edit is undone on exit: $m"',
+        "} elseif (Test-Path $m) {",
+        "  Backup-Once $m",
+        "  Save-ToRun $m",
+        "  $text = Get-Content $m -Raw",
+        // Bounded to the installed list. The same id sits in the subscription list below,
+        // and removing that one would unsubscribe rather than re-fetch.
+        "  $from = $text.IndexOf('\"WorkshopItemsInstalled\"')",
+        "  $to = $text.IndexOf('\"WorkshopItemDetails\"')",
+        "  if ($to -lt 0) { $to = $text.Length }",
+        '  $key = "`t`t""$id""`n"',
+        "  $at = $text.IndexOf($key, $from)",
+        "  if ($at -ge 0 -and $at -lt $to) {",
+        '    $close = $text.IndexOf("`n`t`t}", $at) + 4',
+        '    if ($close -lt $text.Length -and $text[$close] -eq "`n") { $close++ }',
+        "    Set-Content $m ($text.Substring(0, $at) + $text.Substring($close)) -NoNewline -Encoding UTF8",
+        '    Write-Host "Steam will fetch $id again"',
+        '  } else { Write-Host "$id was not recorded as installed" }',
         "}",
       );
     } else if (action.pattern === "*") {

@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import type { Finding, ModEntry, ScanResult, WorkshopCache } from "../lib/types";
 import { workshopUrl } from "../lib/library";
 import { loadPreview } from "../lib/preview";
+import { planRepair } from "../lib/repair/repairs";
+import { inShell, isSteamRunning, runFileActions, targetsOf } from "../lib/shell";
+import { record } from "../lib/history";
+import { useConfirm } from "./Confirm";
 
 export interface ModDetailProps {
   mod: ModEntry;
@@ -169,6 +173,8 @@ export function ModDetail({ mod, scan, workshop, findings, onOpen, onClose }: Mo
             onOpen={onOpen}
           />
 
+          {mod.steamId && <RetryDownload mod={mod} scan={scan} />}
+
           <section>
             <h3>On disk</h3>
             <code className="path">{mod.folder}</code>
@@ -183,6 +189,103 @@ export function ModDetail({ mod, scan, workshop, findings, onOpen, onClose }: Mo
         </div>
       </aside>
     </div>
+  );
+}
+
+/**
+ * Ask Steam to fetch this Workshop item again.
+ *
+ * For a copy that arrived damaged rather than absent, where the Workshop page offers nothing
+ * but unsubscribing and resubscribing by hand. Steam treats a present folder as proof of a
+ * good copy, so both the folder and Steam's record of having downloaded it have to go; the
+ * subscription stays, which is what makes this a re-fetch rather than an unsubscribe.
+ */
+function RetryDownload({ mod, scan }: { mod: ModEntry; scan: ScanResult }) {
+  const [steamUp, setSteamUp] = useState<boolean | null>(null);
+  const { confirm, dialog } = useConfirm();
+  const shell = inShell();
+
+  useEffect(() => {
+    if (!shell) return;
+    let live = true;
+    void isSteamRunning().then((up) => live && setSteamUp(up));
+    return () => {
+      live = false;
+    };
+  }, [shell]);
+
+  const plan = planRepair({
+    scan,
+    modpack: { id: "", name: "", createdAt: "", updatedAt: "", gameCycle: scan.gameCycle, activeOrder: [] },
+    finding: {
+      id: `retry:${mod.steamId}`,
+      rule: "retry-workshop-download",
+      severity: "info",
+      title: `Re-download ${mod.name}`,
+      detail: "",
+      packageIds: [mod.packageId],
+      fix: {
+        kind: "retry-workshop-download",
+        label: "Retry download",
+        tier: 3,
+        auto: false,
+        params: { steamId: mod.steamId ?? "" },
+      },
+    },
+  });
+
+  if (!plan || plan.kind !== "files") return null;
+  // Bound to a fresh const: a function declaration hoists, so the narrowing above has not
+  // happened yet as far as the closure below is concerned.
+  const filePlan = plan;
+
+  const blocked = !shell ? "Needs the desktop app" : steamUp ? "Close Steam first" : null;
+
+  async function retry() {
+    const ok = await confirm({
+      title: `Have Steam fetch ${mod.name} again?`,
+      body: (
+        <>
+          <p>{filePlan.summary}</p>
+          <p className="muted">
+            Steam re-downloads on its next check, which usually means the next time you start it or launch the
+            game. Nothing is lost either way: the current copy is backed up first.
+          </p>
+        </>
+      ),
+      confirmLabel: "Remove and re-fetch",
+    });
+    if (!ok) return;
+    await runFileActions(filePlan.actions, null);
+    record({
+      kind: "repair",
+      summary: `Asked Steam to re-download ${mod.name}`,
+      detail: `Workshop item ${mod.steamId}`,
+      targets: targetsOf(filePlan.actions),
+    });
+  }
+
+  return (
+    <section>
+      {dialog}
+      <h3>Download</h3>
+      <div className="repair-actions">
+        <button
+          className="btn"
+          type="button"
+          disabled={!!blocked}
+          title={blocked ?? filePlan.summary}
+          onClick={() => void retry()}
+        >
+          Retry download
+        </button>
+        <span className="repair-note">
+          {blocked === "Close Steam first"
+            ? "Steam is open. It rewrites its download record when it closes, so the change would be undone."
+            : "For a copy that downloaded damaged. Removes it and Steam's record of it, keeping the subscription."}
+        </span>
+      </div>
+    </section>
   );
 }
 

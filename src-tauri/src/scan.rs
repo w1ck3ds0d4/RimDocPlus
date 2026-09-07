@@ -407,7 +407,11 @@ pub fn scan_install_with(
     let mut mods = Vec::new();
     mods.extend(scan_mod_dir(&data_dir, ModSource::Official, &mut report));
     if let Some(local) = &paths.local_mods {
-        mods.extend(scan_mod_dir(Path::new(local), ModSource::Local, &mut report));
+        mods.extend(scan_mod_dir(
+            Path::new(local),
+            ModSource::Local,
+            &mut report,
+        ));
     }
     if let Some(workshop) = &paths.workshop {
         mods.extend(scan_mod_dir(

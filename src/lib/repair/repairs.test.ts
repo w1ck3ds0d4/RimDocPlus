@@ -3,12 +3,16 @@ import type { Finding, ModEntry, ProposedFix, ScanResult } from "../types";
 import type { Modpack } from "../modpacks";
 import {
   autoPackRepairs,
+  workshopManifest,
   planRepair,
   toPowerShell,
   toRollbackPowerShell,
   type FileAction,
   type RepairPlan,
 } from "./repairs";
+
+/** A single backslash, spelled this way so no escaping layer can eat it. */
+const SEP = String.fromCharCode(92);
 
 function mod(packageId: string, over: Partial<ModEntry> = {}): ModEntry {
   return {
@@ -244,6 +248,31 @@ describe("file repairs", () => {
         finding: findingWith({ ...manual, kind: "restore-mods-config" }),
       }),
     ).toBeNull();
+  });
+});
+
+describe("workshopManifest", () => {
+  const withWorkshop = (workshop: string): ScanResult => ({
+    ...scanOf([], []),
+    paths: { saveData: "C:/save", workshop },
+  });
+
+  const WIN = ["C:", "Steam", "steamapps", "workshop", "content", "294100"].join(SEP);
+  const NIX = "/home/me/.steam/steam/steamapps/workshop/content/294100";
+
+  /** The scan reports whatever the platform handed it, and on Windows that is backslashes. */
+  it("finds the manifest two levels above the content folder", () => {
+    expect(workshopManifest(withWorkshop(WIN))).toBe(
+      ["C:", "Steam", "steamapps", "workshop", "appworkshop_294100.acf"].join(SEP),
+    );
+    expect(workshopManifest(withWorkshop(NIX))).toBe(
+      "/home/me/.steam/steam/steamapps/workshop/appworkshop_294100.acf",
+    );
+  });
+
+  it("says nothing rather than guessing when the path is not the shape it expects", () => {
+    expect(workshopManifest(withWorkshop("C:/somewhere/else"))).toBeNull();
+    expect(workshopManifest(scanOf([], []))).toBeNull();
   });
 });
 

@@ -122,6 +122,16 @@ export function readSessionLog(): Promise<{ path: string; text: string } | null>
   return invoke<{ path: string; text: string } | null>("read_session_log", {});
 }
 
+/**
+ * Whether the Steam client is running.
+ *
+ * It holds its workshop record in memory and rewrites the file on exit, so anything editing
+ * that record has to wait for Steam to be closed or the change is simply undone.
+ */
+export function isSteamRunning(): Promise<boolean> {
+  return invoke<boolean>("is_steam_running", {});
+}
+
 /** Start RimWorld from its install folder. */
 export function launchGame(gameDir: string): Promise<string> {
   return invoke<string>("launch_game", { gameDir });

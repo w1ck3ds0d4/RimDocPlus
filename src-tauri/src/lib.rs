@@ -34,6 +34,11 @@ enum FileAction {
         #[serde(rename = "maxPx")]
         max_px: u32,
     },
+    ForgetWorkshopItem {
+        path: String,
+        #[serde(rename = "steamId")]
+        steam_id: String,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -201,6 +206,74 @@ fn delete_matching(directory: &Path, pattern: &str) -> Result<String, String> {
     Ok(format!("removed {removed}"))
 }
 
+/// Whether the Steam client is running.
+///
+/// It holds its workshop manifest in memory and rewrites the file on exit, so an edit made
+/// while it is up is simply undone. Anything that touches that manifest has to check first.
+#[tauri::command]
+fn is_steam_running() -> bool {
+    let output = Command::new("tasklist")
+        .args(["/FI", "IMAGENAME eq steam.exe", "/NH"])
+        .output();
+    match output {
+        Ok(o) => String::from_utf8_lossy(&o.stdout)
+            .to_lowercase()
+            .contains("steam.exe"),
+        // Unknown is treated as running: refusing to edit is recoverable, editing under a
+        // live Steam silently loses the change and looks like the repair did nothing.
+        Err(_) => true,
+    }
+}
+
+/// Drop one item from Steam's record of what it has downloaded.
+///
+/// The manifest keeps two lists: what Steam believes is installed, and what the account is
+/// subscribed to. Removing the installed entry while leaving the subscription is what makes
+/// Steam fetch the item again; removing the subscription instead would just unsubscribe.
+///
+/// The file is Valve's tab-indented key-value format. Parsed by hand because only one block
+/// is being removed and every byte outside it must survive untouched, which a
+/// parse-and-reserialise would not guarantee.
+fn forget_workshop_item(path: &Path, steam_id: &str) -> Result<String, String> {
+    let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
+
+    let installed = text
+        .find("\"WorkshopItemsInstalled\"")
+        .ok_or("No WorkshopItemsInstalled block in the manifest")?;
+    // Bounded by the next section, so an id appearing in both lists cannot have the wrong
+    // one removed.
+    let end = text[installed..]
+        .find("\"WorkshopItemDetails\"")
+        .map(|i| installed + i)
+        .unwrap_or(text.len());
+
+    let key = format!("\t\t\"{steam_id}\"\n");
+    let Some(at) = text[installed..end].find(&key).map(|i| installed + i) else {
+        return Ok(format!("{steam_id} was not recorded as installed"));
+    };
+
+    let brace = text[at..end]
+        .find("\t\t{")
+        .map(|i| at + i)
+        .ok_or("Malformed manifest entry")?;
+    let close = text[brace..end]
+        .find("\n\t\t}")
+        .map(|i| brace + i + "\n\t\t}".len())
+        .ok_or("Unterminated manifest entry")?;
+    // Take the newline after the closing brace too, so no blank line is left behind.
+    let cut = if text[close..].starts_with('\n') {
+        close + 1
+    } else {
+        close
+    };
+
+    let mut next = String::with_capacity(text.len());
+    next.push_str(&text[..at]);
+    next.push_str(&text[cut..]);
+    fs::write(path, next).map_err(|e| e.to_string())?;
+    Ok(format!("Steam will fetch {steam_id} again"))
+}
+
 /// Carry out a repair plan, backing every target up first.
 ///
 /// One failing action does not stop the run: the rest still apply and the failure is
@@ -259,6 +332,20 @@ fn run_file_actions(
                 directory.clone(),
                 delete_matching(Path::new(directory), pattern),
             ),
+            FileAction::ForgetWorkshopItem { path, steam_id } => {
+                let p = PathBuf::from(path);
+                if is_steam_running() {
+                    (
+                        path.clone(),
+                        Err("Steam is running, and it rewrites this file on exit. Close Steam and try again.".to_string()),
+                    )
+                } else {
+                    (
+                        path.clone(),
+                        backup_once(&p).and_then(|_| forget_workshop_item(&p, steam_id)),
+                    )
+                }
+            }
         };
 
         let (ok, detail) = match result {
@@ -490,7 +577,8 @@ pub fn run() {
             launch_game,
             read_mod_preview,
             scan_install,
-            read_session_log
+            read_session_log,
+            is_steam_running
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");
@@ -661,6 +749,55 @@ mod tests {
                 denied.display()
             );
         }
+    }
+
+    /// Only the installed record goes, never the subscription.
+    ///
+    /// The manifest lists both, and the id appears in each. Removing the subscription would
+    /// unsubscribe the player, which is the opposite of asking Steam to fetch the item again,
+    /// so the search is bounded to the installed section.
+    #[test]
+    fn forgetting_an_item_leaves_the_subscription_alone() {
+        let tmp = tempdir().unwrap();
+        let acf = tmp.path().join("appworkshop_294100.acf");
+        let manifest = concat!(
+            "\"AppWorkshop\"\n{\n",
+            "\t\"WorkshopItemsInstalled\"\n\t{\n",
+            "\t\t\"111\"\n\t\t{\n\t\t\t\"size\"\t\t\"5\"\n\t\t}\n",
+            "\t\t\"222\"\n\t\t{\n\t\t\t\"size\"\t\t\"7\"\n\t\t}\n",
+            "\t}\n",
+            "\t\"WorkshopItemDetails\"\n\t{\n",
+            "\t\t\"222\"\n\t\t{\n\t\t\t\"subscribedby\"\t\t\"9\"\n\t\t}\n",
+            "\t}\n}\n",
+        );
+        fs::write(&acf, manifest).unwrap();
+
+        let detail = forget_workshop_item(&acf, "222").unwrap();
+        assert!(detail.contains("222"), "{detail}");
+
+        let after = fs::read_to_string(&acf).unwrap();
+        let installed = after.find("WorkshopItemsInstalled").unwrap();
+        let details = after.find("WorkshopItemDetails").unwrap();
+
+        // Gone from what Steam thinks it has downloaded...
+        assert!(!after[installed..details].contains("222"));
+        // ...still there as a subscription, which is what makes Steam fetch it again.
+        assert!(after[details..].contains("222"));
+        // The untouched neighbour survives intact.
+        assert!(after[installed..details].contains("111"));
+        assert!(after.contains("AppWorkshop"));
+    }
+
+    /// An id Steam has no record of installing is not an error: the folder removal beside it
+    /// is the part that matters, and a manifest that never mentioned it is already correct.
+    #[test]
+    fn forgetting_an_unknown_item_is_not_a_failure() {
+        let tmp = tempdir().unwrap();
+        let acf = tmp.path().join("appworkshop_294100.acf");
+        fs::write(&acf, "\"WorkshopItemsInstalled\"\n\t{\n\t}").unwrap();
+        assert!(forget_workshop_item(&acf, "999")
+            .unwrap()
+            .contains("not recorded"));
     }
 
     /// Rolling back a path nothing backed up is reported, not treated as a failure: the

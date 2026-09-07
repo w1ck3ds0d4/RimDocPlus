@@ -32,6 +32,7 @@ export const RELEASES: Release[] = [
       "Triage covers the faults read out of your log too, which is where the most severe findings are",
       "A logged fault the scan can prove was fixed since is marked settled rather than offered a repair that would do nothing",
       "Findings are outlined in their severity, so a list can be read by shape before it is read as words",
+      "Retry download on any Workshop mod: removes it and Steam's record of having downloaded it, keeping the subscription, so Steam fetches it again",
       "Settings: choose the size at which a texture counts as oversized, from 1024px down to anything above the 512px target",
       "Every change is backed up first, and every repair that touches disk can be rolled back",
     ],

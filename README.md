@@ -214,6 +214,25 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Retry a Workshop download
+
+For a mod that arrived damaged rather than absent, where the Workshop page offers nothing but
+unsubscribing and resubscribing by hand.
+
+Steam's `appworkshop_294100.acf` keeps two lists: what it believes it has downloaded, and what the
+account subscribes to. Dropping the installed record while leaving the subscription is what makes
+Steam fetch the item again, which is why this is not the same as unsubscribing. The mod folder goes
+too, because Steam treats a present folder as proof of a good copy and a half-downloaded one will
+otherwise survive several retries.
+
+The button is disabled while Steam is running. Steam holds that record in memory and rewrites the
+file when it exits, so an edit made underneath it is simply undone, and a repair that silently
+achieves nothing is worse than one that declines. Both the folder and the manifest are backed up
+first, so undoing puts the current copy back.
+
+It is offered on any Workshop mod from its detail panel, and on the ghost-subscription finding the
+session report raises when Steam registered a subscription and no folder ever arrived.
+
 ### Live scanning
 
 The desktop build walks the install itself rather than reading a fixture written at build time.
@@ -295,9 +314,9 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 - **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
 - **L2 and L3 testing**: headless boot check and scripted soak run with TPS attribution
 - **A/B benchmarking**: same save, two profiles, measured locally
-- **Subscribe and unsubscribe from inside the app.** The Web API is read-only; `ISteamUGC::SubscribeItem` is the Steamworks SDK and needs a native binding plus a running Steam client. The established pattern belongs to the shell.
+- **Subscribing from inside the app**: the anonymous Web API is read-only, and changing a subscription needs the Steamworks SDK, a native binding and a running Steam client. Re-fetching an item is covered without any of that (see Retry download); subscribing to something new is not.
 - **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path
-- **Texture and def audits**: oversized texture detection with batch downscaling, unreachable def pruning
+- **Def audits**: unreachable def pruning
 
 ## License
 

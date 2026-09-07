@@ -303,8 +303,8 @@ const EXPLANATIONS: Record<string, Explanation> = {
     detail:
       "Steam registered the subscription but no folder arrived. The mod is not actually installed, so " +
       "anything depending on it fails. Usually fixed by unsubscribing and resubscribing.",
-    fixKind: "resubscribe-workshop-item",
-    params: (e) => ({ steamIds: [/for (\d+)/.exec(e.message)?.[1] ?? ""].filter(Boolean) }),
+    fixKind: "retry-workshop-download",
+    params: (e) => ({ steamId: ghostIdOf(e) ?? "" }),
   },
   "duplicate-package-id": {
     title: (e) => `Duplicate mod loaded: ${duplicateIdOf(e) ?? "unknown"}`,
