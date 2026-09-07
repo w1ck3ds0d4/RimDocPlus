@@ -36,6 +36,11 @@ export interface ModEntry {
   textures?: TextureStats;
   /** XML patch operations that target an xpath, when the scan read the Patches folder. */
   patches?: PatchOperation[];
+  /**
+   * Assembly file names this mod ships, lowercased. No paths: the name is what identifies a
+   * library, and it is what two mods shipping the same one have in common.
+   */
+  assemblies?: string[];
   /** Set from ModsConfig.xml, not from the mod folder. */
   active: boolean;
   loadIndex: number | null;

@@ -1,4 +1,4 @@
-import type { Finding, ModEntry, OversizedTexture, ScanResult } from "../types";
+import type { Finding, ModEntry, OversizedTexture, ScanResult, WorkshopCache } from "../types";
 
 const GB = 1024 ** 3;
 
@@ -13,6 +13,13 @@ export const DOWNSCALE_TARGET_PX = 512;
 export const DEFAULT_OVERSIZE_PX = 1024;
 
 export interface AnalysisOptions {
+  /**
+   * Workshop metadata, when the player has fetched it.
+   *
+   * Optional because the app works offline by default, and every rule reading it reports
+   * nothing rather than guessing when it is absent.
+   */
+  workshop?: WorkshopCache | null;
   /**
    * A texture is worth resizing at or above this in either dimension.
    *

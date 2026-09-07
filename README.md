@@ -59,6 +59,8 @@ Nine independent rules, each provable without launching the game:
 - **incompatible-pair**: both mods enabled where one declares the conflict
 - **load-order-violation**: `loadAfter` and `loadBefore` constraints the current order breaks
 - **version-mismatch**: mods not advertising the running game cycle, collapsed into one counted finding
+- **bundled-assemblies**: two or more mods shipping the same library. RimWorld loads assemblies into one process, so the first copy wins and the rest are ignored; where the copies are different versions, whichever mod loads second is silently bound to the other's build and fails in a way that looks like a fault in the wrong mod. Reported, never repaired, since whether a bundled library can be removed is the author's call
+- **workshop-updates**: mods the Workshop has updated more recently than the copy on disk. Steam normally keeps subscriptions current, so a gap usually means a download did not land. Needs `pnpm workshop` data, ignores gaps under two days as folder-time noise, and pairs with Retry download
 
 Every finding carries a proposed repair tagged with its tier and whether it can be applied automatically. The severity counts above the list are filters: click one to show only that severity, click it again to clear. A filter clears itself once nothing of that severity is left, so repairing the last critical never leaves an empty list behind.
 

@@ -1,6 +1,7 @@
 import type { Finding, ModEntry, ScanResult } from "../types";
 import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS } from "./about.ts";
 import { DEFAULT_ANALYSIS, runPerformanceRules, type AnalysisOptions } from "./performance.ts";
+import { ruleBundledAssemblies, ruleWorkshopUpdates } from "./packaging.ts";
 import { runPatchRules } from "./patches.ts";
 
 /** What one rule did on one run, for the diagnostics panel. */
@@ -48,6 +49,8 @@ export function runStaticRulesWithDiagnostics(
     ["incompatible-pair", () => ruleIncompatiblePair(active, activeSet, byId)],
     ["load-order-violation", () => ruleLoadOrder(active, position)],
     ["version-mismatch", () => ruleVersionMismatch(active, scan.gameCycle)],
+    ["bundled-assemblies", () => ruleBundledAssemblies(active)],
+    ["workshop-updates", () => ruleWorkshopUpdates(active, options.workshop ?? null)],
     ["performance", () => runPerformanceRules(scan, options)],
     ["patch-override", () => runPatchRules(scan)],
   ];

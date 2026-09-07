@@ -114,6 +114,9 @@ pub struct ModEntry {
     /// implementation always populates both.
     pub textures: TextureStats,
     pub patches: Vec<PatchOperation>,
+    /// Assembly file names this mod ships, lowercased and deduped.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub assemblies: Vec<String>,
     /// Set from ModsConfig.xml, not from the mod folder.
     pub active: bool,
     pub load_index: Option<i64>,
@@ -502,6 +505,7 @@ fn scan_mod_dir(dir: &Path, source: ModSource, progress: &mut dyn FnMut(&str)) -
         };
 
         if let Some(mut mod_entry) = parse_about(input) {
+            mod_entry.assemblies = measured.assemblies;
             mod_entry.textures = measured.textures;
             mod_entry.patches = read_patches(&folder);
             mod_entry.preview_path = find_preview(&folder);
@@ -536,6 +540,10 @@ fn read_about(folder: &Path) -> Option<String> {
 struct MeasuredMod {
     size_bytes: u64,
     textures: TextureStats,
+    /// Assembly file names, no paths. Collected during the walk that is happening anyway, so
+    /// it costs nothing beyond the string: a mod bundling a library that belongs to another
+    /// mod is a packaging mistake worth naming, and the file name is all that identifies it.
+    assemblies: Vec<String>,
 }
 
 /// One pass over a mod folder producing both its on-disk size and its texture footprint.
@@ -546,6 +554,7 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
     let mut count: u32 = 0;
     let mut vram: u64 = 0;
     let mut oversized: Vec<OversizedTexture> = Vec::new();
+    let mut assemblies: Vec<String> = Vec::new();
     let mut truncated = false;
     let mut stack = vec![dir.to_path_buf()];
 
@@ -584,6 +593,9 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
             total += size;
 
             let name = entry.file_name().to_string_lossy().to_lowercase();
+            if name.ends_with(".dll") {
+                assemblies.push(name.clone());
+            }
             if !name.ends_with(".png") {
                 continue;
             }
@@ -605,6 +617,9 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
     oversized.sort_by_key(|t| std::cmp::Reverse(t.width as u64 * t.height as u64));
     oversized.truncate(MAX_OVERSIZED);
 
+    assemblies.sort();
+    assemblies.dedup();
+
     MeasuredMod {
         size_bytes: total,
         textures: TextureStats {
@@ -613,6 +628,7 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
             oversized,
             truncated,
         },
+        assemblies,
     }
 }
 
@@ -818,6 +834,8 @@ fn parse_about(input: AboutInput) -> Option<ModEntry> {
     };
 
     Some(ModEntry {
+        // Filled in by the caller, which is the only place that has walked the files.
+        assemblies: Vec::new(),
         package_id,
         name,
         author,

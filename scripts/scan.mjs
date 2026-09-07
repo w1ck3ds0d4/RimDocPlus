@@ -125,6 +125,7 @@ function measureMod(dir, budget = 6000) {
   let total = 0;
   let seen = 0;
   const textures = { count: 0, estimatedVramBytes: 0, oversized: [], truncated: false };
+  const assemblies = new Set();
   const stack = [dir];
 
   while (stack.length) {
@@ -152,7 +153,12 @@ function measureMod(dir, budget = 6000) {
       } catch {
         continue;
       }
-      if (!entry.name.toLowerCase().endsWith(".png")) continue;
+      const lower = entry.name.toLowerCase();
+      // Collected during the walk that is happening anyway, so it costs nothing beyond the
+      // string. A mod bundling a library that belongs to another mod is a packaging mistake
+      // worth naming, and the file name is all that identifies it.
+      if (lower.endsWith(".dll")) assemblies.add(lower);
+      if (!lower.endsWith(".png")) continue;
       const size = pngSize(full);
       if (!size) continue;
       textures.count++;
@@ -165,7 +171,7 @@ function measureMod(dir, budget = 6000) {
 
   textures.oversized.sort((a, b) => b.width * b.height - a.width * a.height);
   textures.oversized = textures.oversized.slice(0, MAX_OVERSIZED);
-  return { sizeBytes: total, textures };
+  return { sizeBytes: total, textures, assemblies: [...assemblies].sort() };
 }
 
 /** RimWorld accepts About/About.xml with any casing, and some mods ship it uppercased. */
@@ -339,6 +345,7 @@ function scanModDir(dir, source) {
     if (mod)
       mods.push({
         ...mod,
+        assemblies: measured.assemblies,
         textures: measured.textures,
         patches: readPatches(folder),
         previewPath: findPreview(folder),
