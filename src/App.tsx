@@ -25,7 +25,9 @@ import { record } from "./lib/history";
 import { installDiff } from "./lib/installDiff";
 import { Settings, loadDevMode, loadOversizePx, saveOversizePx } from "./components/Settings";
 import { GameControls } from "./components/GameControls";
-import { inShell, scanInstall } from "./lib/shell";
+import { Logo } from "./components/Logo";
+import { Splash } from "./components/Splash";
+import { inShell, scanInstall, watchScan, type ScanProgress } from "./lib/shell";
 
 type Tab = "home" | "doctor" | "session" | "packs" | "order" | "library" | "settings";
 
@@ -41,6 +43,7 @@ export default function App() {
   const [devMode, setDevMode] = useState(loadDevMode);
   const [scanning, setScanning] = useState(false);
   const [oversizePx, setOversizePx] = useState(loadOversizePx);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
 
   const setDevModePersisted = useCallback((on: boolean) => {
     setDevMode(on);
@@ -54,6 +57,13 @@ export default function App() {
   const [undoStack, setUndoStack] = useState<{ modpack: Modpack; label: string }[]>([]);
 
   useEffect(() => {
+    // Armed before the scan starts, or the first folders report into nothing and the bar
+    // begins part-way along.
+    let stop: (() => void) | undefined;
+    void watchScan(setScanProgress).then((off) => {
+      stop = off;
+    });
+
     // The shell scans the install itself; the browser has only the build-time fixture.
     Promise.all([inShell() ? scanInstall() : loadScan(), loadSession(), loadWorkshop()])
       .then(([s, l, w]) => {
@@ -76,7 +86,11 @@ export default function App() {
         setProfiles(seeded);
         setActiveId(seeded[0].id);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setScanProgress(null);
+        stop?.();
+      });
   }, []);
 
   useEffect(() => {
@@ -134,11 +148,14 @@ export default function App() {
   const rescan = useCallback(async () => {
     if (!inShell() || scanning) return;
     setScanning(true);
+    const stop = await watchScan(setScanProgress);
     try {
       setScan(await scanInstall());
     } catch (e) {
       console.error("Rescan failed", e);
     } finally {
+      stop();
+      setScanProgress(null);
       setScanning(false);
     }
   }, [scanning]);
@@ -202,7 +219,12 @@ export default function App() {
 
   const doctorFilter = useSeverityFilter(staticFindings);
 
-  if (loading) return <main />;
+  if (loading)
+    return (
+      <main>
+        <Splash progress={scanProgress} note="Reading your install" />
+      </main>
+    );
   if (!scan || !workingScan) return <NoFixtures />;
 
   // The detail panel is opened from several tabs and stays open across a tab change, so the
@@ -266,6 +288,17 @@ export default function App() {
         <TabButton id="library" tab={tab} setTab={setTab} label="Library" />
         <TabButton id="settings" tab={tab} setTab={setTab} label="Settings" />
       </nav>
+
+      {scanning && (
+        <div className="rescan-strip" role="status" aria-live="polite">
+          <span className="rescan-spin" aria-hidden="true" />
+          <span>
+            Rescanning
+            {scanProgress && scanProgress.total > 0 ? ` ${scanProgress.done} of ${scanProgress.total}` : ""}
+          </span>
+          <span className="muted rescan-label">{scanProgress?.label ?? ""}</span>
+        </div>
+      )}
 
       <main>
         {tab === "home" && diff && (
@@ -377,19 +410,6 @@ export default function App() {
 }
 
 /** RD with a medical cross: the mark reads as a doctor, not a mod list. */
-function Logo() {
-  return (
-    <div className="brand" aria-label="RimDoc+" title="RimDoc+">
-      <span className="r">R</span>
-      <span className="d">D</span>
-      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-        <rect x="6.2" y="0.8" width="3.6" height="14.4" rx="1.1" fill="#e5484d" />
-        <rect x="0.8" y="6.2" width="14.4" height="3.6" rx="1.1" fill="#e5484d" />
-      </svg>
-    </div>
-  );
-}
-
 /**
  * One number in the header.
  *

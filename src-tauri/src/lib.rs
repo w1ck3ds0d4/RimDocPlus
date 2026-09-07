@@ -376,9 +376,26 @@ fn rollback(targets: Vec<String>) -> Result<RunReport, String> {
 /// means the desktop app would keep reporting the install as it was when it was compiled.
 /// After a repair rewrites 730 textures, or after Steam updates a mod, that snapshot is
 /// simply wrong, so the shell scans for itself.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanProgressEvent {
+    done: usize,
+    total: usize,
+    label: String,
+}
+
 #[tauri::command(async)]
-fn scan_install() -> Result<scan::ScanResult, String> {
-    scan::scan_install(None)
+fn scan_install(app: AppHandle) -> Result<scan::ScanResult, String> {
+    scan::scan_install_with(None, &mut |p| {
+        let _ = app.emit(
+            "scan:progress",
+            ScanProgressEvent {
+                done: p.done,
+                total: p.total,
+                label: p.label.to_string(),
+            },
+        );
+    })
 }
 
 /// Read a mod's banner image back as a data URL.

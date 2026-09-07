@@ -53,6 +53,7 @@ export function Triage({
   const [steps, setSteps] = useState<TriageStep[]>([]);
   const [auto, setAuto] = useState(loadAuto);
   const [queue, setQueue] = useState<TriageResult["decisions"]>([]);
+  const [busy, setBusy] = useState(false);
 
   function setAutoMode(next: boolean) {
     setAuto(next);
@@ -63,7 +64,27 @@ export function Triage({
     }
   }
 
+  /**
+   * Plan the pass, after letting the button paint that it is working.
+   *
+   * runTriage is synchronous and plans every repair, which on a list carrying several
+   * hundred texture actions is long enough to see. Called straight from the click handler it
+   * blocks the frame, so the button never gets to change and the window simply stops for a
+   * moment. Yielding once lets the busy state land first.
+   */
   function run() {
+    if (busy) return;
+    setBusy(true);
+    setTimeout(() => {
+      try {
+        plan();
+      } finally {
+        setBusy(false);
+      }
+    }, 0);
+  }
+
+  function plan() {
     const triage = runTriage(findings, { scan, modpack }, { auto, workshop });
     if (triage.applied.length) {
       applyModpack(
@@ -128,7 +149,12 @@ export function Triage({
             <b>Auto</b>
           </span>
         </label>
-        <button className={`triage-btn${findings.length === 0 ? " clean" : ""}`} type="button" onClick={run}>
+        <button
+          className={`triage-btn${findings.length === 0 ? " clean" : ""}${busy ? " busy" : ""}`}
+          type="button"
+          disabled={busy}
+          onClick={run}
+        >
           <span className="cross" aria-hidden="true">
             <svg width="30" height="30" viewBox="0 0 16 16" focusable="false">
               <rect x="6.1" y="0.6" width="3.8" height="14.8" rx="1.2" fill="#ffffff" />
@@ -136,7 +162,7 @@ export function Triage({
             </svg>
           </span>
           <span className="triage-label">
-            <b>{findings.length === 0 ? "Nothing to triage" : "Perform triage"}</b>
+            <b>{busy ? "Working..." : findings.length === 0 ? "Nothing to triage" : "Perform triage"}</b>
           </span>
           <span className="triage-count">{findings.length}</span>
         </button>

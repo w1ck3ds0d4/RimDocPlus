@@ -3112,3 +3112,175 @@ tr.clickable:hover td {
   margin: 0 0 8px;
   color: var(--ok);
 }
+
+/* Startup ------------------------------------------------------------------ */
+
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 60vh;
+  animation: splash-in 0.25s ease-out;
+}
+
+/* Held back a beat: a scan that finishes fast should not flash a loading screen. */
+@keyframes splash-in {
+  0%,
+  40% {
+    opacity: 0;
+  }
+}
+
+.splash-mark {
+  font-size: 26px;
+  transform: scale(1.6);
+  margin-bottom: 10px;
+}
+
+.splash-bar {
+  position: relative;
+  width: min(340px, 70vw);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+
+.splash-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 140ms linear;
+}
+
+/* Nothing has reported yet, so the bar says "working" rather than claiming a position. */
+.splash-bar.sweeping .splash-fill {
+  width: 38%;
+  animation: splash-sweep 1.15s ease-in-out infinite;
+}
+
+@keyframes splash-sweep {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.splash-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.splash-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fixed height and clipped: 252 mod names of wildly different lengths must not make the
+   whole column jump on every update. */
+.splash-label {
+  margin: 0;
+  height: 16px;
+  max-width: min(420px, 80vw);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* A rescan keeps the app on screen, so it reports in a strip rather than taking it over. */
+.rescan-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-soft);
+  font-size: 12px;
+  flex: none;
+}
+
+.rescan-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.rescan-spin {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--panel-3);
+  border-top-color: var(--accent);
+  animation: rescan-spin 0.7s linear infinite;
+}
+
+@keyframes rescan-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash,
+  .splash-bar.sweeping .splash-fill,
+  .rescan-spin {
+    animation: none;
+  }
+
+  .splash-bar.sweeping .splash-fill {
+    width: 100%;
+    opacity: 0.4;
+  }
+}
+
+/* Waiting states ----------------------------------------------------------- */
+
+/* A banner resolves over IPC in the desktop build, so the frame says it is coming rather
+   than sitting as an empty box that reads like a mod with no art. */
+.banner.loading {
+  background: linear-gradient(100deg, var(--panel-2) 30%, var(--panel-3) 50%, var(--panel-2) 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position-x: 130%;
+  }
+  to {
+    background-position-x: -30%;
+  }
+}
+
+/* Planning a pass over several hundred actions takes a visible moment. */
+.triage-btn.busy {
+  cursor: progress;
+}
+
+.triage-btn.busy .cross {
+  animation-duration: 0.9s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner.loading {
+    animation: none;
+  }
+}

@@ -329,7 +329,26 @@ const MAX_PATCH_OPS: usize = 1500;
 /// discovery result: a caller that only knows the game folder (e.g. from a file-picker)
 /// can supply just that and still get the workshop/local/save-data paths this would have
 /// found on its own.
+/// One folder read, for a caller that wants to show the walk happening.
+pub struct ScanProgress<'a> {
+    pub done: usize,
+    pub total: usize,
+    pub label: &'a str,
+}
+
 pub fn scan_install(paths_override: Option<ScanPaths>) -> Result<ScanResult, String> {
+    scan_install_with(paths_override, &mut |_| {})
+}
+
+/// The scan, reporting each mod folder as it finishes with it.
+///
+/// A 252-mod install takes about four seconds, which is a long time for a window to sit
+/// blank. The callback keeps that reporting in the caller's hands rather than making this
+/// file know anything about how the app talks to its own UI.
+pub fn scan_install_with(
+    paths_override: Option<ScanPaths>,
+    progress: &mut dyn FnMut(ScanProgress),
+) -> Result<ScanResult, String> {
     let discovered = discover();
     let paths = match paths_override {
         Some(o) => ScanPaths {
@@ -364,16 +383,38 @@ pub fn scan_install(paths_override: Option<ScanPaths>) -> Result<ScanResult, Str
     let (game_version, active_order) = parse_mods_config(&mods_config_xml);
     let game_cycle = game_cycle_of(&game_version);
 
+    let data_dir = Path::new(&game).join("Data");
+    let total = count_candidates(&data_dir)
+        + paths
+            .local_mods
+            .as_ref()
+            .map_or(0, |p| count_candidates(Path::new(p)))
+        + paths
+            .workshop
+            .as_ref()
+            .map_or(0, |p| count_candidates(Path::new(p)));
+
+    let mut done = 0usize;
+    let mut report = |label: &str| {
+        done += 1;
+        progress(ScanProgress {
+            done: done.min(total),
+            total,
+            label,
+        });
+    };
+
     let mut mods = Vec::new();
-    mods.extend(scan_mod_dir(
-        &Path::new(&game).join("Data"),
-        ModSource::Official,
-    ));
+    mods.extend(scan_mod_dir(&data_dir, ModSource::Official, &mut report));
     if let Some(local) = &paths.local_mods {
-        mods.extend(scan_mod_dir(Path::new(local), ModSource::Local));
+        mods.extend(scan_mod_dir(Path::new(local), ModSource::Local, &mut report));
     }
     if let Some(workshop) = &paths.workshop {
-        mods.extend(scan_mod_dir(Path::new(workshop), ModSource::Steam));
+        mods.extend(scan_mod_dir(
+            Path::new(workshop),
+            ModSource::Steam,
+            &mut report,
+        ));
     }
 
     let position: HashMap<&str, usize> = active_order
@@ -406,7 +447,24 @@ pub fn scan_install(paths_override: Option<ScanPaths>) -> Result<ScanResult, Str
 
 /// Walk one mod root (`Data`, local `Mods`, or the Workshop content folder) and build a
 /// `ModEntry` for every subfolder that has a readable About.xml.
-fn scan_mod_dir(dir: &Path, source: ModSource) -> Vec<ModEntry> {
+/// How many folders in a root could hold a mod.
+///
+/// A shallow count, so it costs one readdir per root rather than a second full walk. It can
+/// exceed the mods actually returned, since a folder without an About.xml is skipped later,
+/// which is why the bar is clamped rather than trusted to land exactly on its total.
+fn count_candidates(dir: &Path) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|e| {
+            !is_backup(&e.file_name()) && e.file_type().map(|t| t.is_dir()).unwrap_or(false)
+        })
+        .count()
+}
+
+fn scan_mod_dir(dir: &Path, source: ModSource, progress: &mut dyn FnMut(&str)) -> Vec<ModEntry> {
     let mut mods = Vec::new();
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
@@ -443,7 +501,12 @@ fn scan_mod_dir(dir: &Path, source: ModSource) -> Vec<ModEntry> {
             mod_entry.textures = measured.textures;
             mod_entry.patches = read_patches(&folder);
             mod_entry.preview_path = find_preview(&folder);
+            progress(&mod_entry.name);
             mods.push(mod_entry);
+        } else {
+            // Still counted: the bar tracks folders looked at, not mods kept, or it would
+            // stall on every folder that turns out not to hold a mod.
+            progress(&entry.file_name().to_string_lossy());
         }
     }
     mods

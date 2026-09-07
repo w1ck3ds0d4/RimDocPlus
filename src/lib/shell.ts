@@ -87,6 +87,21 @@ export function readModPreview(path: string): Promise<string> {
   return invoke<string>("read_mod_preview", { path });
 }
 
+export interface ScanProgress {
+  done: number;
+  total: number;
+  /** The mod folder just read. */
+  label: string;
+}
+
+/** Follow a scan as it walks, returning a function that stops listening. */
+export async function watchScan(onProgress: (p: ScanProgress) => void): Promise<() => void> {
+  if (!inShell()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  const off = await listen<ScanProgress>("scan:progress", (e) => onProgress(e.payload));
+  return () => off();
+}
+
 /**
  * Walk the install and report what is on disk right now.
  *

@@ -217,7 +217,11 @@ function Banner({ mod }: { mod: ModEntry }) {
     );
   }
 
-  return <div className="banner">{src && <img src={src} alt="" onError={() => setFailed(true)} />}</div>;
+  return (
+    <div className={`banner${src ? "" : " loading"}`}>
+      {src && <img src={src} alt="" onError={() => setFailed(true)} />}
+    </div>
+  );
 }
 
 function Relations({
