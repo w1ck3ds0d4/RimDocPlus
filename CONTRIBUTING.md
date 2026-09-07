@@ -22,6 +22,15 @@ which is gitignored and absent in a fresh clone; without it the app starts with 
 scan, which is a supported state and worth checking your change survives. Generate your own
 with `pnpm scan` if you have RimWorld installed.
 
+The Harmony check needs its probe built and staged. The app runs without it and says so
+rather than reporting nothing found:
+
+```bash
+pnpm probe:build     # dotnet publish, trimmed and self contained
+pnpm probe:stage     # copies it where Tauri expects a sidecar
+pnpm probe:verify    # trimmed and untrimmed must report the same thing
+```
+
 ## Before you open a pull request
 
 ```bash

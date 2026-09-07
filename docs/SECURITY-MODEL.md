@@ -13,13 +13,14 @@ Everything below is checkable. Each claim names where in the source it is enforc
 - It makes exactly one kind of network request, to fetch a shared log from a gist link you
   pasted, and only when you press Fetch. Nothing else ever leaves the machine.
 - It copies every file to `<file>.rimdocbak` before changing it, and every run is undoable.
-- It runs five external programs: RimWorld, `steam.exe`, `tasklist`, `reg` and `taskkill`.
+- It runs six external programs: RimWorld, `steam.exe`, `tasklist`, `reg`, `taskkill`, and its
+  own bundled patch probe.
 - It sends nothing anywhere. There is no telemetry, no analytics, no crash reporter.
 
 ## The command boundary
 
 The webview cannot touch the filesystem. Everything it can ask the shell to do is one of
-twenty commands registered in `src-tauri/src/lib.rs`, and that list is the complete surface.
+twenty-one commands registered in `src-tauri/src/lib.rs`, and that list is the complete surface.
 If a capability is not on it, the app does not have it.
 
 ### The five that write
@@ -44,7 +45,12 @@ command" and no "write this path with these bytes" that the analysis layer can r
 
 `read_session_log` takes a flag saying which of the game's two logs to read, not a path. No
 command anywhere takes a path to read, because that would be a general file-read primitive
-and the point of a twenty-command surface is that there is not one.
+and the point of a twenty-one-command surface is that there is not one.
+
+`probe_patches` takes mod folders and reads the assemblies under them. It only ever reads,
+and the program it runs to do so reads .NET metadata rather than loading an assembly, so no
+mod code executes. Loading would fire static constructors, which is running someone's mod to
+find out whether their mod works.
 
 ### The one that reaches the network
 
@@ -66,16 +72,18 @@ app did not launch.
 
 ## What it runs
 
-Five external programs, all of them either yours or Windows'. Nothing else is ever run:
+Six external programs, all of them either yours, Windows', or shipped in this app. Nothing
+else is ever run:
 
-| Program               | Why                                                                            | Where                                       |
-| --------------------- | ------------------------------------------------------------------------------ | ------------------------------------------- |
-| `RimWorldWin64.exe`   | You pressed Play.                                                              | `launch_game`, `launch_supervised`          |
-| `steam.exe -shutdown` | A Workshop repair needs Steam closed, and you pressed the button that says so. | `stop_steam`                                |
-| `steam.exe`           | Starting it again afterwards.                                                  | `start_steam`                               |
-| `tasklist`            | Is Steam running, is the game still up, how much memory is it using.           | `image_running`, `memory_mb`                |
-| `reg query`           | Where Steam is installed, and whether it is running a game.                    | `steam_exe_from_registry`, `running_app_id` |
-| `taskkill`            | Stopping a supervised run, by pid.                                             | `stop_game`                                 |
+| Program               | Why                                                                                      | Where                                       |
+| --------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `RimWorldWin64.exe`   | You pressed Play.                                                                        | `launch_game`, `launch_supervised`          |
+| `steam.exe -shutdown` | A Workshop repair needs Steam closed, and you pressed the button that says so.           | `stop_steam`                                |
+| `steam.exe`           | Starting it again afterwards.                                                            | `start_steam`                               |
+| `tasklist`            | Is Steam running, is the game still up, how much memory is it using.                     | `image_running`, `memory_mb`                |
+| `reg query`           | Where Steam is installed, and whether it is running a game.                              | `steam_exe_from_registry`, `running_app_id` |
+| `taskkill`            | Stopping a supervised run, by pid.                                                       | `stop_game`                                 |
+| `rimdoc-patchprobe`   | Reading mod assemblies to check Harmony targets. Bundled with the app, never downloaded. | `probe_patches`                             |
 
 All of them are spawned through `console_command`, which sets `CREATE_NO_WINDOW` so they do
 not flash a console window over your game.

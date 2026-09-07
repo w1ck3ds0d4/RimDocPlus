@@ -30,7 +30,10 @@
     "workshop": "node scripts/workshop.mjs",
     "verify": "tsc --noEmit && vitest run && prettier --check .",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "probe:verify": "node scripts/probe-verify.mjs",
+    "probe:build": "dotnet publish sidecar/PatchProbe -c Release -r win-x64",
+    "probe:stage": "node scripts/probe-stage.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

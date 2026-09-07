@@ -440,6 +440,18 @@ pnpm tauri:build   # produce a release binary
 
 One failing action does not abort a run: the remaining actions still apply and the failure is reported against its own target, because a plan of 730 texture resizes should not be abandoned because one file is locked.
 
+### Harmony patch check
+
+When RimWorld updates, methods get renamed, moved or deleted. A Harmony patch aimed at one that has gone cannot apply, and nothing on disk says so: you find out when the game throws at startup, or when a feature quietly stops working.
+
+**Check Harmony patches** on the Doctor tab reads the assemblies of every code mod in your modpack and resolves each declared patch target against the installed game. A few seconds for a thousand assemblies. Nothing in any mod runs: it reads .NET metadata and never loads an assembly, because loading would fire static constructors.
+
+Findings are one per mod rather than one per patch, since a mod with four dead patches is one thing to decide about. Where a method moved rather than went, it says where to.
+
+Two things it deliberately does not call breakage. A patch class carrying a Harmony `Prepare()` decides for itself whether to apply, so a missing target may be one the mod already knows to skip; those are reported separately. And a patch whose target is built in code, through `TargetMethod()` or `harmony.Patch(...)`, was never checked at all, so the report says how many rather than letting a resolved count read as a clean bill of health.
+
+See [sidecar/README.md](sidecar/README.md) for the probe itself, which runs standalone against any install.
+
 ## Tech Stack
 
 | Layer               | Choice                                | Why                                                                                      |

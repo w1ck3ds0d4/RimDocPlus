@@ -49,9 +49,11 @@ export const RELEASES: Release[] = [
       "A repair Steam would undo is held back on its own, so the rest of a run still applies instead of the whole thing being refused",
       "One button closes Steam, applies the repair and starts it again, refusing while Steam is running a game",
       "Reset the app, under developer mode, clears everything it remembers and leaves your install, backups and vault alone",
+      "Check Harmony patches reads every mod's assemblies and reports the ones patching a method the game no longer has, without launching anything",
+      "The Session tab reads the previous run's log too, or one pasted out of the game, or one shared as a gist",
     ],
     known: [
-      "Harmony patch analysis stops at the stack trace: a patch is named, but whether its target method still exists in this build of the game needs a C# sidecar that is not built yet",
+      "Harmony patches registered in code rather than declared with an attribute cannot be checked. The target is built while the game runs, so nothing outside it can say whether it still resolves",
       "Tier 2 to 4 repairs are specified and not implemented: XML patch repair, stub defs, assembly-level neutralisation",
       "What a mod costs per tick is not measured. Load time and memory are read from outside the process; attributing simulation time needs code running inside the game",
       "The search judges itself only for faults that stop the mod list loading. A crash an hour into a colony looks the same as a healthy boot from out here",

@@ -832,6 +832,175 @@ fn fetch_shared_log(url: String) -> Result<SessionLog, String> {
     Ok(SessionLog { path: target, text })
 }
 
+/// What the probe reports about one Harmony patch class.
+///
+/// Passed straight through rather than interpreted here: deciding what a verdict means is
+/// analysis, and analysis does not live in the shell.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProbePatch {
+    assembly: String,
+    patch_class: String,
+    target_type: Option<String>,
+    target_method: Option<String>,
+    kinds: Vec<String>,
+    verdict: String,
+    detail: String,
+    moved_to: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProbeReport {
+    game_assemblies: usize,
+    game_types: usize,
+    assemblies_read: usize,
+    assemblies_unreadable: Vec<String>,
+    patches: Vec<ProbePatch>,
+}
+
+#[derive(Debug, Serialize)]
+struct ProbeRequest<'a> {
+    managed: String,
+    assemblies: &'a [String],
+}
+
+/// Where the probe lives.
+///
+/// Tauri copies a sidecar next to the app executable, so that is the first place to look.
+/// The development build is not bundled, so the publish output is the fallback: without it
+/// this would only ever work from an installer, which is a poor way to develop the feature
+/// that needs the most iterating against a real install.
+fn patch_probe() -> Option<PathBuf> {
+    let name = if cfg!(windows) {
+        "rimdoc-patchprobe.exe"
+    } else {
+        "rimdoc-patchprobe"
+    };
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let beside = dir.join(name);
+            if beside.is_file() {
+                return Some(beside);
+            }
+            // `cargo tauri dev` runs from target/debug, four levels under the repo root.
+            let published = dir
+                .ancestors()
+                .nth(3)
+                .map(|root| {
+                    root.join("sidecar/PatchProbe/bin/Release/net10.0/win-x64/publish")
+                        .join(name)
+                })
+                .filter(|path| path.is_file());
+            if published.is_some() {
+                return published;
+            }
+        }
+    }
+    None
+}
+
+/// Every assembly the given mod folders ship.
+///
+/// Walked here rather than sent from the frontend, because it is a thousand paths and the
+/// shell is already the side that reads directories. The folders come from the caller, so
+/// the probe covers the mods in the modpack rather than everything ever downloaded.
+fn mod_assemblies(folders: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    for folder in folders {
+        let mut stack = vec![PathBuf::from(folder)];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+                if path.is_dir() {
+                    // This app's own backups are not part of the install.
+                    if !name.ends_with(".rimdocbak") {
+                        stack.push(path);
+                    }
+                } else if name.ends_with(".dll") {
+                    found.push(path.display().to_string());
+                }
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// Ask the probe whether each mod's Harmony patches still have something to patch.
+///
+/// Takes several seconds over a large install, which is why it is asked for rather than run
+/// on every scan. Nothing in any mod executes: the probe reads metadata and never loads an
+/// assembly.
+#[tauri::command(async)]
+fn probe_patches(folders: Vec<String>) -> Result<ProbeReport, String> {
+    let exe = patch_probe().ok_or(
+        "The patch probe is not installed beside the app. Build it with `pnpm probe:build` \
+         and stage it with `pnpm probe:stage`.",
+    )?;
+
+    let managed = scan::discover()
+        .game
+        .map(|dir| {
+            PathBuf::from(dir)
+                .join("RimWorldWin64_Data")
+                .join("Managed")
+                .display()
+                .to_string()
+        })
+        .ok_or("No RimWorld install found to check against.")?;
+
+    let assemblies = mod_assemblies(&folders);
+    if assemblies.is_empty() {
+        return Err("None of these mods ship an assembly, so there is nothing to check.".into());
+    }
+
+    let request = serde_json::to_string(&ProbeRequest {
+        managed,
+        assemblies: &assemblies,
+    })
+    .map_err(|e| e.to_string())?;
+
+    let mut child = console_command(&exe.to_string_lossy())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Could not start the patch probe: {e}"))?;
+
+    {
+        use std::io::Write;
+        let mut stdin = child.stdin.take().ok_or("The probe took no input.")?;
+        stdin
+            .write_all(request.as_bytes())
+            .map_err(|e| format!("Could not send the request: {e}"))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("The patch probe did not finish: {e}"))?;
+
+    if !output.status.success() {
+        // The probe writes prose to stderr and JSON to stdout, so a failure never arrives
+        // as half a document.
+        let why = String::from_utf8_lossy(&output.stderr);
+        return Err(if why.trim().is_empty() {
+            "The patch probe failed without saying why.".to_string()
+        } else {
+            format!("The patch probe failed: {}", why.trim())
+        });
+    }
+
+    serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("Could not read the probe's report: {e}"))
+}
+
 /// Every save RimWorld has written, newest first, with the mod list each was made with.
 ///
 /// Only the head of each file is read: the mod list sits in a meta block at the very top,
@@ -1171,6 +1340,7 @@ pub fn run() {
             scan_install,
             read_session_log,
             fetch_shared_log,
+            probe_patches,
             is_steam_running,
             list_saves,
             launch_supervised,
