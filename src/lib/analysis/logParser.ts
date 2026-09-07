@@ -254,6 +254,55 @@ const MATCHERS: Matcher[] = [
     severity: "critical",
     test: /^Could not allocate memory: System out of memory/,
   },
+  // A def names a texture that is not on disk anywhere. The thing it belongs to draws as a
+  // missing-texture placeholder, which is one of the most reported "my game is broken"
+  // symptoms and produced no finding at all.
+  {
+    category: "missing-texture",
+    severity: "error",
+    test: /^Could not load Texture2D at '.+' in any active mod or in base resources/,
+  },
+  // Two mods claiming the same key. One of them silently does nothing when it is pressed,
+  // and nothing in the game tells you which.
+  {
+    category: "keybind-conflict",
+    severity: "warning",
+    test: /^Key binding conflict: .+ are both bound to /,
+  },
+  // A mod read a DefOf before the game filled them in, so it read null. Whatever it was
+  // deciding with that value decided it wrong, silently, once, at startup.
+  {
+    category: "early-defof",
+    severity: "error",
+    test: /^Tried to use an uninitialized DefOf of type /,
+  },
+  // Two objects claiming one id in the save's object directory. The second is dropped, so
+  // something that was saved does not come back.
+  {
+    category: "duplicate-object-id",
+    severity: "error",
+    test: /^Cannot register .+ in loaded object directory\. Id already used/,
+  },
+  // A mesh built from indices that point past its own vertices. Whatever it draws does not.
+  {
+    category: "broken-mesh",
+    severity: "error",
+    test: /^Failed setting triangles\. Some indices are referencing out of bounds vertices/,
+  },
+  // A mod loading a texture or material into a static field off the main thread. RimWorld
+  // says "probably" because it is guessing from the field type, and it is usually right.
+  {
+    category: "static-asset",
+    severity: "warning",
+    test: /^Type \S+ probably needs a StaticConstructorOnStartup attribute/,
+  },
+  // Missing or malformed translation keys. Cosmetic, and the count is the only part worth
+  // reading, so it is one row rather than a finding per key.
+  {
+    category: "translation-errors",
+    severity: "info",
+    test: /^Translation data for language \S+ has \d+ errors/,
+  },
   // A mod announcing that its own compatibility patch did not attach. Nothing else
   // matched this: it is not XML-shaped, does not start with "Error", and has no
   // "Exception" in it, so Combat Extended saying its Vanilla Events patch failed produced
@@ -340,7 +389,9 @@ export function analyzeLog(text: string): SessionAnalysis {
         firstLine: i + 1,
         patch: matcher.category === "xml-patch-failure" ? { owner, xpaths: [], files: [] } : undefined,
         defs:
-          matcher.category === "cross-reference" || matcher.category === "config-error"
+          matcher.category === "cross-reference" ||
+          matcher.category === "config-error" ||
+          matcher.category === "static-asset"
             ? { affected: [] }
             : undefined,
       });
@@ -389,6 +440,12 @@ const PATCH_FILE = /^Source file:\s*(.+)$/i;
  * The missing thing and the def that wanted it, both named. Reporting neither, which is what
  * this did, leaves "a def points at another def that does not exist" ten times over.
  */
+/** The two things clashing over a key, and the key. */
+const KEYBIND = /^Key binding conflict: (.+?) and (.+?) are both bound to (\S+?)\.?$/;
+
+/** The type RimWorld named in a static-asset warning. */
+const STATIC_ASSET = /^Type (\S+) probably needs a StaticConstructorOnStartup/;
+
 const CROSS_REF = /No\s+(\S+)\s+named\s+(\S+)\s+found to give to\s+(\S+)(?:\s+(\S+))?/;
 
 /** `Config error in WD_Quard: no parts vulnerable to frostbite` */
@@ -472,6 +529,16 @@ function fingerprintOf(
   if (category === "xml-patch-failure" && patchOwner) {
     return [category, patchOwner].join("|");
   }
+  // One row for the lot. Twenty types on this install, each named differently, so one row
+  // per type filled the tab with twenty warnings saying the same thing about mods whose
+  // authors are the only ones who can act on it.
+  if (category === "static-asset") return category;
+  // RimWorld reports a key clash twice, once from each side: "A and B are both bound to F9"
+  // and then "B and A". One clash, one row, whichever way round it was written.
+  if (category === "keybind-conflict") {
+    const both = KEYBIND.exec(message);
+    if (both) return [category, [both[1], both[2]].sort().join("+"), both[3]].join("|");
+  }
   // One row per Workshop item. Ids are digits, and the fallback normalises digits out, so
   // two items that never downloaded became one row counted twice, with a Retry button that
   // could only ever act on whichever id happened to be first. The second was not named
@@ -506,6 +573,13 @@ function rememberDefs(event: LogEvent, line: string): void {
     const wanted = [cross[3], cross[4]].filter(Boolean).join(" ");
     if (wanted && !event.defs.affected.includes(wanted) && event.defs.affected.length < 40) {
       event.defs.affected.push(wanted);
+    }
+    return;
+  }
+  const staticAsset = STATIC_ASSET.exec(line.trim());
+  if (staticAsset) {
+    if (!event.defs.affected.includes(staticAsset[1]) && event.defs.affected.length < 40) {
+      event.defs.affected.push(staticAsset[1]);
     }
     return;
   }
@@ -624,6 +698,13 @@ interface Explanation {
   params?: (e: LogEvent) => Record<string, string | string[]>;
   /** Set where the category describes the run rather than reporting a fault with it. */
   observation?: true;
+  /**
+   * Set where every occurrence restates one fact, so a count would only mislead.
+   *
+   * RimWorld reports a key clash from both sides. Two lines, one clash, and a badge reading
+   * two next to a title naming one pair invites a question with no answer.
+   */
+  singular?: true;
 }
 
 /** A real newline, spelled so no escaping layer between here and the file can eat it. */
@@ -661,6 +742,82 @@ const EXPLANATIONS: Record<string, Explanation> = {
       "atlas being built, which is what the texture footprint on the Doctor tab measures: the more " +
       "decoded texture data the active mods carry, the larger the atlases the game has to build at " +
       "once. Fewer or smaller textures is the lever, and downscaling is the one that keeps the mods.",
+  },
+  "missing-texture": {
+    title: (e) => {
+      const path = /at '(.+?)'/.exec(e.message)?.[1];
+      return path ? `Missing texture ${path}` : "A texture is missing";
+    },
+    detail:
+      "A def points at a texture file that is not in any active mod or in the game's own resources. " +
+      "Whatever uses it draws as the missing-texture placeholder. Either the mod that ships the file " +
+      "is disabled, or a patch changed the path, or the file was renamed and something still asks for " +
+      "the old name.",
+  },
+  "keybind-conflict": {
+    singular: true,
+    title: (e) => {
+      const both = KEYBIND.exec(e.message);
+      return both ? `${both[1]} and ${both[2]} both use ${both[3]}` : "Two things share one key";
+    },
+    detail:
+      "RimWorld gives the key to one of them and the other does nothing when you press it, with no " +
+      "sign which. Rebind one under Options, Keyboard configuration.",
+  },
+  "early-defof": {
+    title: (e) => {
+      const type = /uninitialized DefOf of type (\S+?)\.?\s/.exec(e.message)?.[1];
+      return type ? `A mod read ${type} before the game filled it in` : "A DefOf was read too early";
+    },
+    detail:
+      "DefOfs are filled in after every def has loaded. Read before that, they are null, so whatever " +
+      "the mod was deciding with that value decided it wrong. It happens once, at startup, and the " +
+      "wrong answer is kept for the rest of the run.",
+  },
+  "duplicate-object-id": {
+    title: (e) => {
+      const id = /\(id=([^\s,]+)/.exec(e.message)?.[1];
+      return id ? `Two things claim the saved id ${id}` : "Two things claim one saved id";
+    },
+    detail:
+      "The save's object directory holds one entry per id, and the second thing to claim one is " +
+      "dropped. Something that was saved does not come back, and the usual cause is two mods giving " +
+      "the same thing an id, or one mod loaded twice.",
+  },
+  "broken-mesh": {
+    title: () => "A mesh was built from indices pointing past its own vertices",
+    detail:
+      "Unity refused to build the mesh, so whatever it belongs to does not draw. A vertex count of " +
+      "zero means the geometry it was given was empty, which is usually a texture or model a mod " +
+      "expected to be there and was not.",
+  },
+  "static-asset": {
+    title: (e) => {
+      const n = e.defs?.affected.length ?? e.count;
+      return `${n} type${n === 1 ? "" : "s"} load an asset off the main thread`;
+    },
+    detail: (e) => {
+      const said =
+        "A static field holding a texture or material, on a type without StaticConstructorOnStartup. " +
+        "Unity only allows assets to be loaded on the main thread, so the field can come back null and " +
+        'whatever draws with it draws nothing. RimWorld says "probably" because it is inferring this ' +
+        "from the field's type, and it is usually right. Each of these is the mod author's to fix, " +
+        "which is why they are one row rather than twenty.";
+      const types = e.defs?.affected ?? [];
+      if (types.length === 0) return said;
+      return said + NEWLINE + NEWLINE + "Types:" + NEWLINE + types.map((t) => "  " + t).join(NEWLINE);
+    },
+  },
+  "translation-errors": {
+    observation: true,
+    title: (e) => {
+      const n = /has (\d+) errors/.exec(e.message)?.[1];
+      return n ? `${n} translation errors in this language` : "Translation errors";
+    },
+    detail:
+      "Keys a mod refers to and does not supply, or supplies twice. The symptom is untranslated text " +
+      "in the interface, and nothing else. Read rather than fixed: the count is the whole of it, and " +
+      "the game generates a full report from Options, Development mode.",
   },
   "patch-injection-failed": {
     title: (e) => {
@@ -837,7 +994,7 @@ export function findingsFromLog(
       // The same number the title counts. A row reading "7 defs rejected" beside a badge
       // reading 14 asks a question it does not answer; the 14 is log lines, which RimWorld
       // wrote twice per def and which nobody acts on.
-      count: event.defs ? affectedCount(event) : event.count,
+      count: explanation?.singular ? undefined : event.defs ? affectedCount(event) : event.count,
       frames: event.frames,
       firstLine: event.firstLine,
       observation: explanation?.observation,
