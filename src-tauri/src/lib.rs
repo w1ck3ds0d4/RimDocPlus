@@ -206,13 +206,23 @@ fn delete_matching(directory: &Path, pattern: &str) -> Result<String, String> {
 /// One failing action does not stop the run: the rest still apply and the failure is
 /// reported against its own target, because a plan of 730 texture resizes should not be
 /// abandoned wholesale because one file is locked.
-#[tauri::command]
+/// Anything that takes real time, or emits while it works, must not run on the main thread.
+///
+/// Tauri runs a synchronous command on the main thread, which is the thread that pumps the
+/// webview's message loop. A long command therefore blocks the window, and an `emit` from
+/// inside one deadlocks outright: the emit needs the pump that the command is holding. This
+/// ran 476 texture resizes and hung on the very first progress event, with the process at
+/// zero CPU. `(async)` runs the same synchronous body on a worker thread instead.
+#[tauri::command(async)]
 fn run_file_actions(
     app: AppHandle,
     actions: Vec<FileAction>,
     config_dir: Option<String>,
 ) -> Result<RunReport, String> {
     let total = actions.len();
+    // Also to stdout: when the window shows nothing, this is what says whether the run is
+    // progressing, stalled, or never started. Launched from Explorer nobody sees it.
+    println!("[rimdoc] apply: {total} actions");
     // Taking the original-version copy walks the whole Config folder, so it is announced
     // before it starts rather than leaving the first pause unexplained.
     let _ = app.emit("repair:backup", config_dir.clone());
@@ -278,6 +288,9 @@ fn run_file_actions(
                 detail: detail.clone(),
             },
         );
+        if (i + 1) % 50 == 0 || i + 1 == total {
+            println!("[rimdoc] apply: {} / {total}", i + 1);
+        }
         outcomes.push(ActionOutcome { target, ok, detail });
     }
 
@@ -300,7 +313,7 @@ fn apply_mods_config(path: String, contents: String) -> Result<String, String> {
 }
 
 /// Undo a run by restoring every `.rimdocbak` beside the paths it touched.
-#[tauri::command]
+#[tauri::command(async)]
 fn rollback(targets: Vec<String>) -> Result<RunReport, String> {
     let mut outcomes = Vec::new();
     let (mut applied, mut failed, mut skipped) = (0, 0, 0);
@@ -363,7 +376,7 @@ fn rollback(targets: Vec<String>) -> Result<RunReport, String> {
 /// means the desktop app would keep reporting the install as it was when it was compiled.
 /// After a repair rewrites 730 textures, or after Steam updates a mod, that snapshot is
 /// simply wrong, so the shell scans for itself.
-#[tauri::command]
+#[tauri::command(async)]
 fn scan_install() -> Result<scan::ScanResult, String> {
     scan::scan_install(None)
 }
@@ -374,7 +387,7 @@ fn scan_install() -> Result<scan::ScanResult, String> {
 /// read any file on the machine to show a picture. Only a Preview image sitting in an About
 /// folder can be reached, which is exactly what the scan records and the detail panel asks
 /// for, so widening what the UI can see would take a change here rather than a config edit.
-#[tauri::command]
+#[tauri::command(async)]
 fn read_mod_preview(path: String) -> Result<String, String> {
     let p = Path::new(&path);
     let name = p

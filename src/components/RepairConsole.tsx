@@ -52,6 +52,20 @@ export function RepairConsole({
     return () => document.removeEventListener("keydown", onKey);
   }, [running, onClose]);
 
+  // A console that shows nothing looks identical whether the run is slow or wedged. This
+  // one says which. It exists because a synchronous command blocked the thread that
+  // delivers its own progress events, and the only symptom was a quiet window.
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    if (!running) {
+      setStalled(false);
+      return;
+    }
+    setStalled(false);
+    const timer = window.setTimeout(() => setStalled(true), 12_000);
+    return () => clearTimeout(timer);
+  }, [running, done]);
+
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
@@ -105,6 +119,15 @@ export function RepairConsole({
             <div className="line work">
               <span className="label" />
               <span className="text caret">working</span>
+            </div>
+          )}
+          {stalled && (
+            <div className="line warn">
+              <span className="label">stalled</span>
+              <span className="text">
+                No progress reported for 12 seconds. The run may still be going; if this stays put, the
+                transcript is not reaching the window.
+              </span>
             </div>
           )}
         </div>
