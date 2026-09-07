@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reads Harmony patch declarations out of mod assemblies and checks whether what they
+    patch still exists in the installed game.
+
+    A separate process in a different language because the question is about .NET metadata,
+    and Cecil is the mature way to ask it. It reads metadata and never loads an assembly,
+    so nothing in a mod runs: loading would execute static constructors and would need the
+    exact runtime the game uses.
+
+    It knows nothing about RimDoc+. It reads a request on stdin, writes a report on stdout,
+    and can be run by hand against any install.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>rimdoc-patchprobe</AssemblyName>
+    <RootNamespace>RimDoc.PatchProbe</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Shipped beside the app, so size matters more than start-up microseconds. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      Cecil warns that it uses reflection the trimmer cannot follow. Those paths are the
+      ones that write assemblies and read PDBs, and this program does neither: it opens a
+      module, reads custom attributes and type names, and closes it. The claim is not taken
+      on faith, it is checked. `pnpm probe:verify` runs the trimmed build and the untrimmed
+      one over the same install and fails if their reports differ by a byte.
+    -->
+    <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+  </ItemGroup>
+
+</Project>

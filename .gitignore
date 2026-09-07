@@ -20,3 +20,8 @@ src-tauri/gen/schemas
 src/dev-data/scan.json
 src/dev-data/session.json
 src/dev-data/workshop.json
+
+# The sidecar's build output. The published binary is produced by `dotnet publish`,
+# not committed: a 13 MB executable does not belong in a git history.
+sidecar/**/bin/
+sidecar/**/obj/
