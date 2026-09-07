@@ -180,9 +180,8 @@ export function Modpacks({
 
       <p className="section-title">Applying a modpack</p>
       <p className="note">
-        Writing the load order straight into the game and launching it belongs to the Tauri shell, which is
-        the next slice. Until then, exporting ModsConfig.xml over the file in your save-data Config folder
-        does the same job by hand.
+        <b>Apply to game</b> in the header writes this pack's load order into ModsConfig.xml, backing up what
+        was there. Exporting the file is for sharing a pack or applying it somewhere else.
       </p>
     </>
   );
