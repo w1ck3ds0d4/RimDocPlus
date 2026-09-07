@@ -288,7 +288,10 @@ export default function App() {
             />
             {active && (
               <Triage
-                findings={staticFindings}
+                // Both sets: the log's faults are the most severe the app finds, and a
+                // "fix everything" button that quietly skipped every critical one was the
+                // largest gap in it.
+                findings={[...staticFindings, ...sessionFindings]}
                 scan={workingScan}
                 modpack={active}
                 workshop={workshop}

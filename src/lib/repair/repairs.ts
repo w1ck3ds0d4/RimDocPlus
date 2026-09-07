@@ -1,5 +1,5 @@
 import type { Finding, ScanResult, WorkshopCache } from "../types";
-import { DEFAULT_OVERSIZE_PX, DOWNSCALE_TARGET_PX, oversizedAt } from "../analysis/performance";
+import { DEFAULT_OVERSIZE_PX, DOWNSCALE_TARGET_PX, oversizedAt } from "../analysis/performance.ts";
 import { sortLoadOrder, toggleMod, toModsConfigXml, type Modpack } from "../modpacks.ts";
 import { rankDuplicates, rankKeepPreference } from "../analysis/duplicates.ts";
 
@@ -163,11 +163,16 @@ const REPAIRS: Record<string, RepairFn> = {
   },
 
   "pick-duplicate-winner": (ctx) => {
-    const folders = list(ctx, "folders");
     const packageId = str(ctx, "packageId");
-    if (folders.length < 2 || !packageId) return null;
+    if (!packageId) return null;
 
     const copies = ctx.scan.mods.filter((m) => m.packageId === packageId);
+    // The static rule names the folders it found; a rule reading them out of a log cannot,
+    // because a log knows the mod and not where it lives. Falling back to the scan lets one
+    // repair serve both, and the scan is the better source in either case since it is
+    // current while the log is a record of a run that already ended.
+    const folders = list(ctx, "folders").length ? list(ctx, "folders") : copies.map((m) => m.folder);
+    if (folders.length < 2) return null;
     const ranking = rankDuplicates(copies, ctx.scan.gameCycle, ctx.workshop ?? null);
     const byFolder = new Map(copies.map((m) => [m.folder, m]));
 

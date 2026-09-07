@@ -459,11 +459,28 @@ main {
 
 /* Severity reads from the dot alone. A coloured edge on every card turned the list into
    a stripe of unrelated hues before the reader got to a single word of it. */
+/*
+ * The outline carries the severity, so a list can be read by shape before any of it is
+ * read as words. Mixed at low alpha against the panel rather than used at full strength:
+ * a dozen findings edged in solid red is noise, and the row that actually matters has to
+ * stay the one that stands out.
+ */
 .finding {
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--sev) 42%, var(--line));
   border-radius: var(--radius);
   overflow: hidden;
+}
+
+.finding[data-sev="critical"] {
+  border-color: color-mix(in srgb, var(--sev) 70%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--sev) 22%, transparent);
+}
+
+/* An observation is a fact, not a fault, so it keeps the neutral edge. */
+.finding-list.notes .finding {
+  border-color: var(--line);
+  box-shadow: none;
 }
 
 .finding > summary {
@@ -3064,5 +3081,34 @@ tr.clickable:hover td {
 
 /* Says the numbers beneath it describe the plan, not the install as it stands. */
 .triage-applied {
+  color: var(--ok);
+}
+
+/* Findings the scan has since settled ------------------------------------- */
+
+.finding-list.settled .finding {
+  border-color: var(--line);
+  box-shadow: none;
+  opacity: 0.72;
+}
+
+.finding-list.settled .f-title {
+  text-decoration: line-through;
+  text-decoration-color: var(--dim);
+}
+
+.f-settled {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(78, 201, 139, 0.45);
+  color: var(--ok);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.f-settled-why {
+  margin: 0 0 8px;
   color: var(--ok);
 }

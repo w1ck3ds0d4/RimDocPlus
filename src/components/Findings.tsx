@@ -76,8 +76,9 @@ export function SeveritySummary({
  * on whether a repair exists, because that is exactly the distinction being drawn.
  */
 export function FindingList({ findings, empty }: { findings: Finding[]; empty: string }) {
-  const actionable = findings.filter((f) => f.fix);
-  const notes = findings.filter((f) => !f.fix);
+  const settled = findings.filter((f) => f.stale);
+  const actionable = findings.filter((f) => !f.stale && f.fix);
+  const notes = findings.filter((f) => !f.stale && !f.fix);
 
   if (!findings.length) return <p className="muted">{empty}</p>;
 
@@ -96,6 +97,23 @@ export function FindingList({ findings, empty }: { findings: Finding[]; empty: s
           Nothing here has an outstanding repair. What follows is what the Doctor observed, not work waiting
           to be done.
         </p>
+      )}
+
+      {settled.length > 0 && (
+        <>
+          <p className="section-title">
+            Already dealt with <span className="count">{settled.length}</span>
+          </p>
+          <p className="note">
+            Read out of a log of a run that has finished, and the current scan shows they no longer apply.
+            Kept because knowing a fault happened is worth something even once it is gone.
+          </p>
+          <div className="finding-list settled">
+            {sortFindings(settled).map((finding) => (
+              <FindingRow key={finding.id} finding={finding} />
+            ))}
+          </div>
+        </>
       )}
 
       {notes.length > 0 && (
@@ -122,6 +140,7 @@ function FindingRow({ finding }: { finding: Finding }) {
   return (
     <details
       className="finding"
+      data-sev={finding.severity}
       style={{ ["--sev" as string]: `var(--${finding.severity})` }}
       // Anything the game cannot recover from is worth reading without a click.
       open={SEVERITY_ORDER[finding.severity] === 0}
@@ -129,6 +148,7 @@ function FindingRow({ finding }: { finding: Finding }) {
       <summary>
         <i className="sev-dot" />
         <span className="f-title">{finding.title}</span>
+        {finding.stale && <span className="f-settled">settled</span>}
         {finding.count && finding.count > 1 ? (
           <span className="f-count" title={`Seen ${finding.count} times`}>
             &times;{finding.count}
@@ -138,6 +158,7 @@ function FindingRow({ finding }: { finding: Finding }) {
       </summary>
 
       <div className="f-body">
+        {finding.stale && <p className="f-settled-why">{finding.stale}</p>}
         <p className="f-detail">{finding.detail}</p>
 
         {finding.packageIds.length > 0 && (

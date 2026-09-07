@@ -292,6 +292,43 @@ describe("log analysis", () => {
     expect(reset?.title).toBe("RimWorld reset your mod list after a load failure");
   });
 
+  describe("the duplicate-load complaint", () => {
+    const DUP =
+      "Tried loading mod with the same packageId multiple times: Orion.Hospitality. " +
+      "Ignoring the duplicates.";
+
+    const dupFinding = (mods: ModEntry[]) =>
+      findingsFromLog(analyzeLog(DUP), mods).find((f) => f.rule === "log:duplicate-package-id");
+
+    /**
+     * A package id contains dots, and so does the end of the sentence it sits in. Reading it
+     * lazily stopped at the first one and produced "orion", which matches no installed mod,
+     * so the finding was titled with half an id and its repair could never find a target.
+     */
+    it("reads the whole package id, not up to its first dot", () => {
+      expect(dupFinding([])?.title).toBe("Duplicate mod loaded: Orion.Hospitality");
+      expect(dupFinding([])?.fix?.params?.packageId).toBe("orion.hospitality");
+    });
+
+    it("calls it settled when exactly one copy is installed now", () => {
+      const finding = dupFinding([mod("orion.hospitality")]);
+      expect(finding?.stale).toContain("orion.hospitality");
+    });
+
+    it("still reports it while two copies remain", () => {
+      const both = [
+        mod("orion.hospitality", { folder: "C:/ws/1" }),
+        mod("orion.hospitality", { folder: "C:/ws/2" }),
+      ];
+      expect(dupFinding(both)?.stale).toBeUndefined();
+    });
+
+    /** No copies is not proof of a fix: the id may simply be one this parser misread. */
+    it("claims nothing when the id matches no installed mod", () => {
+      expect(dupFinding([mod("something.else")])?.stale).toBeUndefined();
+    });
+  });
+
   it("attributes a stack trace back to the mod that owns the namespace", () => {
     const mods = [mod("dankpyon.medieval.overhaul", { name: "Medieval Overhaul" })];
     const findings = findingsFromLog(analyzeLog(log), mods);

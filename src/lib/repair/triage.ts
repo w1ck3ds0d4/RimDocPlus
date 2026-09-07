@@ -81,13 +81,23 @@ export function runTriage(
     external: [],
     unresolved: [],
     notes: [],
-    before: findings.length,
-    after: findings.length,
+    // Both ends come from re-running the rules, so the count means the same thing on each
+    // side. Taking `before` from the input length instead broke the moment findings that
+    // the rules cannot re-derive, such as anything read out of a log, were passed in.
+    before: countRemaining(ctx.scan, ctx.modpack),
+    after: 0,
     elapsedMs: 0,
   };
   const startedAt = performance.now();
 
   for (const finding of findings) {
+    // Already dealt with, per the current scan. Repairing it would find nothing to do, and
+    // counting it as outstanding work would overstate what is left.
+    if (finding.stale) {
+      result.notes.push(finding);
+      continue;
+    }
+
     const plan = planRepair({
       scan: ctx.scan,
       modpack: result.modpack,

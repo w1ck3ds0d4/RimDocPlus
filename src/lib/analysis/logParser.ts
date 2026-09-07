@@ -307,11 +307,15 @@ const EXPLANATIONS: Record<string, Explanation> = {
     params: (e) => ({ steamIds: [/for (\d+)/.exec(e.message)?.[1] ?? ""].filter(Boolean) }),
   },
   "duplicate-package-id": {
-    title: (e) => `Duplicate mod loaded: ${/multiple times: (\S+?)\./.exec(e.message)?.[1] ?? "unknown"}`,
+    title: (e) => `Duplicate mod loaded: ${duplicateIdOf(e) ?? "unknown"}`,
     detail:
       "The same packageId exists in more than one folder, typically a Workshop copy and a local copy. " +
       "RimWorld keeps one and silently ignores the other, so you cannot tell which version is running.",
     fixKind: "pick-duplicate-winner",
+    // The log names the mod but knows nothing of folders, which is what the repair acts on.
+    // Without this the repair was handed no arguments at all and quietly produced nothing,
+    // so the finding carried a Repair button that could never do anything.
+    params: (e) => ({ packageId: duplicateIdOf(e)?.toLowerCase() ?? "" }),
   },
   "mod-init-failure": {
     title: (e) => `Mod failed to initialise: ${/type (\S+?)[:.]/.exec(e.message)?.[1] ?? "unknown"}`,
@@ -382,6 +386,7 @@ export function findingsFromLog(analysis: SessionAnalysis, mods: ModEntry[]): Fi
       count: event.count,
       frames: event.frames,
       firstLine: event.firstLine,
+      stale: settledSince(event, mods),
       fix: explanation?.fixKind
         ? {
             kind: explanation.fixKind,
@@ -393,6 +398,41 @@ export function findingsFromLog(analysis: SessionAnalysis, mods: ModEntry[]): Fi
         : undefined,
     };
   });
+}
+
+/**
+ * Whether the scan proves a logged fault has already been dealt with.
+ *
+ * The log records a run that has finished, so a fault in it may well have been fixed since,
+ * possibly by this very app. Where the current files can settle the question, saying so
+ * beats offering a repair that would find nothing to do. Only claimed where the scan is
+ * genuinely decisive: most faults leave no trace on disk, and silence is not proof.
+ */
+function settledSince(event: LogEvent, mods: ModEntry[]): string | undefined {
+  if (event.category !== "duplicate-package-id") return undefined;
+  const id = duplicateIdOf(event)?.toLowerCase();
+  if (!id) return undefined;
+  // Exactly one copy is proof it was resolved. None is not: the id may be from a mod since
+  // uninstalled, or one this parser read wrongly, and neither is grounds for a claim.
+  const copies = mods.filter((m) => m.packageId === id).length;
+  return copies === 1
+    ? `Only one copy of ${id} is installed now, so this was resolved after the log was written.`
+    : undefined;
+}
+
+/**
+ * The packageId a duplicate-load complaint is about, exactly as the log wrote it.
+ *
+ * The trailing dot ends the sentence, and package ids contain dots of their own. A lazy
+ * match stopped at the first one and yielded "orion" out of "Orion.Hospitality.", which
+ * matched no installed mod: the finding was titled with half an id and its repair was handed
+ * something that could never be found.
+ *
+ * Returned in the author's own casing, which is what belongs in a title. Comparisons against
+ * the scan lowercase it themselves, because that is the only place the casing matters.
+ */
+function duplicateIdOf(event: LogEvent): string | undefined {
+  return /multiple times: (\S+)\.(?:\s|$)/.exec(event.message)?.[1];
 }
 
 /** An unrecognised fault still deserves better than "Unhandled exception". */

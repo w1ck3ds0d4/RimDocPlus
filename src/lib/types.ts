@@ -135,6 +135,14 @@ export interface ProposedFix {
 
 export interface Finding {
   id: string;
+  /**
+   * Set when the scan proves this is no longer true of the install.
+   *
+   * A session finding is read out of a log of a run that already happened, so it describes
+   * the install as it was. Where the current scan can settle it, saying so is far better
+   * than offering a repair that would do nothing.
+   */
+  stale?: string;
   rule: string;
   severity: Severity;
   title: string;
