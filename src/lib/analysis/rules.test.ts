@@ -355,6 +355,9 @@ describe("log analysis", () => {
     const finding = findingsFromLog(analyzeLog(shutdown), [])[0];
     expect(finding.severity).toBe("info");
     expect(finding.title).toContain("when the game closed");
+    // Marked as describing the run rather than reporting a fault, which is what keeps it
+    // out of the list of things to do.
+    expect(finding.observation).toBe(true);
   });
 
   it("does not call a type scan's unloaded dependency a crash", () => {
@@ -389,6 +392,22 @@ describe("log analysis", () => {
       "Workshop item 3092936341 never downloaded",
       "Workshop item 753498552 never downloaded",
     ]);
+  });
+
+  it("does not file a crash as something merely observed", () => {
+    // No repair exists for a NullReferenceException, and for a while that was enough to
+    // file one under Observations beside the patch overrides. A fault nobody can automate
+    // is still a fault.
+    const crash = [
+      "Error in PostExposeData of Verse.BackCompatibilityConverter_Universal",
+      "System.NullReferenceException: Object reference not set to an instance of an object",
+      "[Ref F049DDD8]",
+      "  at Verse.Find.get_FactionManager () [0x00005] in <x>:0 ",
+    ].join(NEWLINE);
+    const finding = findingsFromLog(analyzeLog(crash), [])[0];
+    expect(finding.severity).toBe("critical");
+    expect(finding.fix).toBeUndefined();
+    expect(finding.observation).toBeUndefined();
   });
 
   it("collapses repeats of the same fault into one counted event", () => {
