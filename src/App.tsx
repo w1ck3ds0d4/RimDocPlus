@@ -21,6 +21,7 @@ import { Triage } from "./components/Triage";
 import { Library } from "./components/Library";
 import { ModDetail } from "./components/ModDetail";
 import { Home } from "./components/Home";
+import { Bisect } from "./components/Bisect";
 import { record } from "./lib/history";
 import { installDiff } from "./lib/installDiff";
 import { Settings, loadDevMode, loadOversizePx, saveOversizePx } from "./components/Settings";
@@ -64,7 +65,6 @@ export default function App() {
       stop = off;
     });
 
-    // The shell scans the install itself; the browser has only the build-time fixture.
     // Both the install and the log are read live in the shell. The browser has only the
     // fixtures `pnpm scan` wrote.
     Promise.all([
@@ -210,8 +210,8 @@ export default function App() {
   }, [scan, active]);
 
   const staticFindings = useMemo<Finding[]>(
-    () => (workingScan ? runStaticRules(workingScan, { oversizePx }) : []),
-    [workingScan, oversizePx],
+    () => (workingScan ? runStaticRules(workingScan, { oversizePx, workshop }) : []),
+    [workingScan, oversizePx, workshop],
   );
 
   const sessionAnalysis = useMemo<SessionAnalysis | null>(
@@ -354,6 +354,8 @@ export default function App() {
               findings={doctorFilter.filtered}
               empty="No static problems found. This load order is structurally sound."
             />
+            {/* After the findings, because it is what to reach for once they have run out. */}
+            {active && <Bisect scan={workingScan} modpack={active} />}
           </>
         )}
         {tab === "session" &&

@@ -216,6 +216,29 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Find the culprit
+
+Triage repairs what the rules can name. This is for the rest: the game crashes, or drags, and
+nothing on disk says why.
+
+Half the mods are switched off, the order is written into the game and the game is started. You say
+whether the problem is still there, and the list halves again. A 224-mod list settles in about eight
+launches. Every verdict is yours: nothing here decides whether a fault is present, because that would
+mean claiming to know what a fault looks like from outside the game.
+
+Two things make the trials mean anything. Official content and the bootstrap layer are never switched
+off, since removing Core is not a test and disabling Harmony breaks everything that patches through
+it. And every dependency of a kept mod is pulled back in whether or not the split happened to include
+it, because otherwise half the trials fail for a missing dependency rather than the fault, and the
+search follows the wrong half from there. A mod pulled in that way stays a suspect: being needed by
+something is not evidence of innocence.
+
+The search is saved on every step, since a trial means launching the game and coming back. The load
+order it started from is restored when it ends, however it ends.
+
+It cannot find a fault that needs two particular mods together. That is stated up front rather than
+discovered at the end of eight launches.
+
 ### Retry a Workshop download
 
 For a mod that arrived damaged rather than absent, where the Workshop page offers nothing but
@@ -312,7 +335,7 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 - **Version pinning in modpacks**: a modpack records package ids, not exact mod versions, so it is repeatable but not yet reproducible. Pinning arrives with the vault.
 - **Mod vault**: content-addressed local store so Steam updates land as new versions instead of overwriting a working setup
 - **Supervised launch**: the shell starts the game, but does not yet watch it. Live log streaming, crash and hang detection and case-file capture are still to come
-- **Auto-bisect**: binary search across the mod list to isolate a minimal breaking set unattended
+- **Unattended bisect**: the search is assisted, and needs you to judge each trial. Deciding automatically whether a fault is present means the headless boot check and a definition of "broken", neither of which exists yet
 - **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
 - **L2 and L3 testing**: headless boot check and scripted soak run with TPS attribution
 - **A/B benchmarking**: same save, two profiles, measured locally

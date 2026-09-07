@@ -3306,3 +3306,61 @@ tr.clickable:hover td {
     animation: none;
   }
 }
+
+/* Bisection ---------------------------------------------------------------- */
+
+.bisect {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+/* A search in progress is the thing to look at, not a footnote under the findings. */
+.bisect.running {
+  border-color: var(--accent-soft);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+}
+
+.bisect p {
+  margin: 0 0 10px;
+}
+
+.bisect .panel-head .count {
+  margin-left: 8px;
+  color: var(--dim);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.bisect-verdict b {
+  color: var(--accent);
+}
+
+.bisect-trials {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.bisect-trials li {
+  display: grid;
+  grid-template-columns: 70px 110px 1fr;
+  gap: 10px;
+}
+
+.bisect-trials .bad {
+  color: var(--critical);
+}
+
+.bisect-trials .good {
+  color: var(--ok);
+}
