@@ -13,6 +13,7 @@ import {
 import type { WorkshopCache } from "../lib/types";
 import { download } from "../lib/download";
 import { inShell, rollback, runFileActions, targetsOf, type RunReport } from "../lib/shell";
+import { record } from "../lib/history";
 
 const AUTO_KEY = "rimdoc.triage.auto";
 
@@ -395,8 +396,15 @@ function ApplyActions({ actions, config }: { actions: FileAction[]; config: stri
     setState("running");
     setError(null);
     try {
-      setReport(await runFileActions(actions, config));
+      const run = await runFileActions(actions, config);
+      setReport(run);
       setState("done");
+      record({
+        kind: "repair",
+        summary: `Applied ${run.applied} file change${run.applied === 1 ? "" : "s"}`,
+        detail: `${run.skipped} skipped${run.failed > 0 ? `, ${run.failed} failed` : ""}. Backups in ${run.backup_dir}.`,
+        targets: targetsOf(actions),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setState("idle");
@@ -406,8 +414,15 @@ function ApplyActions({ actions, config }: { actions: FileAction[]; config: stri
   async function undo() {
     setState("running");
     try {
-      setReport(await rollback(targetsOf(actions)));
+      const run = await rollback(targetsOf(actions));
+      setReport(run);
       setState("undone");
+      record({
+        kind: "rollback",
+        summary: `Restored ${run.applied} file${run.applied === 1 ? "" : "s"}`,
+        detail: run.skipped > 0 ? `${run.skipped} had no backup to restore` : undefined,
+        targets: targetsOf(actions),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setState("done");

@@ -47,6 +47,11 @@ export function rollback(targets: string[]): Promise<RunReport> {
   return invoke<RunReport>("rollback", { targets });
 }
 
+/** Read a mod's banner image back as a data URL. */
+export function readModPreview(path: string): Promise<string> {
+  return invoke<string>("read_mod_preview", { path });
+}
+
 /** Start RimWorld from its install folder. */
 export function launchGame(gameDir: string): Promise<string> {
   return invoke<string>("launch_game", { gameDir });

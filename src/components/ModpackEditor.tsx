@@ -9,10 +9,12 @@ export function PackEditor({
   modpack,
   mods,
   onChange,
+  onOpenMod,
 }: {
   modpack: Modpack;
   mods: ModEntry[];
   onChange: (next: Modpack) => void;
+  onOpenMod: (packageId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("active");
@@ -122,8 +124,10 @@ export function PackEditor({
                     </button>
                   </td>
                   <td className="idx">{on ? index : "-"}</td>
-                  <td className="name" title={mod.description ?? undefined}>
-                    {mod.name}
+                  <td className="name" title="Open the mod's details">
+                    <button type="button" className="link" onClick={() => onOpenMod(mod.packageId)}>
+                      {mod.name}
+                    </button>
                     {mod.description && <span className="has-desc">?</span>}
                   </td>
                   <td className="pid">{mod.packageId}</td>

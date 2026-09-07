@@ -2288,3 +2288,472 @@ tr.dev-error td {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Mod detail drawer -------------------------------------------------------- */
+
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(6, 9, 12, 0.62);
+  display: flex;
+  justify-content: flex-end;
+  animation: scrim-in 120ms ease-out;
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.drawer {
+  width: min(560px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: -18px 0 42px rgba(0, 0, 0, 0.45);
+  animation: drawer-in 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+.drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.drawer-head h2 {
+  margin: 0 0 3px;
+  font-size: 16px;
+}
+
+.drawer-head .pid {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.drawer-body {
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.drawer-body section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drawer-body h3 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.drawer-body h3 .count {
+  color: var(--text-soft);
+  letter-spacing: 0;
+}
+
+/* The banner holds its height while the image resolves, so opening the panel does not
+   shift everything below it once the load lands. */
+.banner {
+  /* The drawer body is a scrolling flex column, so without this the banner is shrunk to
+     nothing by the content below it and aspect-ratio never gets a height to work from. */
+  flex: none;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.banner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.banner.empty {
+  display: grid;
+  place-items: center;
+  color: var(--dim);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tag.on {
+  color: var(--ok);
+  border-color: rgba(78, 201, 139, 0.45);
+}
+
+.tag.off,
+.tag.local {
+  color: var(--dim);
+}
+
+.tag.warn {
+  color: var(--warning);
+  border-color: rgba(217, 171, 65, 0.45);
+}
+
+.description {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--text-soft);
+  line-height: 1.55;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.stat {
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.stat dt {
+  font-size: 11px;
+  color: var(--dim);
+  margin-bottom: 2px;
+}
+
+.stat dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A relation is a jump target, so it looks like one. A missing mod stays visible and
+   inert rather than being dropped, because "declared but not installed" is the fact
+   the panel is there to show. */
+.relation {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-3);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.relation:hover:not(:disabled) {
+  border-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+.relation.off {
+  opacity: 0.62;
+}
+
+.relation.missing {
+  color: var(--critical);
+  border-color: rgba(240, 97, 109, 0.4);
+  cursor: default;
+}
+
+.detail-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-findings li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+}
+
+.detail-findings .rule {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.drawer-body .path {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-soft);
+  word-break: break-all;
+}
+
+.btn.icon {
+  padding: 4px 9px;
+  line-height: 1;
+}
+
+/* A name that opens the detail panel. Styled as a link but built as a button, since it
+   moves within the app rather than navigating anywhere. */
+.link {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+
+tr.clickable {
+  cursor: pointer;
+}
+
+tr.clickable:hover td {
+  background: var(--panel-2);
+}
+
+/* Home --------------------------------------------------------------------- */
+
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* The one line worth reading first. Its colour is the verdict, so the page can be
+   understood before any of the numbers below it are. */
+.verdict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border-left-width: 3px;
+}
+
+.verdict.good {
+  border-left-color: var(--ok);
+}
+
+.verdict.warn {
+  border-left-color: var(--warning);
+}
+
+.verdict.bad {
+  border-left-color: var(--critical);
+}
+
+.verdict h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.verdict p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.home-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  font: inherit;
+  text-align: left;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.home-card:hover {
+  border-color: var(--accent-soft);
+  background: var(--panel-2);
+}
+
+.home-card-value {
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-card-label {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.home-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 14px 16px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.panel-head h3 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feed li {
+  display: grid;
+  grid-template-columns: 74px 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.feed p {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.feed time {
+  color: var(--dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* One badge per kind of change, so the journal can be skimmed for the destructive ones
+   without reading every line. */
+.kind {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--panel-3);
+  color: var(--dim);
+}
+
+.kind.repair {
+  color: var(--ok);
+  border-color: rgba(78, 201, 139, 0.4);
+}
+
+.kind.rollback {
+  color: var(--warning);
+  border-color: rgba(217, 171, 65, 0.4);
+}
+
+.kind.order {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+.change-group {
+  margin-bottom: 12px;
+}
+
+.change-group h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+.change-group .count {
+  color: var(--dim);
+}
+
+.release h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.release h4 time {
+  margin-left: 6px;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.release ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-soft);
+}
+
+.release-known {
+  margin: 12px 0 6px;
+  font-size: 12px;
+}
+
+.btn.small {
+  padding: 2px 8px;
+  font-size: 11px;
+}

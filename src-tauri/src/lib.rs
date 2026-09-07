@@ -2,6 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 
 /// One change to disk, mirroring the FileAction union the analysis layer produces.
@@ -287,6 +289,39 @@ fn rollback(targets: Vec<String>) -> Result<RunReport, String> {
     })
 }
 
+/// Read a mod's banner image back as a data URL.
+///
+/// Deliberately narrower than enabling Tauri's asset protocol, which would let the webview
+/// read any file on the machine to show a picture. Only a Preview image sitting in an About
+/// folder can be reached, which is exactly what the scan records and the detail panel asks
+/// for, so widening what the UI can see would take a change here rather than a config edit.
+#[tauri::command]
+fn read_mod_preview(path: String) -> Result<String, String> {
+    let p = Path::new(&path);
+    let name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let in_about = p
+        .parent()
+        .and_then(|d| d.file_name())
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.eq_ignore_ascii_case("about"));
+
+    if !in_about || !name.starts_with("preview.") {
+        return Err(format!("Not a mod preview: {path}"));
+    }
+    let mime = match name.rsplit('.').next().unwrap_or_default() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        other => return Err(format!("Unsupported preview format: {other}")),
+    };
+
+    let bytes = fs::read(p).map_err(|e| e.to_string())?;
+    Ok(format!("data:{mime};base64,{}", BASE64.encode(bytes)))
+}
+
 /// Start RimWorld.
 ///
 /// Spawned detached rather than waited on: the point is to hand the player their game,
@@ -315,7 +350,8 @@ pub fn run() {
             run_file_actions,
             apply_mods_config,
             rollback,
-            launch_game
+            launch_game,
+            read_mod_preview
         ])
         .run(tauri::generate_context!())
         .expect("error while running RimDoc+");
@@ -437,6 +473,33 @@ mod tests {
                 assert!(path.ends_with("T.png"));
             }
             other => panic!("expected a downscale, got {other:?}"),
+        }
+    }
+
+    /// The preview command exists to be a restriction, so what it refuses is the behaviour
+    /// worth pinning down. It reads a banner and nothing else, however the path is dressed up.
+    #[test]
+    fn only_a_mod_banner_can_be_read_back() {
+        let tmp = tempdir().unwrap();
+        let about = tmp.path().join("About");
+        write(&about.join("Preview.png"), "not really a png, but it is the right file");
+        write(&about.join("About.xml"), "<ModMetaData/>");
+        write(&tmp.path().join("secrets.png"), "somewhere else entirely");
+
+        assert!(read_mod_preview(about.join("Preview.png").display().to_string()).is_ok());
+
+        // The neighbouring metadata, a file outside an About folder, and a traversal that
+        // lands on one are all refused, so widening what the UI can see means editing this.
+        for denied in [
+            about.join("About.xml"),
+            tmp.path().join("secrets.png"),
+            about.join("..").join("secrets.png"),
+        ] {
+            assert!(
+                read_mod_preview(denied.display().to_string()).is_err(),
+                "{} should not be readable",
+                denied.display()
+            );
         }
     }
 

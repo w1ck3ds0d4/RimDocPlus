@@ -14,6 +14,31 @@ Built as a Tauri v2 desktop app (Rust + React + TypeScript), with a .NET sidecar
 
 ## Features (Built)
 
+### Home
+
+The landing page: whether anything needs attention, and what has been happening to the install.
+
+- A one-line verdict coloured by severity, so the page reads before any of its numbers do
+- Blocking findings, warnings, faults from the last session and texture memory, each a way into the tab that explains it
+- **What RimDoc+ did**: a journal of every repair applied, load order written and rollback run, with what an undo would reach. Recorded where the change happens, so nothing can be missed by omission
+- **What changed in your mods**: added, removed and updated since the previous scan, from folder modification times. Steam replaces Workshop mods without asking, so the change that broke a save is often one you never made
+- **What's new in RimDoc+**: the app's own release notes, including what is still not true of the build you are running
+
+The install comparison is stored against the scan that produced it rather than recomputed, because the comparison is destructive: once the snapshot advances the previous state is gone, and reopening the app would otherwise report no changes at all.
+
+### Mod details
+
+Click any mod, in the Library or the load order, for everything the scan already read about it:
+
+- The mod's own banner image, read from `About/Preview.png`
+- Author, package id, source, load position and which game cycles it advertises
+- Description, with the rich-text markup authors write in it stripped rather than printed raw
+- What it costs: disk, texture count, decoded texture memory, patch operations, subscribers, when its folder last changed
+- What it needs, what depends on it, what it conflicts with, and what it must load around. Every relationship is a jump to that mod, and one that is declared but not installed stays visible and inert rather than being dropped
+- The findings that name it, so the Doctor's verdict on a mod is next to the mod
+
+Banners reach the two builds by different routes, because neither can use the other's. The desktop shell reads them through a command that will only open a `Preview` image inside an `About` folder, which is narrower than enabling Tauri's asset protocol and would have let the webview read any file on the machine to show a picture. The browser build is served them in development by a Vite middleware whose allowlist is the exact set of paths the scan recorded.
+
 ### Install scan
 
 - Walks the official `Data` folder, local `Mods`, and the Steam Workshop content folder

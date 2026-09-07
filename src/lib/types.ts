@@ -21,6 +21,8 @@ export interface ModEntry {
   description?: string;
   /** Folder mtime as an ISO string: a proxy for when the mod was last updated. */
   updatedAt?: string;
+  /** Absolute path to the mod's banner image, when it ships one. */
+  previewPath?: string;
   dependencies: ModDependency[];
   incompatibleWith: string[];
   loadAfter: string[];

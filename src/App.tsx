@@ -19,17 +19,22 @@ import { SessionReport } from "./components/SessionReport";
 import { RepairProvider } from "./components/Repair";
 import { Triage } from "./components/Triage";
 import { Library } from "./components/Library";
+import { ModDetail } from "./components/ModDetail";
+import { Home } from "./components/Home";
+import { record } from "./lib/history";
+import { installDiff } from "./lib/installDiff";
 import { Settings, loadDevMode } from "./components/Settings";
 import { GameControls } from "./components/GameControls";
 
-type Tab = "doctor" | "session" | "packs" | "order" | "library" | "settings";
+type Tab = "home" | "doctor" | "session" | "packs" | "order" | "library" | "settings";
 
 export default function App() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [session, setSession] = useState<{ path: string; text: string } | null>(null);
+  const [openMod, setOpenMod] = useState<string | null>(null);
   const [workshop, setWorkshop] = useState<WorkshopCache | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("doctor");
+  const [tab, setTab] = useState<Tab>("home");
   const [modpacks, setProfiles] = useState<Modpack[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [devMode, setDevMode] = useState(loadDevMode);
@@ -101,6 +106,16 @@ export default function App() {
       const previous = modpacks.find((p) => p.id === modpack.id);
       if (previous) setUndoStack((stack) => [{ modpack: previous, label }, ...stack].slice(0, 20));
       setProfiles((current) => current.map((p) => (p.id === modpack.id ? modpack : p)));
+      // Recorded here rather than at each call site: everything that changes a load order
+      // goes through this function, so the journal cannot miss one by omission.
+      const delta = previous ? modpack.activeOrder.length - previous.activeOrder.length : 0;
+      record({
+        kind: "modpack",
+        summary: `${label} in ${modpack.name}`,
+        detail: `${modpack.activeOrder.length} mods enabled${
+          delta === 0 ? "" : delta > 0 ? `, ${delta} added` : `, ${-delta} removed`
+        }`,
+      });
     },
     [modpacks],
   );
@@ -158,10 +173,19 @@ export default function App() {
     [sessionAnalysis, scan],
   );
 
+  // Computed once per scan rather than per render: the comparison advances a stored
+  // snapshot, so running it is what consumes the previous state.
+  const diff = useMemo(() => (scan ? installDiff(scan) : null), [scan]);
+
   const doctorFilter = useSeverityFilter(staticFindings);
 
   if (loading) return <main />;
   if (!scan || !workingScan) return <NoFixtures />;
+
+  // The detail panel is opened from several tabs and stays open across a tab change, so the
+  // mod it points at is resolved from the scan rather than passed around as an object.
+  const selectedMod = openMod ? (scan.mods.find((m) => m.packageId === openMod) ?? null) : null;
+  const allFindings = [...staticFindings, ...sessionFindings];
 
   const drift = active ? diffModpacks(scan.activeOrder, active.activeOrder) : null;
   const dirty = drift ? drift.added.length > 0 || drift.removed.length > 0 || drift.reordered : false;
@@ -208,6 +232,7 @@ export default function App() {
       </header>
 
       <nav className="tabs" role="tablist">
+        <TabButton id="home" tab={tab} setTab={setTab} label="Home" />
         <TabButton id="doctor" tab={tab} setTab={setTab} label="Doctor" count={staticFindings.length} />
         <TabButton id="session" tab={tab} setTab={setTab} label="Session" count={sessionFindings.length} />
         <TabButton id="packs" tab={tab} setTab={setTab} label="Modpacks" count={modpacks.length} />
@@ -223,6 +248,17 @@ export default function App() {
       </nav>
 
       <main>
+        {tab === "home" && diff && (
+          <Home
+            scan={workingScan}
+            modpack={active}
+            findings={staticFindings}
+            sessionFindings={sessionFindings}
+            diff={diff}
+            onGo={setTab}
+            onOpenMod={setOpenMod}
+          />
+        )}
         {tab === "doctor" && (
           <>
             <SeveritySummary
@@ -278,7 +314,7 @@ export default function App() {
             onDelete={remove}
           />
         )}
-        {tab === "library" && <Library scan={scan} workshop={workshop} />}
+        {tab === "library" && <Library scan={scan} workshop={workshop} onOpenMod={setOpenMod} />}
         {tab === "settings" && (
           <Settings
             scan={workingScan}
@@ -291,11 +327,22 @@ export default function App() {
         )}
         {tab === "order" &&
           (active ? (
-            <PackEditor modpack={active} mods={scan.mods} onChange={upsert} />
+            <PackEditor modpack={active} mods={scan.mods} onChange={upsert} onOpenMod={setOpenMod} />
           ) : (
             <p className="muted">Create a modpack first.</p>
           ))}
       </main>
+
+      {selectedMod && (
+        <ModDetail
+          mod={selectedMod}
+          scan={workingScan}
+          workshop={workshop}
+          findings={allFindings}
+          onOpen={setOpenMod}
+          onClose={() => setOpenMod(null)}
+        />
+      )}
     </RepairProvider>
   );
 }

@@ -239,6 +239,28 @@ function folderMtime(folder) {
   }
 }
 
+/**
+ * The mod's banner image, which every mod on the reference install ships.
+ *
+ * Matched case-insensitively rather than by a fixed name: across 253 mods the file appears
+ * as Preview.png, preview.png, Preview.PNG and Preview.jpg, and Windows finds all four while
+ * a Linux or macOS build of the same scan would not.
+ */
+function findPreview(folder) {
+  for (const about of ["About", "about"]) {
+    const dir = join(folder, about);
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    const hit = entries.find((e) => e.isFile() && /^preview\.(png|jpe?g)$/i.test(e.name));
+    if (hit) return join(dir, hit.name);
+  }
+  return undefined;
+}
+
 function hasSubdir(folder, name) {
   const direct = join(folder, name);
   if (existsSync(direct)) return true;
@@ -276,7 +298,13 @@ function scanModDir(dir, source) {
       sizeBytes: measured.sizeBytes,
       updatedAt: folderMtime(folder),
     });
-    if (mod) mods.push({ ...mod, textures: measured.textures, patches: readPatches(folder) });
+    if (mod)
+      mods.push({
+        ...mod,
+        textures: measured.textures,
+        patches: readPatches(folder),
+        previewPath: findPreview(folder),
+      });
   }
   return mods;
 }

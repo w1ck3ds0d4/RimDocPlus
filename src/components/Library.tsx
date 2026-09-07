@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ScanResult, WorkshopCache } from "../lib/types";
-import { buildLibrary, cleanupCandidates, sortLibrary, workshopUrl, type LibrarySort } from "../lib/library";
+import { buildLibrary, cleanupCandidates, sortLibrary, type LibrarySort } from "../lib/library";
 
 const SORTS: { key: LibrarySort; label: string }[] = [
   { key: "order", label: "Load order" },
@@ -11,7 +11,15 @@ const SORTS: { key: LibrarySort; label: string }[] = [
   { key: "size", label: "Disk size" },
 ];
 
-export function Library({ scan, workshop }: { scan: ScanResult; workshop: WorkshopCache | null }) {
+export function Library({
+  scan,
+  workshop,
+  onOpenMod,
+}: {
+  scan: ScanResult;
+  workshop: WorkshopCache | null;
+  onOpenMod: (packageId: string) => void;
+}) {
   const [sort, setSort] = useState<LibrarySort>("dependents");
   const [query, setQuery] = useState("");
   const [onlyCleanup, setOnlyCleanup] = useState(false);
@@ -74,16 +82,11 @@ export function Library({ scan, workshop }: { scan: ScanResult; workshop: Worksh
             {visible.map((row) => (
               <tr
                 key={`${row.mod.packageId}:${row.mod.folder}`}
-                className={row.active ? undefined : "row-off"}
+                className={`clickable${row.active ? "" : " row-off"}`}
+                onClick={() => onOpenMod(row.mod.packageId)}
               >
-                <td className="name" title={row.mod.description ?? undefined}>
-                  {row.mod.steamId ? (
-                    <a href={workshopUrl(row.mod.steamId)} target="_blank" rel="noreferrer noopener">
-                      {row.mod.name}
-                    </a>
-                  ) : (
-                    row.mod.name
-                  )}
+                <td className="name" title="Open the mod's details">
+                  <span className="link">{row.mod.name}</span>
                   {row.mod.source === "official" && <span className="tag official">core</span>}
                 </td>
                 <td className="num">{row.dependents > 0 ? row.dependents : ""}</td>

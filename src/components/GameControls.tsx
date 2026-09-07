@@ -4,6 +4,7 @@ import { toModsConfigXml, type Modpack } from "../lib/modpacks";
 import { configDir } from "../lib/repair/repairs";
 import { applyModsConfig, inShell, launchGame } from "../lib/shell";
 import { useConfirm } from "./Confirm";
+import { record } from "../lib/history";
 
 /**
  * Apply a modpack to the game, and start it.
@@ -45,6 +46,12 @@ export function GameControls({ scan, modpack }: { scan: ScanResult; modpack: Mod
         toModsConfigXml(modpack.activeOrder, scan.gameVersion),
       );
       setStatus(`Applied ${modpack.activeOrder.length} mods`);
+      record({
+        kind: "order",
+        summary: `Wrote ${modpack.activeOrder.length} mods into ModsConfig.xml`,
+        detail: `From the modpack "${modpack.name}"`,
+        targets: [`${config}/ModsConfig.xml`],
+      });
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     } finally {
@@ -58,6 +65,7 @@ export function GameControls({ scan, modpack }: { scan: ScanResult; modpack: Mod
     try {
       await launchGame(scan.paths.game);
       setStatus("RimWorld started");
+      record({ kind: "launch", summary: "Started RimWorld", detail: scan.paths.game });
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     } finally {
