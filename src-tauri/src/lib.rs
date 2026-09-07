@@ -1131,6 +1131,166 @@ fn read_probe_report() -> Result<Option<String>, String> {
     }
 }
 
+/// RimWorld's Steam app id. Subscribing needs Steam to believe it is talking to the game.
+const RIMWORLD_APP_ID: &str = "294100";
+
+/// Where the game keeps Valve's library.
+///
+/// The player's own copy, loaded from their install, rather than one shipped here. That
+/// avoids redistributing Valve's binary entirely, and it means the version in use is always
+/// the one the game itself was built against.
+fn steam_api_dll(game_dir: &str) -> Option<PathBuf> {
+    let plugins = PathBuf::from(game_dir)
+        .join("RimWorldWin64_Data")
+        .join("Plugins");
+    // Named directly first, then looked for, because Unity has moved this between versions
+    // and an install that puts it elsewhere should still work.
+    let direct = plugins.join("x86_64").join("steam_api64.dll");
+    if direct.is_file() {
+        return Some(direct);
+    }
+    let mut stack = vec![plugins];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path
+                .file_name()
+                .map(|n| n.eq_ignore_ascii_case("steam_api64.dll"))
+                .unwrap_or(false)
+            {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+/// Ask Steam to subscribe to a Workshop item.
+///
+/// The one thing in this app that presents itself to Steam as RimWorld. Subscribing goes
+/// through the Steamworks API, that API authenticates by app id, and there is no protocol
+/// URL or web endpoint that will do it: `steam://` can open a Workshop page and nothing more.
+/// So for as long as this call runs, Steam counts the app id as in use and will show the
+/// player as playing RimWorld. That is disclosed where the button is, because it is visible
+/// to their friends and nothing else this app does is.
+///
+/// Refused while the game is running. Two processes initialising the API under one app id is
+/// not a thing this can test on every machine, and the cost of being wrong is someone's
+/// session, so it does not try.
+#[tauri::command(async)]
+fn steam_subscribe(game_dir: String, workshop_id: String) -> Result<String, String> {
+    if !workshop_id.chars().all(|c| c.is_ascii_digit()) || workshop_id.is_empty() {
+        return Err("That is not a Workshop item id.".into());
+    }
+    let id: u64 = workshop_id
+        .parse()
+        .map_err(|_| "That Workshop item id is out of range.".to_string())?;
+
+    if running_app_id().is_some() {
+        return Err(
+            "Steam is running a game. Subscribing has to talk to Steam as RimWorld, and doing \
+             that alongside a running game is not something this will risk. Quit the game and \
+             try again."
+                .into(),
+        );
+    }
+    if image_running("steam.exe") != Some(true) {
+        return Err("Steam is not running. Start it, sign in, and try again.".into());
+    }
+
+    let dll = steam_api_dll(&game_dir).ok_or(
+        "No steam_api64.dll in this RimWorld install, so there is nothing to ask. \
+         Subscribe from the Workshop page instead.",
+    )?;
+
+    // Safety: the library is Valve's own, loaded from the player's game install, and every
+    // symbol below is called with the signature Valve's flat API documents for it.
+    unsafe {
+        std::env::set_var("SteamAppId", RIMWORLD_APP_ID);
+        std::env::set_var("SteamGameId", RIMWORLD_APP_ID);
+
+        let lib = libloading::Library::new(&dll)
+            .map_err(|e| format!("Could not load {}: {e}", dll.display()))?;
+
+        let init: libloading::Symbol<unsafe extern "C" fn() -> bool> = lib
+            .get(b"SteamAPI_Init\0")
+            .map_err(|e| format!("That steam_api64.dll has no SteamAPI_Init: {e}"))?;
+        if !init() {
+            return Err(
+                "Steam would not start a session. It has to be running and signed in, and it \
+                 has to own RimWorld on this account."
+                    .into(),
+            );
+        }
+
+        let shutdown: libloading::Symbol<unsafe extern "C" fn()> = lib
+            .get(b"SteamAPI_Shutdown\0")
+            .map_err(|e| format!("That steam_api64.dll has no SteamAPI_Shutdown: {e}"))?;
+
+        let outcome = subscribe_through(&lib, id);
+
+        // Callbacks are pumped briefly so Steam has somewhere to deliver the result before
+        // the session is torn down. Subscribing is asynchronous; this does not wait for the
+        // download, only for Steam to have taken the request.
+        if let Ok(run) = lib.get::<unsafe extern "C" fn()>(b"SteamAPI_RunCallbacks\0") {
+            for _ in 0..20 {
+                run();
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+
+        shutdown();
+        outcome
+    }
+}
+
+/// Find whichever ISteamUGC this copy of the library exposes, and subscribe through it.
+///
+/// The accessor is versioned into its own name, `SteamAPI_SteamUGC_v016` on the build this
+/// was written against. Hardcoding that would work on one machine and fail on the next, so
+/// the versions are tried in turn and the first that resolves is used. Newest first, because
+/// a library that has several should be asked for its most recent.
+unsafe fn subscribe_through(lib: &libloading::Library, id: u64) -> Result<String, String> {
+    let mut ugc: *mut std::ffi::c_void = std::ptr::null_mut();
+    let mut which = String::new();
+
+    for version in (10..=30).rev() {
+        let name = format!("SteamAPI_SteamUGC_v{version:03}\0");
+        if let Ok(accessor) =
+            lib.get::<unsafe extern "C" fn() -> *mut std::ffi::c_void>(name.as_bytes())
+        {
+            let found = accessor();
+            if !found.is_null() {
+                ugc = found;
+                which = name.trim_end_matches('\0').to_string();
+                break;
+            }
+        }
+    }
+
+    if ugc.is_null() {
+        return Err(
+            "This copy of steam_api64.dll exposes no Workshop interface this understands. \
+             Subscribe from the Workshop page instead."
+                .into(),
+        );
+    }
+
+    let subscribe: libloading::Symbol<unsafe extern "C" fn(*mut std::ffi::c_void, u64) -> u64> =
+        lib.get(b"SteamAPI_ISteamUGC_SubscribeItem\0")
+            .map_err(|e| format!("No SubscribeItem in {which}: {e}"))?;
+
+    subscribe(ugc, id);
+    Ok(format!(
+        "Asked Steam to subscribe to {id}. It downloads on its own; the mod appears once it has."
+    ))
+}
+
 /// Every save RimWorld has written, newest first, with the mod list each was made with.
 ///
 /// Only the head of each file is read: the mod list sits in a meta block at the very top,
@@ -1486,6 +1646,7 @@ pub fn run() {
             is_game_running,
             stop_steam,
             start_steam,
+            steam_subscribe,
             hash_mod
         ])
         .run(tauri::generate_context!())

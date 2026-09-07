@@ -21,6 +21,7 @@ base64 = "0.22"
 sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["png"] }
 ureq = { version = "3.2.1", default-features = false, features = ["rustls"] }
+libloading = "0.8.9"
 
 [profile.release]
 codegen-units = 1

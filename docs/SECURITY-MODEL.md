@@ -14,7 +14,8 @@ Everything below is checkable. Each claim names where in the source it is enforc
   pasted, and only when you press Fetch. Nothing else ever leaves the machine.
 - It copies every file to `<file>.rimdocbak` before changing it, and every run is undoable.
 - It runs six external programs: RimWorld, `steam.exe`, `tasklist`, `reg`, `taskkill`, and its
-  own bundled patch probe.
+  own bundled patch probe. It also loads your game's own `steam_api64.dll` to subscribe to a
+  Workshop item, which is the one thing it does that Steam sees as RimWorld.
 - It sends nothing anywhere. There is no telemetry, no analytics, no crash reporter.
 
 ## The command boundary
@@ -173,6 +174,35 @@ The app works fully without ever running it, and cannot run it for you.
 
 There is no telemetry, no analytics, no crash reporting, and no update check.
 
+## Subscribing to a Workshop item
+
+There is a **Subscribe** button on a finding about a missing mod, and it is the only thing
+here that presents this app to Steam **as RimWorld**.
+
+That is not a shortcut taken for convenience. Subscribing goes through the Steamworks API,
+that API authenticates by app id, and no `steam://` URL will do it: the protocol can open a
+Workshop page and nothing else. So there is no version of this feature that does not do it.
+
+What that means, plainly:
+
+- **While the call runs, Steam shows you as playing RimWorld.** Your friends can see it. It
+  lasts seconds, but it is real and it is the reason this is said on the button as well as
+  here.
+- It **loads your own copy** of `steam_api64.dll` from your RimWorld install. Nothing of
+  Valve's is redistributed with this app, and the version used is the one your game was built
+  against.
+- It **refuses while a game is running.** Two processes initialising the API under one app id
+  is not something this can test on every machine, and the cost of being wrong is your
+  session.
+- It needs Steam running and signed in, and says so rather than failing quietly.
+- It asks Steam to subscribe and nothing more. It does not download, unsubscribe, or touch
+  anything else on your account.
+
+The Workshop page button is still there and still does nothing but open a page.
+
+This reverses a position this document previously stated. It was changed deliberately, by the
+owner, after the trade-off above was put to him in these words.
+
 ## Closing Steam
 
 One button closes Steam, applies a repair, and starts it again. It exists because Steam keeps
@@ -193,9 +223,7 @@ What it will not do:
 
 ## What it deliberately will not do
 
-- **Subscribe or unsubscribe on your behalf.** That needs the Steamworks SDK running under
-  RimWorld's app id, which a third-party process has no business impersonating. The app opens
-  the Workshop page instead.
+- **Unsubscribe on your behalf.** Removing something from your account is not a repair.
 - **Edit your saves.** It reads the mod list out of the header and nothing else.
 - **Touch mod code.** No assembly is patched, rewritten or injected.
 - **Auto-repair on its own.** Every write is behind a button you pressed, and every plan can
