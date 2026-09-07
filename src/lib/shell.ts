@@ -194,6 +194,45 @@ export function stopGame(): Promise<string> {
   return invoke<string>("stop_game", {});
 }
 
+export interface VaultEntry {
+  packageId: string;
+  name: string;
+  /** First 16 hex characters of the folder's content hash. */
+  hash: string;
+  sizeBytes: number;
+  files: number;
+  capturedAt: string;
+  path: string;
+}
+
+/** Take a mod's current build into the vault, or recognise one already held. */
+export function vaultCapture(folder: string, packageId: string, name: string): Promise<VaultEntry> {
+  return invoke<VaultEntry>("vault_capture", { folder, packageId, name });
+}
+
+export function vaultList(): Promise<VaultEntry[]> {
+  return invoke<VaultEntry[]>("vault_list", {});
+}
+
+/** Put a vaulted build back, backing up what it replaces. */
+export function vaultRestore(packageId: string, hash: string, target: string): Promise<string> {
+  return invoke<string>("vault_restore", { packageId, hash, target });
+}
+
+export function vaultForget(packageId: string, hash: string): Promise<string> {
+  return invoke<string>("vault_forget", { packageId, hash });
+}
+
+/**
+ * What is in a mod folder right now, as one hash, without copying anything.
+ *
+ * How a pin is checked: the modpack records the hash it was built against, and a mismatch
+ * means the mod on disk is not the one it was tested with.
+ */
+export function hashMod(folder: string): Promise<string> {
+  return invoke<string>("hash_mod", { folder });
+}
+
 /** Start RimWorld from its install folder. */
 export function launchGame(gameDir: string): Promise<string> {
   return invoke<string>("launch_game", { gameDir });

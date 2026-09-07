@@ -3688,3 +3688,57 @@ tr.clickable:hover td {
 .tab:hover .tab-icon {
   opacity: 1;
 }
+
+/* Pins and the vault ------------------------------------------------------- */
+
+.vault {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.vault p {
+  margin: 0 0 10px;
+}
+
+.vault .splash-bar {
+  width: 100%;
+  margin: 4px 0 10px;
+}
+
+.pin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pin-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.pin-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The two builds, so a drift can be told apart from a mod simply being unmeasured. */
+.pin-hash {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}

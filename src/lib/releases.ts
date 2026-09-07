@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
       "Every watched run is measured, so two modpacks can be compared on load time, memory and faults",
       "The search can judge its own trials for a load failure, running each one and reading the log itself",
       "Tabs carry icons, so the strip stops truncating when the window is narrow",
+      "Modpacks can be pinned to exact mod builds, and the vault keeps a copy of each so a pin still refers to something",
       "Settings: choose the size at which a texture counts as oversized, from 1024px down to anything above the 512px target",
       "Every change is backed up first, and every repair that touches disk can be rolled back",
     ],

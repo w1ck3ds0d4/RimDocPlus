@@ -24,6 +24,7 @@ import { Home } from "./components/Home";
 import { Bisect } from "./components/Bisect";
 import { Saves } from "./components/Saves";
 import { GameWatch } from "./components/GameWatch";
+import { Vault } from "./components/Vault";
 import { record } from "./lib/history";
 import { installDiff } from "./lib/installDiff";
 import { Settings, loadDevMode, loadOversizePx, saveOversizePx } from "./components/Settings";
@@ -395,6 +396,7 @@ export default function App() {
             onDelete={remove}
           />
         )}
+        {tab === "packs" && active && <Vault scan={workingScan} modpack={active} onChange={upsert} />}
         {tab === "library" && <Library scan={scan} workshop={workshop} onOpenMod={setOpenMod} />}
         {tab === "settings" && (
           <Settings

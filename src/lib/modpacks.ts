@@ -16,6 +16,15 @@ export interface Modpack {
   gameCycle: string;
   activeOrder: string[];
   note?: string;
+  /**
+   * The exact build of each mod this modpack was last known to work with, by content hash.
+   *
+   * A modpack without these is repeatable but not reproducible: it says which mods, not
+   * which versions of them, and Steam overwrites a Workshop mod in place. Pinning is what
+   * turns "these 224 mods" into "this setup", and it is only meaningful alongside the vault,
+   * since a pin naming a build nobody kept a copy of describes something already lost.
+   */
+  pins?: Record<string, string>;
 }
 
 /**

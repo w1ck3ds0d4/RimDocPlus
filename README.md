@@ -216,6 +216,33 @@ An orange strip across the top marks dev mode as on, since a diagnostic mode tha
 
 A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
 
+### Exact builds
+
+A modpack records which mods it uses, which makes it repeatable. It does not record which builds,
+which is what would make it reproducible, and Steam overwrites a Workshop mod in place. So a setup
+can stop working without anything about it appearing to have changed.
+
+Pinning records the content hash of every mod in a modpack. Checking re-reads them and reports
+drift: the mod is still there, still enabled, and is not the build this setup was known to work
+with. Nothing about a load order changes when Steam replaces a mod underneath it, so that state is
+otherwise invisible.
+
+The vault keeps the copies a pin refers to, addressed by content rather than by the version in
+About.xml, which is whatever the author last remembered to change. Hashed from file contents, not
+sizes and modification times: a copy rewrites every mtime, and two builds can differ by one byte at
+the same length. Paths go in alongside the content, since moving a file without editing it still
+makes a different mod, and the file list is sorted because directory order is whatever the
+filesystem feels like.
+
+Two things are left out of the identity deliberately: this app's own `.rimdocbak` backups, and
+Steam's `PublishedFileId.txt`. Including either would give one build different hashes depending on
+what had happened to it since, which is the one thing a content address must not do.
+
+Keyed by hash, so vaulting a build already held costs one walk and no copy. Restoring backs up what
+it replaces, and a drifted mod can only be restored when its pinned build is actually in the vault:
+a pin naming a build nobody kept describes something already lost, and the button says so rather
+than failing when pressed.
+
 ### Judging a run without being asked
 
 A run is classified from what it wrote, using markers taken from two real logs on the reference
@@ -424,8 +451,6 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 
 ## What's Not Yet Built
 
-- **Version pinning in modpacks**: a modpack records package ids, not exact mod versions, so it is repeatable but not yet reproducible. Pinning arrives with the vault.
-- **Mod vault**: content-addressed local store so Steam updates land as new versions instead of overwriting a working setup
 - **Unattended bisect for faults after the main menu**: the search judges itself for anything that stops the mod list loading. A crash an hour into a colony, or a slowdown, still needs you, because from outside the process those look exactly like a healthy boot
 - **Tier 2 to 4 repairs**: XML patch repair, stub defs, and assembly-level neutralisation are specified but not implemented
 - **Scripted soak run**: a long unattended session with faults attributed over time. Needs the tick measurement above
