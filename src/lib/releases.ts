@@ -75,7 +75,6 @@ export const RELEASES: Release[] = [
     ],
     known: [
       "Harmony patches registered in code rather than declared with an attribute cannot be checked. The target is built while the game runs, so nothing outside it can say whether it still resolves",
-      "Assembly-level repairs are specified and not implemented. Stripping a patch class from a DLL cannot be an overlay mod, so it would mean a derived copy of somebody else's work, which the safety model rules out",
       "The search judges a trial past the main menu, but cannot play the colony for you: a fault that needs one is launched and judged rather than found unattended. A slowdown is still yours to call, because nothing in the log says a run was slow",
     ],
   },

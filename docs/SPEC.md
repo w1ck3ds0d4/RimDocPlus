@@ -158,17 +158,37 @@ not on Windows).
 **Tier 3, missing content.** Generate a stub def so an absent dependency produces a gap
 rather than a load failure. Repair broken texture and sound references.
 
-**Tier 4, assembly level.** Via the sidecar: neutralise a dead Harmony patch by stripping
-the patch class from a derived copy of the DLL, retarget an assembly reference built
-against an older Harmony or HugsLib, or emit a shim assembly whose finalizer swallows a
-known-bad patch's exception so the mod degrades instead of crashing.
+### Why the scale stops at three
+
+There was a tier 4: neutralise a dead Harmony patch by stripping its class from a derived
+copy of the DLL, retarget an assembly reference, or emit a shim whose finalizer swallows a
+known-bad patch's exception. It is gone, for three reasons that are worth keeping written
+down so the idea is not re-derived from its absence.
+
+**It contradicts the safety model.** A repair is an overlay that loads after its target and
+never modifies the original mod folder. A stripped DLL cannot be an overlay. It means
+shipping a derived copy of somebody else's work, which is the forking the fix registry below
+exists to prevent.
+
+**Its job does not come up.** Neutralising exists to stop a dead patch from throwing. Across
+740 patches in 159 mods with code on the reference install, two are dead, and neither throws:
+Harmony leaves an unresolved target unpatched and the mod's feature is quietly absent. There
+is no exception to swallow.
+
+**What those two need, it cannot do.** Both want methods RimWorld deleted outright, present
+on no game type and no base class. Neutralising an already-inert patch changes nothing, and
+a retarget has nowhere to point. Restoring the feature means writing the mod's missing
+update, which is the author's work and not a repair.
+
+The check that finds dead patches stays. Naming the patch class, the target it wanted, and
+where the method went is a bug report an author can act on, and that is worth more than any
+edit this app could make to their assembly.
 
 ### Safety model
 
 - The original mod folder is never modified. A repair is an overlay mod that loads after
   the target, or a derived copy in the vault with a full diff attached.
 - Every profile records which repairs are active. Revert is one click.
-- Tier 4 always explains, then proposes, then applies. Never silent.
 - On mod update, previously active repairs are re-applied if they still apply cleanly and
   flagged loudly if they do not.
 
