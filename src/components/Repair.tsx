@@ -22,7 +22,8 @@ export interface RepairApi {
   applyModpack: (modpack: Modpack, label: string) => void;
 }
 
-const RepairContext = createContext<RepairApi | null>(null);
+/** Exported so anything naming a mod can offer to act on it, not only a repair plan. */
+export const RepairContext = createContext<RepairApi | null>(null);
 
 /**
  * The scan and modpack every finding is being judged against.

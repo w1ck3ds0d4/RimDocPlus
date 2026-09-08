@@ -19,6 +19,7 @@ import {
 } from "../lib/shell";
 import { record } from "../lib/history";
 import { useConfirm } from "./Confirm";
+import { ToggleMod } from "./ToggleMod";
 
 /**
  * What each mod costs per tick, measured from inside the running game.
@@ -203,6 +204,7 @@ export function TickCost({
               <th className="n">Share</th>
               <th className="n">Per 1,000 calls</th>
               <th className="n">Calls</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -216,6 +218,18 @@ export function TickCost({
                 <td className="n">{Math.round(row.share * 100)}%</td>
                 <td className="n">{row.perThousand.toFixed(2)} ms</td>
                 <td className="n">{row.calls.toLocaleString()}</td>
+                {/*
+                  The point of a row saying what a mod costs is deciding whether to keep it,
+                  and that decision was three tabs away from the number behind it.
+                */}
+                <td className="n">
+                  {(() => {
+                    const entry = scan.mods.find(
+                      (m) => m.packageId.toLowerCase() === row.packageId.toLowerCase(),
+                    );
+                    return entry ? <ToggleMod mod={entry} /> : null;
+                  })()}
+                </td>
               </tr>
             ))}
           </tbody>
