@@ -48,6 +48,35 @@ function scanOf(mods: ModEntry[]): ScanResult {
 
 const SIZES = [2048, 1024, 768, 600, 513];
 
+describe("when the footprint is high and nothing is resizable", () => {
+  // The reference install: 15.5 GB across 33,701 textures, and the largest is 1017px
+  // against a 1024px threshold. The footprint finding said the number was high, the resize
+  // rule never fired, and nothing connected the two.
+  const footprintOf = (sizes: number[], thresholdPx = 1024) =>
+    runPerformanceRules(scanOf([mod(sizes)]), { oversizePx: thresholdPx }).find(
+      (f) => f.rule === "texture-footprint",
+    );
+
+  it("says the threshold is why, and what a lower one would catch", () => {
+    const detail = footprintOf([1017, 900])?.detail ?? "";
+    expect(detail).toContain("volume rather than size");
+    expect(detail).toContain("1024px setting");
+    expect(detail).toContain("the biggest being 1017px");
+    expect(detail).toContain("2 textures sit above the 512px target");
+  });
+
+  it("says nothing extra when the resize rule does have something to offer", () => {
+    // Then the two findings agree and the reader has a repair to press.
+    expect(footprintOf([2048])?.detail).not.toContain("volume rather than size");
+  });
+
+  it("does not promise a lower threshold would help when nothing is above the target", () => {
+    const detail = footprintOf([])?.detail ?? "";
+    expect(detail).toContain("volume rather than size");
+    expect(detail).not.toContain("would offer to shrink");
+  });
+});
+
 describe("oversizedAt", () => {
   it("counts only what meets the threshold, whatever the scan recorded", () => {
     const m = mod(SIZES);
