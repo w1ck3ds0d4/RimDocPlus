@@ -89,12 +89,29 @@ fn backups_root() -> Result<PathBuf, String> {
     Ok(files::home_dir_for("write backups into")?.join("RimDoc-Backups"))
 }
 
+/// Whether a path walks back up through a parent component.
+fn climbs(path: &Path) -> bool {
+    path.components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+}
+
 /// Copy a file or directory beside itself as `.rimdocbak`, once.
 ///
 /// Directories are copied recursively. A plain copy of a directory creates an empty one,
 /// which would make removing a duplicate mod folder unrecoverable while looking backed up.
 fn backup_once(path: &Path) -> Result<(), String> {
     if !path.exists() {
+        // Nothing to copy, but the fact that there was nothing is itself what an undo needs:
+        // without it a repair that only creates files was unrollbackable, and the run still
+        // told the reader every change could be put back. The marker is what rollback reads
+        // to know the file should not exist afterwards.
+        let marker = PathBuf::from(format!("{}.rimdocbak.absent", path.display()));
+        if !marker.exists() {
+            if let Some(dir) = marker.parent() {
+                fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            }
+            fs::write(&marker, b"").map_err(|e| e.to_string())?;
+        }
         return Ok(());
     }
     let bak = PathBuf::from(format!("{}.rimdocbak", path.display()));
@@ -546,6 +563,20 @@ fn run_file_actions(
             }
             FileAction::Write { path, contents } => {
                 let p = PathBuf::from(path);
+                // Every path this app produces is absolute and built from a scan, so a
+                // parent component in one means it was built from something a scan read
+                // rather than found: a def name out of a log line, a mod name out of an
+                // About.xml. Refused here as well as where it is built, because creating
+                // missing parents made a climbing path land somewhere real.
+                if climbs(&p) {
+                    outcomes.push(ActionOutcome {
+                        target: path.clone(),
+                        ok: false,
+                        detail: "refused: the path climbs out of its folder".into(),
+                    });
+                    failed += 1;
+                    continue;
+                }
                 // A write to somewhere that does not exist yet is a write, not a failure.
                 // Every write until now landed beside a file the scan had already read, so
                 // this never came up; a repair that generates a small mod is all folders
@@ -657,6 +688,39 @@ fn rollback(targets: Vec<String>) -> Result<RunReport, String> {
     for target in targets {
         let path = PathBuf::from(&target);
         let bak = PathBuf::from(format!("{target}.rimdocbak"));
+        let absent = PathBuf::from(format!("{target}.rimdocbak.absent"));
+
+        // The file did not exist before the run, so undoing it means taking it away again.
+        if absent.exists() {
+            let undo = (|| -> Result<(), String> {
+                if path.is_dir() {
+                    fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+                } else if path.exists() {
+                    fs::remove_file(&path).map_err(|e| e.to_string())?;
+                }
+                fs::remove_file(&absent).map_err(|e| e.to_string())
+            })();
+            match undo {
+                Ok(()) => {
+                    applied += 1;
+                    outcomes.push(ActionOutcome {
+                        target,
+                        ok: true,
+                        detail: "removed, it was not there before".into(),
+                    });
+                }
+                Err(e) => {
+                    failed += 1;
+                    outcomes.push(ActionOutcome {
+                        target,
+                        ok: false,
+                        detail: e,
+                    });
+                }
+            }
+            continue;
+        }
+
         if !bak.exists() {
             skipped += 1;
             outcomes.push(ActionOutcome {
@@ -2111,6 +2175,58 @@ mod tests {
         assert!(forget_workshop_item(&acf, "999")
             .unwrap()
             .contains("not recorded"));
+    }
+
+    /// A write that created the file is undone by removing it.
+    ///
+    /// backup_once has nothing to copy when the file is not there, and used to say so and
+    /// stop. Rollback then found no backup, called the target "no backup", and left the file
+    /// where it was, while the run still told the reader every change could be put back. A
+    /// repair that only creates files, which the stub-def repair is, was unrollbackable.
+    #[test]
+    fn rolling_back_a_created_file_takes_it_away() {
+        let tmp = tempdir().unwrap();
+        let made = tmp.path().join("generated").join("Stub.xml");
+
+        backup_once(&made).unwrap();
+        fs::create_dir_all(made.parent().unwrap()).unwrap();
+        fs::write(&made, "<Defs/>").unwrap();
+        assert!(made.exists());
+
+        let report = rollback(vec![made.display().to_string()]).unwrap();
+
+        assert_eq!(report.applied, 1);
+        assert_eq!(report.failed, 0);
+        assert!(!made.exists(), "the file should be gone");
+        assert!(!PathBuf::from(format!("{}.rimdocbak.absent", made.display())).exists());
+    }
+
+    /// A file that was already there is restored rather than removed.
+    #[test]
+    fn rolling_back_an_edited_file_puts_the_old_one_back() {
+        let tmp = tempdir().unwrap();
+        let existing = tmp.path().join("Config.xml");
+        fs::write(&existing, "before").unwrap();
+
+        backup_once(&existing).unwrap();
+        fs::write(&existing, "after").unwrap();
+
+        rollback(vec![existing.display().to_string()]).unwrap();
+
+        assert_eq!(fs::read_to_string(&existing).unwrap(), "before");
+    }
+
+    /// No path this app builds walks back up through a parent, and one that does was built
+    /// from something a scan read rather than found.
+    #[test]
+    fn a_climbing_path_is_recognised() {
+        assert!(climbs(&PathBuf::from(
+            "C:/game/Mods/Stubs/Defs/../../../../evil.xml"
+        )));
+        assert!(climbs(&PathBuf::from("../evil.xml")));
+        assert!(!climbs(&PathBuf::from(
+            "C:/game/Mods/Stubs/Defs/SoundDef_Fine.xml"
+        )));
     }
 
     /// Rolling back a path nothing backed up is reported, not treated as a failure: the

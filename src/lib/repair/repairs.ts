@@ -47,6 +47,22 @@ export interface RepairContext {
   workshop?: WorkshopCache | null;
 }
 
+/**
+ * A defName RimWorld would accept, and nothing else.
+ *
+ * The name comes out of a log line, and a log line echoes whatever a mod's own XML declared,
+ * verbatim. Interpolated straight into a path it escapes the folder it was meant for:
+ * "../../../../Windows/Temp/pwned" produced a write to
+ * Mods/RimDocPlusStubs/Defs/SoundDef_../../../../Windows/Temp/pwned.xml, and the shell
+ * creates missing parents, so that write would have landed. Interpolated into XML it closes
+ * the element early.
+ *
+ * Anything outside this alphabet gets no repair rather than a sanitised one: a def whose
+ * name this does not match is not a def RimWorld resolved, so a stub for it would stand in
+ * for nothing.
+ */
+const DEF_NAME = /^[A-Za-z0-9_]{1,120}$/;
+
 /** The generated mod's identity, shared by the repair and anything that looks for it. */
 export const STUB_MOD = {
   packageId: "w1ck3ds0d4.rimdocstubs",
@@ -462,6 +478,7 @@ const REPAIRS: Record<string, RepairFn> = {
     const defType = str(ctx, "defType");
     const names = list(ctx, "defNames");
     if (!game || !defType || names.length === 0 || !STUBBABLE_DEF_TYPES.has(defType)) return null;
+    if (!names.every((name) => DEF_NAME.test(name))) return null;
 
     const type = shortType(defType);
     const root = `${game}/Mods/${STUB_MOD.folder}`;

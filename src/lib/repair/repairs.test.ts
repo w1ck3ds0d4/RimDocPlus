@@ -119,6 +119,24 @@ describe("stub-missing-defs", () => {
     expect(defs).not.toContain("Verse.SoundDef");
   });
 
+  it("offers nothing for a name that is not a defName", () => {
+    // The name comes out of a log line, and a log line echoes whatever a mod's own XML
+    // declared. Interpolated into a path, "../../../../Windows/Temp/pwned" produced a write
+    // outside the Mods folder, and the shell creates missing parents, so it would have
+    // landed. A name this rejects is not one RimWorld resolved, so a stub stands in for
+    // nothing anyway.
+    expect(plan("Verse.SoundDef", ["../../../../Windows/Temp/pwned"])).toBeNull();
+    expect(plan("Verse.SoundDef", ["a/b"])).toBeNull();
+    expect(plan("Verse.SoundDef", ["a" + String.fromCharCode(92) + "b"])).toBeNull();
+    expect(plan("Verse.SoundDef", ['<x>&"evil'])).toBeNull();
+    expect(plan("Verse.SoundDef", [""])).toBeNull();
+    expect(plan("Verse.SoundDef", ["Fine_Name", "bad/name"])).toBeNull();
+  });
+
+  it("still offers one for a name RimWorld would accept", () => {
+    expect(plan("Verse.SoundDef", ["RT_AutoCannonReloadSound"])).not.toBeNull();
+  });
+
   it("refuses a type an empty def would not stand in for", () => {
     // An empty ThingDef is a real, broken item rather than an absence. For those the null
     // is the honest state, so there is no repair rather than a repair that hides the fault.
