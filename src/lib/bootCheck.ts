@@ -28,11 +28,15 @@ const MOD_CLASSES = /Verse\.LoadedModManager:CreateModClasses/;
 /** A mod announcing itself. Not a standard, so this is deliberately loose. */
 const MOD_READY = /^\[[^\]]+\]|::\s*initialized|Harmony patches have been applied|\bv\d+\.\d+/i;
 
-/**
- * Unity's allocator dump, written only on a clean shutdown. Its absence after the process
- * has gone is what separates a crash from someone quitting.
+/*
+ * There was a CLEAN_EXIT marker here, matching Unity's allocator dump, on the belief that it
+ * is written only on a clean shutdown. It is not. A RimWorld killed mid-run with
+ * Stop-Process wrote seventeen of those lines, including "Peak Allocated memory", so the
+ * marker was true for a crash and a run that died before loading came back "unknown".
+ *
+ * The exit code answers the question the dump was being asked to answer, and on Windows
+ * every process that ends has one.
  */
-const CLEAN_EXIT = /^\[ALLOC_|Peak Allocated memory/;
 
 /**
  * The process dying, said by the game rather than inferred.
@@ -60,7 +64,6 @@ const DIED = [
 export function bootVerdict(lines: string[], exitCode?: number | null): BootResult {
   let modsInitialised = 0;
   let reachedModClasses = false;
-  let cleanExit = false;
   let died: string | undefined;
   let evidence: string | undefined;
 
@@ -71,7 +74,6 @@ export function bootVerdict(lines: string[], exitCode?: number | null): BootResu
       return { verdict: "reset", evidence: line.trim(), modsInitialised };
     }
     if (MOD_CLASSES.test(line)) reachedModClasses = true;
-    if (CLEAN_EXIT.test(line)) cleanExit = true;
     if (MOD_READY.test(line)) modsInitialised++;
     if (!died && DIED.some((d) => d.test(line))) died = line.trim();
   }
@@ -92,9 +94,11 @@ export function bootVerdict(lines: string[], exitCode?: number | null): BootResu
   // Still running, and nothing has gone wrong yet.
   if (exitCode === undefined) return { verdict: "loading", modsInitialised };
 
-  // Gone, without the reset line and without a clean shutdown. Something took the process
-  // down rather than the game deciding it could not load.
-  if (!cleanExit) {
+  // Gone, before mod construction, without the reset line. Something took the process down
+  // rather than the game deciding it could not load. A zero code here is the one shape this
+  // cannot read: the game closed tidily without ever finishing a load, which is not a thing
+  // it does on its own, so it is reported as unknown rather than guessed at.
+  if (exitCode !== 0) {
     return {
       verdict: "crashed",
       evidence: `Exited with code ${exitCode ?? "unknown"} without finishing a load`,
