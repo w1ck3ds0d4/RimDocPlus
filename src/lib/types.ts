@@ -49,6 +49,14 @@ export interface ModEntry {
    * library, and it is what two mods shipping the same one have in common.
    */
   assemblies?: string[];
+  /**
+   * Every defName the mod declares in a Defs folder, sorted and deduplicated.
+   *
+   * Declarations only. A defName inside a Patches file is an insertion into someone else's
+   * def, which is how mods build on each other. A defName in Defs is this mod saying the def
+   * is its own, and RimWorld keeps one per name.
+   */
+  defNames?: string[];
   /** Set from ModsConfig.xml, not from the mod folder. */
   active: boolean;
   loadIndex: number | null;

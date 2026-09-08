@@ -5,6 +5,9 @@ import { ruleBundledAssemblies, ruleWorkshopUpdates } from "./packaging.ts";
 import { runPatchRules } from "./patches.ts";
 
 /** What one rule did on one run, for the diagnostics panel. */
+/** A real newline, spelled so no escaping layer between here and the file can eat it. */
+const NEWLINE = String.fromCharCode(10);
+
 export interface RuleRun {
   name: string;
   count: number;
@@ -52,6 +55,7 @@ export function runStaticRulesWithDiagnostics(
     ["bundled-assemblies", () => ruleBundledAssemblies(active)],
     ["workshop-updates", () => ruleWorkshopUpdates(active, options.workshop ?? null)],
     ["performance", () => runPerformanceRules(scan, options)],
+    ["duplicate-defs", () => ruleDuplicateDefs(active)],
     ["patch-override", () => runPatchRules(scan)],
   ];
 
@@ -326,6 +330,86 @@ function ruleIncompatiblePair(
           tier: 1,
           auto: false,
           params: { candidates: [mod.packageId, other] },
+        },
+      });
+    }
+  }
+  return findings;
+}
+
+/**
+ * A mod whose every declared def is also declared by another mod.
+ *
+ * RimWorld keeps one def per name and lets whichever loaded later win, silently, with
+ * nothing in the log. Two mods declaring some of the same names is ordinary: an expansion
+ * redefining what it expands is the system working, and in the reference install twenty-one
+ * active pairs overlap that way, the largest being a tech-level mod redefining ninety-seven
+ * of Core's research projects on purpose.
+ *
+ * Total containment is different. A mod every one of whose defs is also somebody else's
+ * contributes nothing the other does not, and one of the two is redundant.
+ *
+ * With one exception, which the first run of this rule found: containment in Core or a DLC
+ * means nothing. Redefining vanilla defs is the most ordinary thing a mod does, and EdB
+ * Prepare Carefully redefining twenty-six of Core's is the mod working, not a duplicate of
+ * Core. So official content is never the container. What is left is two mods shipping the
+ * same content, and exactly one pair in the reference install qualifies: two versions of
+ * one mod published as separate Workshop items.
+ */
+function ruleDuplicateDefs(active: ModEntry[]): Finding[] {
+  // Small overlaps are coincidence rather than duplicated content: one mod naming a def the
+  // same thing as another says nothing, five say the two ship the same thing.
+  const MEANINGFUL = 5;
+  const withDefs = active.filter((m) => (m.defNames?.length ?? 0) >= MEANINGFUL);
+  const sets = new Map(withDefs.map((m) => [m.packageId, new Set(m.defNames)]));
+  const findings: Finding[] = [];
+  const reported = new Set<string>();
+
+  for (const mod of withDefs) {
+    const own = sets.get(mod.packageId)!;
+    for (const other of withDefs) {
+      if (other.packageId === mod.packageId) continue;
+      // Redefining vanilla is how mods work. Only another mod claiming the same content
+      // says one of the two is redundant.
+      if (other.source === "official") continue;
+      const theirs = sets.get(other.packageId)!;
+      // Only ever reported from the contained side, so a pair yields one finding and the
+      // mod named first is the one with nothing of its own.
+      if (theirs.size < own.size) continue;
+      if (![...own].every((name) => theirs.has(name))) continue;
+      const key = [mod.packageId, other.packageId].sort().join("|");
+      if (reported.has(key)) continue;
+      reported.add(key);
+
+      const later = (mod.loadIndex ?? 0) > (other.loadIndex ?? 0) ? mod : other;
+      findings.push({
+        id: `duplicate-defs:${key}`,
+        rule: "duplicate-defs",
+        severity: "warning",
+        title: `${mod.name} declares nothing ${other.name} does not`,
+        detail:
+          `All ${own.size} defs ${mod.name} declares are also declared by ${other.name}, which ` +
+          `declares ${theirs.size}. RimWorld keeps one def per name and lets whichever mod loads ` +
+          `later win, with nothing written to the log, so right now ${later.name} supplies the ` +
+          `shared ones and the other mod's copies are discarded.` +
+          NEWLINE +
+          NEWLINE +
+          "Shared:" +
+          NEWLINE +
+          [...own]
+            .sort()
+            .slice(0, 15)
+            .map((n) => `  ${n}`)
+            .join(NEWLINE) +
+          (own.size > 15 ? `${NEWLINE}  and ${own.size - 15} more` : ""),
+        packageIds: [mod.packageId, other.packageId],
+        count: own.size,
+        fix: {
+          kind: "disable-one-of",
+          label: "Disable one of them",
+          tier: 1,
+          auto: false,
+          params: { candidates: [mod.packageId, other.packageId] },
         },
       });
     }
