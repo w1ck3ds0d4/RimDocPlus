@@ -40,6 +40,31 @@ function scanOf(mods: ModEntry[]): ScanResult {
 const TARGET = '/Defs/ThingDef[defName="MealSurvivalPack"]/graphicData/texPath';
 
 describe("runPatchRules", () => {
+  it("does not blame the later mod when it only added and the earlier one replaced", () => {
+    // The same false collision the DESTRUCTIVE list exists to prevent, arriving from the
+    // other direction: the pair only required one touch to be destructive, so a mod that
+    // merely adds was told it discarded an earlier mod's replacement, with a repair
+    // offering to disable it. Disabling it would have removed content and restored nothing.
+    const findings = runPatchRules(
+      scanOf([
+        mod("a.replacer", [op(TARGET, "PatchOperationReplace")], 0),
+        mod("b.adder", [op(TARGET, "PatchOperationAdd")], 1),
+      ]),
+    );
+    expect(findings).toHaveLength(0);
+  });
+
+  it("still blames the later mod when it is the one that overwrote", () => {
+    const findings = runPatchRules(
+      scanOf([
+        mod("a.adder", [op(TARGET, "PatchOperationAdd")], 0),
+        mod("b.replacer", [op(TARGET, "PatchOperationReplace")], 1),
+      ]),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0].title).toContain("b.replacer overrides");
+  });
+
   it("does not call two mods inserting at one anchor a collision", () => {
     // PatchOperationInsert adds a sibling beside the node it matched and leaves that node
     // alone, so both insertions apply. Reported as an override, it told someone the earlier

@@ -6,6 +6,32 @@ const RESET =
   "Caught exception while loading play data but there are active mods other than Core. " +
   "Resetting mods config and trying again.";
 
+describe("a run that died before it loaded", () => {
+  it("is a crash, whatever Unity printed on the way out", () => {
+    // There was a CLEAN_EXIT marker matching Unity's allocator dump, on the belief that it
+    // is written only on a clean shutdown. A RimWorld killed with Stop-Process wrote
+    // seventeen of those lines, so the marker was true for a crash and this came back
+    // "unknown". The exit code answers it instead.
+    const dumpAfterDeath = [
+      "[HugsLib] v11.0.4",
+      "Memory Statistics:",
+      "[ALLOC_TEMP_TLS] TLS Allocator",
+      "      Peak Allocated memory 0 B",
+    ];
+    expect(bootVerdict(dumpAfterDeath, -1).verdict).toBe("crashed");
+    expect(bootVerdict(dumpAfterDeath, 3221225477).verdict).toBe("crashed");
+  });
+
+  it("is still only loading while the process is alive", () => {
+    expect(bootVerdict(["[HugsLib] v11.0.4"], undefined).verdict).toBe("loading");
+  });
+
+  it("says unknown rather than guessing when the game closed tidily without loading", () => {
+    // Not something the game does on its own, so there is nothing honest to conclude.
+    expect(bootVerdict(["[HugsLib] v11.0.4"], 0).verdict).toBe("unknown");
+  });
+});
+
 describe("judging past the main menu", () => {
   const loadedThen = (...after: string[]) => [
     "[HugsLib] v11.0.4",

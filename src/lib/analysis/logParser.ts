@@ -85,9 +85,13 @@ const NOISE = [
   /^0x[0-9A-Fa-f]+ \(/,
   /^[A-Za-z]:[\\/].*\.dll:.*SymType:/,
   /^=+ END OF STACKTRACE =+/,
-  /^\[ ALLOC_\w+ \]/,
+  // Written without spaces inside the brackets and indented, which the first versions of
+  // these got wrong in both directions, so neither matched a line RimWorld actually writes
+  // and the dump they were added to strip was never stripped.
+  /^\s*\[ALLOC_\w+\]/,
   /^\s*\d+B: \d+ Subsections/,
-  /^Failed Allocations\. Bucket layout/,
+  /^\s*Failed Allocations\. Bucket layout/,
+  /^\s*Peak (Allocated|Block|Large allocation)/,
 ];
 
 /**

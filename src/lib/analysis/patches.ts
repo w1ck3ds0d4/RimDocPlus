@@ -132,6 +132,14 @@ export function runPatchRulesWithIntents(scan: ScanResult): {
     for (const first of destructive) {
       for (const second of conflict.touches) {
         if (first.mod.packageId === second.mod.packageId) continue;
+        // The mod that loads later is the one the finding names as overriding, so it has to
+        // be the one that overwrote. Requiring only `first` to be destructive meant a later
+        // mod that merely adds to a node was accused of discarding an earlier mod's
+        // replacement, with a repair offering to disable it: disabling it would have
+        // removed content and restored nothing. This is the false collision the DESTRUCTIVE
+        // list exists to prevent, arriving from the other direction.
+        const later = (first.mod.loadIndex ?? 0) > (second.mod.loadIndex ?? 0) ? first : second;
+        if (!later.destructive) continue;
         const key = [first.mod.packageId, second.mod.packageId].sort().join("|");
         const existing = byPair.get(key);
         if (existing) {
