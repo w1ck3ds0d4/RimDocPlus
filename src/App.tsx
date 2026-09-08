@@ -43,6 +43,7 @@ import {
   watchScan,
   type ScanProgress,
 } from "./lib/shell";
+import { howItEnded } from "./lib/runOutcome";
 
 type Tab =
   "home" | "doctor" | "session" | "performance" | "saves" | "packs" | "order" | "library" | "settings";
@@ -546,14 +547,7 @@ export default function App() {
                 // A clean exit needs no announcement. Anything else is the thing someone
                 // pressed Play to find out about, whichever tab they are on.
                 if (exit.code === 0 && !exit.wentQuiet) return;
-                const minutes = Math.round(exit.durationMs / 60000);
-                setBadRun(
-                  exit.code === null
-                    ? "RimWorld was stopped rather than exiting on its own."
-                    : exit.code !== 0
-                      ? `RimWorld exited with code ${exit.code} after ${minutes} minute${minutes === 1 ? "" : "s"}.`
-                      : `RimWorld stopped writing to its log well before it closed, after ${minutes} minute${minutes === 1 ? "" : "s"}.`,
-                );
+                setBadRun(howItEnded(exit));
               }}
             />
           </div>

@@ -1496,7 +1496,11 @@ fn memory_kb(text: &str) -> Option<u64> {
 struct GameExit {
     /// Highest working set seen while the run was watched.
     peak_memory_mb: u64,
-    /// None when the process was terminated rather than exiting on its own.
+    /// The process's exit code.
+    ///
+    /// Option because `ExitStatus::code` is, not because it is ever absent here: on Windows
+    /// every process that ends has a code, including one that was killed. This used to say
+    /// None meant terminated, and the branch reading it could not fire.
     code: Option<i32>,
     duration_ms: u128,
     lines: usize,
