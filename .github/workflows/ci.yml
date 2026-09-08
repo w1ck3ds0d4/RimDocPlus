@@ -109,3 +109,23 @@ jobs:
 
       - name: Unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # The thing a person would actually install. Nothing above this builds it: pnpm build
+      # compiles the frontend, and clippy compiles the Rust without bundling, so a broken
+      # resource path, a missing sidecar, a bad capability or a Tauri config mistake all
+      # passed a green CI and were caught only by building by hand. For an app whose job is
+      # writing into somebody's game folder, that is the wrong thing to leave unbuilt.
+      - name: Build the installer
+        run: pnpm tauri build
+
+      # Attached so a pull request can be installed and used, rather than read. The app is
+      # verified against a real modded install, which is not something CI can do.
+      - name: Keep the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: rimdocplus-installer
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,90 @@
+name: Release
+
+# Cut by pushing a tag, so the version that ships is a commit someone chose rather than
+# whatever main happened to be. The tag is the only trigger: nothing here runs by accident.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The same steps CI runs, in the same order, because a release build that skipped them
+      # would be the one build nobody checked.
+      - name: Test the patch probe
+        run: pnpm probe:test
+
+      - name: Build the patch probe
+        run: pnpm probe:build
+
+      - name: Stage it as a sidecar
+        run: pnpm probe:stage
+
+      - name: Build the companion mod
+        run: pnpm probe-mod:build
+
+      - name: Stage the companion mod
+        run: pnpm probe-mod:stage
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # The version in the tag has to be the version in the app, or someone downloads
+      # v0.2.0 and installs 0.1.0. Checked here rather than trusted, because the three
+      # places it lives are easy to update two of.
+      - name: The tag matches the app
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          app=$(node -p "require('./package.json').version")
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "tag=$tag package.json=$app tauri.conf.json=$conf"
+          test "$tag" = "$app" && test "$tag" = "$conf"
+
+      - name: Build the installer
+        run: pnpm tauri build
+
+      # A draft, so the notes can be written and the installer tried before anyone sees it.
+      # Unsigned: SmartScreen warns on first run, and saying so here is cheaper than the
+      # question it otherwise produces.
+      - name: Draft the release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          body: |
+            Windows only. The installer is unsigned, so SmartScreen will warn on first run:
+            More info, then Run anyway.
+
+            RimDoc+ reads your RimWorld install and its logs, and writes only when you press
+            a repair. Every change is backed up beside itself and can be rolled back.

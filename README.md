@@ -511,6 +511,7 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 | [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)     | What each individual analysis actually does, rule by rule.                                                               |
 | [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) | Everything this app can touch, with the source that enforces each limit.                                                 |
 | [docs/SPEC.md](docs/SPEC.md)                     | The original specification, including what is planned and not yet built.                                                 |
+| [docs/SMOKE-TEST.md](docs/SMOKE-TEST.md)         | The list a person works down before a release, ordered so what writes to your game comes last.                           |
 | [CONTRIBUTING.md](CONTRIBUTING.md)               | Building it, the checks that must pass, and the house style.                                                             |
 
 ## License
