@@ -214,11 +214,19 @@ public static class Program
     }
 
     /// <summary>Every type the installed game defines, by full name, with its method names.</summary>
-    private sealed record GameSurface(int Assemblies, Dictionary<string, HashSet<string>> Types);
+    /// <param name="Bases">
+    /// Each type's base type, so a lookup can walk the chain the way Harmony does.
+    /// </param>
+    private sealed record GameSurface(
+        int Assemblies,
+        Dictionary<string, HashSet<string>> Types,
+        Dictionary<string, string> Bases
+    );
 
     private static GameSurface ReadGameTypes(string managed)
     {
         var types = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var bases = new Dictionary<string, string>(StringComparer.Ordinal);
         var count = 0;
 
         foreach (var path in Directory.EnumerateFiles(managed, "*.dll"))
@@ -250,12 +258,49 @@ public static class Program
                         names.Add(property.Name);
                     }
                     types[type.FullName] = names;
+                    if (type.BaseType is not null)
+                    {
+                        bases[type.FullName] = type.BaseType.FullName;
+                    }
                 }
             }
         }
 
-        return new GameSurface(count, types);
+        return new GameSurface(count, types, bases);
     }
+
+    /// <summary>
+    /// The type in a chain that declares a method, or null when none of them does.
+    /// </summary>
+    /// <remarks>
+    /// Bounded rather than trusting the chain to end: a malformed or circular hierarchy in
+    /// somebody's assembly should cost a wrong answer, not a hang.
+    /// </remarks>
+    private static string? DeclaringTypeOf(GameSurface game, string type, string method)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var current = type;
+        while (seen.Add(current) && seen.Count <= MaxInheritanceDepth)
+        {
+            if (game.Types.TryGetValue(current, out var names) && names.Contains(method))
+            {
+                return current;
+            }
+            if (!game.Bases.TryGetValue(current, out var next))
+            {
+                return null;
+            }
+            current = next;
+        }
+        return null;
+    }
+
+    /// <summary>How far up a base chain a target is looked for.</summary>
+    /// <remarks>
+    /// RimWorld's deepest is about ten. The cap is a guard against a cycle, not a limit
+    /// anything real reaches.
+    /// </remarks>
+    private const int MaxInheritanceDepth = 64;
 
     /// <summary>Nested types included, since patch classes are very often nested.</summary>
     private static IEnumerable<TypeDefinition> AllTypes(ModuleDefinition module)
@@ -355,9 +400,21 @@ public static class Program
             return report("ok", $"{targetType} exists. No single method is named on the class.");
         }
 
-        if (methods.Contains(targetMethod))
+        // Harmony resolves a target with AccessTools.Method, which searches base types.
+        // Reading only the declared methods reported a patch as dead when the method it
+        // wanted had merely moved up into a base class the target still inherits from:
+        // Designator_PlantsCut.IconReverseDesignating is declared on Verse.Designator, two
+        // steps up a chain the type still walks, and the patch applies exactly as it always
+        // did. Judging the chain is what makes "this patch cannot apply" mean it.
+        var declaredOn = DeclaringTypeOf(game, targetType, targetMethod);
+        if (declaredOn is not null)
         {
-            return report("ok", $"{targetType}.{targetMethod} exists in this build.");
+            return report(
+                "ok",
+                declaredOn == targetType
+                    ? $"{targetType}.{targetMethod} exists in this build."
+                    : $"{targetType} inherits {targetMethod} from {declaredOn}, which is where Harmony finds it."
+            );
         }
 
         // Where it went, if it went anywhere. A method that moved to another type is a
