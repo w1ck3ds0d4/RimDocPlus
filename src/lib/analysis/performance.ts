@@ -44,7 +44,10 @@ export function runPerformanceRules(
   options: AnalysisOptions = DEFAULT_ANALYSIS,
 ): Finding[] {
   const active = scan.mods.filter((m) => m.active && m.textures);
-  return [...ruleTextureFootprint(active), ...ruleOversizedTextures(active, options.oversizePx)];
+  return [
+    ...ruleTextureFootprint(active, options.oversizePx),
+    ...ruleOversizedTextures(active, options.oversizePx),
+  ];
 }
 
 /**
@@ -77,7 +80,7 @@ function withOversized(active: ModEntry[], thresholdPx: number): ModEntry[] {
  * already at or under the target. Offering a fix here promised something it could not
  * deliver, and duplicated the oversize rule's own plan over the same files.
  */
-function ruleTextureFootprint(active: ModEntry[]): Finding[] {
+function ruleTextureFootprint(active: ModEntry[], thresholdPx: number): Finding[] {
   const bytes = active.reduce((sum, m) => sum + (m.textures?.estimatedVramBytes ?? 0), 0);
   const gb = bytes / GB;
   if (gb < FOOTPRINT_WARN_GB) return [];
@@ -101,6 +104,7 @@ function ruleTextureFootprint(active: ModEntry[]): Finding[] {
         "the atlas builder does at load and how close the card runs to full.\n\n" +
         "There is no repair for this one. Most of the total is thousands of textures already at a " +
         "sensible size, so it comes down chiefly by running fewer mods, not by resizing.\n\n" +
+        whyNoResize(active, thresholdPx) +
         "Heaviest mods:\n" +
         worst
           .map((m) => `  ${((m.textures?.estimatedVramBytes ?? 0) / GB).toFixed(2)} GB  ${m.name}`)
@@ -108,6 +112,42 @@ function ruleTextureFootprint(active: ModEntry[]): Finding[] {
       packageIds: worst.map((m) => m.packageId),
     },
   ];
+}
+
+/**
+ * Why the resize repair has nothing to offer, when it has nothing to offer.
+ *
+ * The two texture findings could contradict each other in silence. This one says the
+ * footprint is high; the other offers to shrink what is too big; and on an install whose
+ * largest texture is 1017px against a 1024px threshold, the second never appears. The
+ * reader is left with a number and a repair that does not exist, and no way to connect them.
+ *
+ * Said here rather than solved by moving the default. The threshold is the player's to set,
+ * and quietly lowering it would turn a quiet install into a long worklist of tier 3 repairs
+ * that change what loads.
+ */
+function whyNoResize(active: ModEntry[], thresholdPx: number): string {
+  if (withOversized(active, thresholdPx).length > 0) return "";
+
+  // Everything above the downscale target was recorded by the scan, so this is answerable
+  // without reading the disk again, and so is moving the setting.
+  const couldResize = active.reduce((sum, m) => sum + oversizedAt(m, DOWNSCALE_TARGET_PX + 1).length, 0);
+  const largest = active.reduce(
+    (px, m) => (m.textures?.oversized ?? []).reduce((most, t) => Math.max(most, t.width, t.height), px),
+    0,
+  );
+
+  const said =
+    `This is volume rather than size. Nothing here is individually large enough to resize at ` +
+    `your ${thresholdPx}px setting` +
+    (largest > 0 ? `, the biggest being ${largest}px` : "") +
+    `, so the downscale repair does not appear and has nothing to act on.`;
+
+  return couldResize > 0
+    ? said +
+        ` ${couldResize.toLocaleString()} textures sit above the ${DOWNSCALE_TARGET_PX}px target, ` +
+        `which is what lowering the threshold in Settings would offer to shrink.\n\n`
+    : said + `\n\n`;
 }
 
 /**
