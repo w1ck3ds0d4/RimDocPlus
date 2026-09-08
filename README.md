@@ -498,7 +498,7 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 ## What's Not Yet Built
 
 - **Unattended reproduction of a fault that needs a colony**: the search judges a trial past the main menu, because a crash writes its own admission to the log and that is now read. What it cannot do is play the colony for you, so those trials are launched and judged rather than run unattended. A slowdown is still yours to call: nothing in the log says a run was slow
-- **Tier 4 repairs**: assembly-level neutralisation is specified but not implemented. Tier 2 ships as the patch-override repair and tier 3 as texture downscaling; stub defs for an absent dependency are still specified only
+- **Tier 4 repairs**: assembly-level neutralisation is specified and not implemented, and the spec is at odds with itself about it. The safety model says the original mod folder is never modified and a repair is an overlay; stripping a patch class from a DLL cannot be an overlay, so it means shipping a derived copy of somebody's mod, which is the forking the fix-registry section exists to avoid. That tension is a decision, not a task. Tiers 1 to 3 all ship
 - **Scripted soak run**: a long unattended session with faults attributed over time
 - **Frame measurement**: load time, memory and per-mod tick cost are measured, the last of them by the companion mod on the Performance tab. Frame time is not: what the renderer spends is not attributable to a mod by timing ticks
 - **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path

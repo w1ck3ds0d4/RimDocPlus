@@ -1,5 +1,5 @@
 import type { Finding, ModEntry, Severity } from "../types";
-import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS } from "./about.ts";
+import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS, STUBBABLE_DEF_TYPES } from "./about.ts";
 
 /** Hardware and build facts scraped from the log header. Drives the performance rules. */
 export interface SessionEnvironment {
@@ -708,7 +708,7 @@ interface Explanation {
   title: (e: LogEvent) => string;
   /** A function where the entry itself carries the specifics worth naming. */
   detail: string | ((e: LogEvent) => string);
-  fixKind?: string;
+  fixKind?: string | ((e: LogEvent) => string | undefined);
   /** Arguments the repair needs, read back out of the log line that raised it. */
   params?: (e: LogEvent) => Record<string, string | string[]>;
   /** Set where the category describes the run rather than reporting a fault with it. */
@@ -724,6 +724,25 @@ interface Explanation {
 
 /** A real newline, spelled so no escaping layer between here and the file can eat it. */
 const NEWLINE = String.fromCharCode(10);
+
+/**
+ * What a cross-reference finding is missing, split into its type and its name.
+ *
+ * `defs.missing` is stored as the two words the log wrote, because that is what the title
+ * says. A repair needs them apart.
+ */
+function missingTypeOf(event: LogEvent): string | undefined {
+  return event.defs?.missing?.split(" ")[0];
+}
+
+function missingNameOf(event: LogEvent): string | undefined {
+  return event.defs?.missing?.split(" ")[1];
+}
+
+/** A category's repair, which some categories decide per finding. */
+function fixKindOf(explanation: Explanation | undefined, event: LogEvent): string | undefined {
+  return typeof explanation?.fixKind === "function" ? explanation.fixKind(event) : explanation?.fixKind;
+}
 
 /** Human-readable explanation and repair for each recognised category. */
 const EXPLANATIONS: Record<string, Explanation> = {
@@ -931,6 +950,10 @@ const EXPLANATIONS: Record<string, Explanation> = {
     fixKind: "repair-xpath",
   },
   "cross-reference": {
+    // Offered only where an empty def is better than the null, which is one type. The
+    // reference install's ten unresolved references are all of it.
+    fixKind: (e) => (STUBBABLE_DEF_TYPES.has(missingTypeOf(e) ?? "") ? "stub-missing-defs" : undefined),
+    params: (e) => ({ defType: missingTypeOf(e) ?? "", defNames: [missingNameOf(e) ?? ""] }),
     title: (e) => {
       if (!e.defs?.missing) return "Unresolved cross-reference";
       const n = affectedCount(e);
@@ -995,6 +1018,7 @@ export function findingsFromLog(
       .map((ns) => index.get(ns.toLowerCase()))
       .filter((id): id is string => !!id);
     const packageIds = [...new Set([...attributed, ...inlineAttribution(event.message, index)])];
+    const fix = fixKindOf(explanation, event);
 
     return {
       id: event.fingerprint,
@@ -1014,13 +1038,13 @@ export function findingsFromLog(
       firstLine: event.firstLine,
       observation: explanation?.observation,
       stale: settledSince(event, mods, activeOrder),
-      fix: explanation?.fixKind
+      fix: fix
         ? {
-            kind: explanation.fixKind,
+            kind: fix,
             label: "Repair",
             tier: 1 as const,
             auto: false,
-            params: explanation.params?.(event),
+            params: explanation?.params?.(event),
           }
         : undefined,
     };

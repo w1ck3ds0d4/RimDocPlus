@@ -47,6 +47,7 @@ export const RELEASES: Release[] = [
         items: [
           "Triage applies every repair it can defend, then re-runs the rules to count what actually resolved",
           "Every repair is a plan you read before it runs, graded by how much can go wrong, and nothing above the safest tier is silent",
+          "Stands an empty SoundDef up for a reference nothing supplies, in a small mod of its own, so the field resolves to silence instead of to nothing",
           "Every change is backed up first, and anything that touched disk can be rolled back in one click",
           "Writes the load order into ModsConfig.xml and starts the game, or closes Steam, applies and starts it again",
           "Subscribes to a mod you are missing, and re-fetches one Steam recorded but never downloaded",
@@ -74,7 +75,7 @@ export const RELEASES: Release[] = [
     ],
     known: [
       "Harmony patches registered in code rather than declared with an attribute cannot be checked. The target is built while the game runs, so nothing outside it can say whether it still resolves",
-      "Assembly-level repairs and stub defs for an absent dependency are specified and not implemented",
+      "Assembly-level repairs are specified and not implemented. Stripping a patch class from a DLL cannot be an overlay mod, so it would mean a derived copy of somebody else's work, which the safety model rules out",
       "The search judges a trial past the main menu, but cannot play the colony for you: a fault that needs one is launched and judged rather than found unattended. A slowdown is still yours to call, because nothing in the log says a run was slow",
     ],
   },

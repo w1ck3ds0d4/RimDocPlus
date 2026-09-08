@@ -73,6 +73,60 @@ function findingWith(fix: ProposedFix, over: Partial<Finding> = {}): Finding {
 const auto = { tier: 1 as const, auto: true, label: "Fix" };
 const manual = { tier: 1 as const, auto: false, label: "Fix" };
 
+describe("stub-missing-defs", () => {
+  const plan = (defType: string, defNames: string[]) => {
+    const target = mod("some.mod");
+    const scan = { ...scanOf([target], ["some.mod"]), paths: { saveData: "C:/save", game: "C:/RimWorld" } };
+    return planRepair({
+      scan,
+      modpack: profileOf(["some.mod"]),
+      finding: findingWith(
+        { kind: "stub-missing-defs", label: "Repair", tier: 1, auto: false, params: { defType, defNames } },
+        { packageIds: [] },
+      ),
+    });
+  };
+
+  it("writes an overlay mod rather than touching the mod that wanted the sound", () => {
+    // The safety model's rule, and the reason a stub is a repair rather than an edit: the
+    // mod is untouched and deleting the folder puts everything back.
+    const files = plan("Verse.SoundDef", ["RT_T72VehicleEngine"]);
+    expect(files?.kind).toBe("files");
+    const paths = files?.kind === "files" ? files.actions.map((a) => ("path" in a ? a.path : "")) : [];
+    expect(paths).toEqual([
+      "C:/RimWorld/Mods/RimDocPlusStubs/About/About.xml",
+      "C:/RimWorld/Mods/RimDocPlusStubs/Defs/SoundDef_RT_T72VehicleEngine.xml",
+    ]);
+  });
+
+  it("gives each stub its own file, so repairing two does not undo the first", () => {
+    const first = plan("Verse.SoundDef", ["TC_Empty"]);
+    const second = plan("Verse.SoundDef", ["Mortar_Launch"]);
+    const pathOf = (p: ReturnType<typeof plan>) => {
+      const action = p?.kind === "files" ? p.actions[1] : undefined;
+      return action && "path" in action ? action.path : "";
+    };
+    expect(pathOf(first)).not.toBe(pathOf(second));
+  });
+
+  it("writes a def RimWorld can read", () => {
+    const files = plan("Verse.SoundDef", ["Gun_AutocannonA"]);
+    const action = files?.kind === "files" ? files.actions[1] : undefined;
+    const defs = action && "contents" in action ? action.contents : "";
+    expect(defs).toContain("<SoundDef>");
+    expect(defs).toContain("<defName>Gun_AutocannonA</defName>");
+    // The type is written bare, whatever namespace the log spelled it with.
+    expect(defs).not.toContain("Verse.SoundDef");
+  });
+
+  it("refuses a type an empty def would not stand in for", () => {
+    // An empty ThingDef is a real, broken item rather than an absence. For those the null
+    // is the honest state, so there is no repair rather than a repair that hides the fault.
+    expect(plan("ThingDef", ["SomeItem"])).toBeNull();
+    expect(plan("ResearchProjectDef", ["SomeProject"])).toBeNull();
+  });
+});
+
 describe("reset-mod-settings", () => {
   it("names the file RimWorld actually writes, which is the folder and not the packageId", () => {
     // Every one of the 28 settings files in the reference install is Mod_<folder>_<Class>.xml,

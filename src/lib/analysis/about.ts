@@ -15,6 +15,23 @@ const NESTED_BLOCKS = [
 ];
 
 /** Package ids shipped by Ludeon. These must load before any third-party content. */
+/**
+ * Def types an empty instance is safe to stand in for.
+ *
+ * Deliberately one type. A SoundDef with no subSounds is valid, plays nothing, and is
+ * strictly better than the null a missing reference leaves behind: the field resolves, and
+ * whatever would have thrown on it plays silence instead.
+ *
+ * Adding to this list is not a small decision. An empty ThingDef is a real, broken item in
+ * the game rather than an absence, and an empty ResearchProjectDef is a project that costs
+ * nothing and unlocks nothing. For those the null is the honest state, and a stub would be
+ * the app hiding a fault rather than repairing one.
+ *
+ * Every unresolved reference in the reference install's two logs is a SoundDef, which is
+ * what this list is sized to.
+ */
+export const STUBBABLE_DEF_TYPES = new Set(["SoundDef", "Verse.SoundDef"]);
+
 export const OFFICIAL_PACKAGE_IDS = [
   "ludeon.rimworld",
   "ludeon.rimworld.royalty",

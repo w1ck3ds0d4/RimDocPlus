@@ -546,7 +546,15 @@ fn run_file_actions(
             }
             FileAction::Write { path, contents } => {
                 let p = PathBuf::from(path);
-                let write = backup_once(&p)
+                // A write to somewhere that does not exist yet is a write, not a failure.
+                // Every write until now landed beside a file the scan had already read, so
+                // this never came up; a repair that generates a small mod is all folders
+                // that do not exist yet.
+                let write = p
+                    .parent()
+                    .map(|dir| fs::create_dir_all(dir).map_err(|e| e.to_string()))
+                    .unwrap_or(Ok(()))
+                    .and_then(|_| backup_once(&p))
                     .and_then(|_| fs::write(&p, contents).map_err(|e| e.to_string()))
                     .map(|_| "written".to_string());
                 (path.clone(), write)
