@@ -529,6 +529,7 @@ export default function App() {
                 analysis={sessionAnalysis}
                 findings={sessionFindings}
                 source={session?.path ?? "unknown"}
+                staticFindings={staticFindings}
               />
             ) : (
               <p className="muted">

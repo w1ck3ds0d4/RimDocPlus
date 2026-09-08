@@ -132,10 +132,13 @@ export function SessionReport({
   analysis,
   findings,
   source,
+  staticFindings,
 }: {
   analysis: SessionAnalysis;
   findings: Finding[];
   source: string;
+  /** What the scan found, so the report can carry the few of those a helper asks for. */
+  staticFindings?: Finding[];
 }) {
   const { environment: env, timings } = analysis;
   const filter = useSeverityFilter(findings);
@@ -143,7 +146,7 @@ export function SessionReport({
   const api = useRepairApi();
   const [copied, setCopied] = useState(false);
 
-  const report = api ? buildReport(analysis, findings, api.scan, source) : "";
+  const report = api ? buildReport(analysis, findings, api.scan, source, staticFindings) : "";
   const size = describeReport(report);
 
   return (

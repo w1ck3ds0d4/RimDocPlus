@@ -1,5 +1,26 @@
-import type { Finding, ScanResult } from "./types";
+import type { Finding, ScanResult, Severity } from "./types";
 import type { SessionAnalysis } from "./analysis/logParser";
+import { frameKind } from "./analysis/logParser";
+
+/** Worst first. Someone skimming a pasted report reads the top of it and stops. */
+const ORDER: Record<Severity, number> = { critical: 0, error: 1, warning: 2, info: 3 };
+
+/**
+ * The frames worth pasting.
+ *
+ * The first two frames of a RimWorld trace are almost always Verse or RimWorld internals,
+ * which belong to any of 253 mods equally. The frames that name something are the Harmony
+ * patch annotations and the mod frames, and they are the whole reason a trace is in a bug
+ * report at all. Those come first, then engine frames fill the rest.
+ */
+function usefulFrames(frames: string[], limit: number): string[] {
+  const named = frames.filter((f) => {
+    const kind = frameKind(f.trim());
+    return kind === "patch" || kind === "mod";
+  });
+  const rest = frames.filter((f) => !named.includes(f));
+  return [...named, ...rest].slice(0, limit).map((f) => f.trim());
+}
 
 /**
  * A report written for someone else to read.
@@ -8,15 +29,41 @@ import type { SessionAnalysis } from "./analysis/logParser";
  * that matter have already been found: this is the environment, the clustered faults with
  * their attribution, and the mod list. Anyone helping can act on that, and it is small
  * enough to read.
+ *
+ * Ordered worst first, and honest about which entries are not work: a reader has no way to
+ * tell that a line describes something already fixed, or something that was never a defect,
+ * unless the report says so.
  */
 export function buildReport(
   analysis: SessionAnalysis,
   findings: Finding[],
   scan: ScanResult,
   source: string,
+  /**
+   * What the scan found, as opposed to what the log did.
+   *
+   * "Which of these mods is not updated for this build yet" is the first thing anyone
+   * helping asks, and the app already knows. Only the findings that describe the install
+   * are taken, since the rest are about a load order the reader cannot see.
+   */
+  staticFindings: Finding[] = [],
 ): string {
   const env = analysis.environment;
   const active = scan.mods.filter((m) => m.active);
+
+  const carried = staticFindings.filter((f) => CARRIED_RULES.has(f.rule));
+  const all = [...findings, ...carried].sort(
+    (a, b) => ORDER[a.severity] - ORDER[b.severity] || (b.count ?? 1) - (a.count ?? 1),
+  );
+
+  const counts = all.reduce<Partial<Record<Severity, number>>>((acc, f) => {
+    acc[f.severity] = (acc[f.severity] ?? 0) + 1;
+    return acc;
+  }, {});
+  const breakdown = (["critical", "error", "warning", "info"] as const)
+    .filter((s) => counts[s])
+    .map((s) => `${counts[s]} ${s}`)
+    .join(", ");
 
   const lines: string[] = [
     "RimDoc+ session report",
@@ -29,15 +76,17 @@ export function buildReport(
     `Mods        ${active.length} active of ${scan.mods.length} installed`,
     `Log         ${source}`,
     "",
-    `Faults (${findings.length})`,
+    breakdown ? `Faults (${all.length}): ${breakdown}` : `Faults (${all.length})`,
     "",
   ];
 
-  for (const finding of findings) {
-    lines.push(`[${finding.severity}] ${finding.title}${finding.count ? ` (x${finding.count})` : ""}`);
+  for (const finding of all) {
+    // Said on the line itself rather than in a section below, because a report is pasted
+    // and quoted in pieces, and a line that travels alone has to carry its own meaning.
+    const note = finding.stale ? " [already fixed]" : finding.observation ? " [not a fault]" : "";
+    lines.push(`[${finding.severity}] ${finding.title}${finding.count ? ` (x${finding.count})` : ""}${note}`);
     if (finding.packageIds.length) lines.push(`  blamed: ${finding.packageIds.join(", ")}`);
-    // Two frames is enough to recognise a fault; the rest is Mono plumbing.
-    for (const frame of (finding.frames ?? []).slice(0, 2)) lines.push(`  ${frame.trim()}`);
+    for (const frame of usefulFrames(finding.frames ?? [], 2)) lines.push(`  ${frame}`);
     lines.push("");
   }
 
@@ -46,6 +95,15 @@ export function buildReport(
 
   return lines.filter((l) => l !== "").join("\n") + "\n";
 }
+
+/**
+ * Scan findings that belong in a report about a run.
+ *
+ * Deliberately short. Most static findings are about a load order the reader is looking at
+ * a list of anyway, and a report that carries everything is a report nobody reads. These
+ * are the ones a person helping asks for before anything else.
+ */
+const CARRIED_RULES = new Set(["version-mismatch", "duplicate-defs", "duplicate-package-id"]);
 
 /**
  * What leaves the machine, spelled out so it can be read before it is sent.
