@@ -103,6 +103,30 @@ was wrong, what you changed, and how you know it works.
 
 No AI attribution trailers.
 
+## Releasing
+
+Work down [docs/SMOKE-TEST.md](docs/SMOKE-TEST.md) first. Nothing in CI uses the app against
+a real modded install, and the two defects a person found in it were both sentences that had
+quietly stopped being true, which is a shape no test catches.
+
+Then, from anywhere:
+
+```powershell
+& 'C:\path\to\RimDocPlus\scripts\release.ps1' -DryRun
+```
+
+The full path matters. `.\scripts\release.ps1` only resolves if the prompt is already inside
+the repo, and a PowerShell window usually opens somewhere else. The script re-locates itself
+once it starts, so where it runs from does not otherwise matter, but starting it needs the
+real path.
+
+It refuses unless the version agrees across `package.json`, `tauri.conf.json` and
+`Cargo.toml`, the tree is clean and level with origin, the tag is free, and CI passed on the
+exact commit being tagged. Drop `-DryRun` to cut it, and it asks you to type the tag first.
+
+The tag opens a **draft** release with the installer attached. Nothing is public until you
+publish it.
+
 ## Reporting a bug
 
 The Settings tab has a developer mode with a diagnostics panel, and `rimdoc-diagnostics.json`
