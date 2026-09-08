@@ -33,6 +33,7 @@
     "tauri:build": "tauri build",
     "probe:verify": "node scripts/probe-verify.mjs",
     "probe:build": "dotnet publish sidecar/PatchProbe -c Release -r win-x64",
+    "probe:test": "dotnet test sidecar/PatchProbe.Tests -c Release",
     "probe:stage": "node scripts/probe-stage.mjs",
     "probe-mod:build": "dotnet build sidecar/CompanionMod -c Release",
     "probe-mod:stage": "node scripts/probe-mod-stage.mjs"

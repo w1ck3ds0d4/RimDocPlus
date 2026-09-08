@@ -74,6 +74,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Before the build, so a probe that reports the wrong thing fails the run rather than
+      # shipping. The case it exists for: a target a type inherits is not a missing one, and
+      # reading declared methods only said it was.
+      - name: Test the patch probe
+        run: pnpm probe:test
+
       - name: Build the patch probe
         run: pnpm probe:build
 

@@ -41,4 +41,9 @@
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
   </ItemGroup>
 
+  <!-- So the tests can call the probe rather than only its command line. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="PatchProbe.Tests" />
+  </ItemGroup>
+
 </Project>
