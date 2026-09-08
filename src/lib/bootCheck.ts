@@ -1,4 +1,4 @@
-export type BootVerdict = "loading" | "loaded" | "reset" | "crashed" | "unknown";
+export type BootVerdict = "loading" | "loaded" | "reset" | "crashed" | "crashed-after-load" | "unknown";
 
 export interface BootResult {
   verdict: BootVerdict;
@@ -35,6 +35,21 @@ const MOD_READY = /^\[[^\]]+\]|::\s*initialized|Harmony patches have been applie
 const CLEAN_EXIT = /^\[ALLOC_|Peak Allocated memory/;
 
 /**
+ * The process dying, said by the game rather than inferred.
+ *
+ * Unity's crash handler writes the first line after it has walked the native stack, and it
+ * is the only line in a log that means the process was killed rather than closed. The
+ * second is what usually causes it on a modded install: one allocation the machine refused.
+ *
+ * These are what let a trial be judged past the main menu. Everything else here is about
+ * whether the mod list loaded, which is a question that stops mattering the moment it has.
+ */
+const DIED = [
+  /^A crash has been intercepted by the crash handler/,
+  /^Could not allocate memory: System out of memory/,
+];
+
+/**
  * What a run did, judged only from what it wrote.
  *
  * Grounded in two real logs from the reference install: a failed load of 43 lines carrying
@@ -46,6 +61,7 @@ export function bootVerdict(lines: string[], exitCode?: number | null): BootResu
   let modsInitialised = 0;
   let reachedModClasses = false;
   let cleanExit = false;
+  let died: string | undefined;
   let evidence: string | undefined;
 
   for (const line of lines) {
@@ -57,7 +73,16 @@ export function bootVerdict(lines: string[], exitCode?: number | null): BootResu
     if (MOD_CLASSES.test(line)) reachedModClasses = true;
     if (CLEAN_EXIT.test(line)) cleanExit = true;
     if (MOD_READY.test(line)) modsInitialised++;
+    if (!died && DIED.some((d) => d.test(line))) died = line.trim();
   }
+
+  // Checked before "loaded", because a run that loaded and then died is a failed trial and
+  // used to be a passed one: the search stopped looking the moment mod construction was
+  // reached, which is the earliest point at which nothing has gone wrong yet.
+  if (died && reachedModClasses) {
+    return { verdict: "crashed-after-load", evidence: died, modsInitialised };
+  }
+  if (died) return { verdict: "crashed", evidence: died, modsInitialised };
 
   if (reachedModClasses) {
     evidence = "Reached mod construction, so every def loaded";
@@ -80,15 +105,31 @@ export function bootVerdict(lines: string[], exitCode?: number | null): BootResu
   return { verdict: "unknown", modsInitialised };
 }
 
-/** Whether a verdict means the mod list failed to load, for a search that acts on it. */
+/** Whether a verdict means this trial failed, for a search that acts on it. */
 export function isBootFailure(verdict: BootVerdict): boolean {
-  return verdict === "reset" || verdict === "crashed";
+  return verdict === "reset" || verdict === "crashed" || verdict === "crashed-after-load";
 }
 
-/** Whether the verdict is settled enough to stop the game and move on. */
-export function isDecided(verdict: BootVerdict): boolean {
-  return verdict === "loaded" || verdict === "reset" || verdict === "crashed";
+/**
+ * Whether the verdict is settled enough to stop the game and move on.
+ *
+ * "loaded" is settled only for a fault that stops the mod list loading. A fault that shows
+ * up in a colony is still ahead of a run that has merely finished loading, which is why the
+ * search asks what it is looking for before it decides when to stop watching.
+ */
+export function isDecided(verdict: BootVerdict, lookingFor: FaultShape = "load"): boolean {
+  if (verdict === "reset" || verdict === "crashed" || verdict === "crashed-after-load") return true;
+  return verdict === "loaded" && lookingFor === "load";
 }
+
+/**
+ * What the search is hunting.
+ *
+ * "load" is a fault that stops the mod list loading, which a trial proves by getting past
+ * it. "play" is a fault that needs a colony, which a trial can only prove by being played,
+ * so the game stays open and the log is read until it ends.
+ */
+export type FaultShape = "load" | "play";
 
 export function describeVerdict(result: BootResult): string {
   switch (result.verdict) {
@@ -98,6 +139,8 @@ export function describeVerdict(result: BootResult): string {
       return "The game could not load this mod list and reset ModsConfig.xml back to Core.";
     case "crashed":
       return "The game stopped before finishing a load, and did not shut down cleanly.";
+    case "crashed-after-load":
+      return "The mod list loaded and the game died later. This trial is a failure.";
     case "loading":
       return "Still loading.";
     default:

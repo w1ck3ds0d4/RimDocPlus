@@ -50,7 +50,7 @@ export const RELEASES: Release[] = [
           "Every change is backed up first, and anything that touched disk can be rolled back in one click",
           "Writes the load order into ModsConfig.xml and starts the game, or closes Steam, applies and starts it again",
           "Subscribes to a mod you are missing, and re-fetches one Steam recorded but never downloaded",
-          "Find the culprit halves the mod list, runs the game and halves again, judging its own trials where the fault stops the list loading",
+          "Find the culprit halves the mod list, runs the game and halves again, judging each trial from the log whether the fault stops the list loading or shows up in a colony",
         ],
       },
       {
@@ -75,7 +75,7 @@ export const RELEASES: Release[] = [
     known: [
       "Harmony patches registered in code rather than declared with an attribute cannot be checked. The target is built while the game runs, so nothing outside it can say whether it still resolves",
       "Assembly-level repairs and stub defs for an absent dependency are specified and not implemented",
-      "The search judges itself only for faults that stop the mod list loading. A crash an hour into a colony looks the same as a healthy boot from out here",
+      "The search judges a trial past the main menu, but cannot play the colony for you: a fault that needs one is launched and judged rather than found unattended. A slowdown is still yours to call, because nothing in the log says a run was slow",
     ],
   },
 ];

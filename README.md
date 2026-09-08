@@ -497,7 +497,7 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 
 ## What's Not Yet Built
 
-- **Unattended bisect for faults after the main menu**: the search judges itself for anything that stops the mod list loading. A crash an hour into a colony, or a slowdown, still needs you, because from outside the process those look exactly like a healthy boot
+- **Unattended reproduction of a fault that needs a colony**: the search judges a trial past the main menu, because a crash writes its own admission to the log and that is now read. What it cannot do is play the colony for you, so those trials are launched and judged rather than run unattended. A slowdown is still yours to call: nothing in the log says a run was slow
 - **Tier 4 repairs**: assembly-level neutralisation is specified but not implemented. Tier 2 ships as the patch-override repair and tier 3 as texture downscaling; stub defs for an absent dependency are still specified only
 - **Scripted soak run**: a long unattended session with faults attributed over time
 - **Frame measurement**: load time, memory and per-mod tick cost are measured, the last of them by the companion mod on the Performance tab. Frame time is not: what the renderer spends is not attributable to a mod by timing ticks
