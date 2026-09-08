@@ -98,10 +98,17 @@ if ($gh) {
     $conclusion = ''
     try {
         # Quoted: unquoted, PowerShell splits on the commas and gh sees three arguments.
-        $conclusion = (gh run list --branch main --limit 1 --json 'headSha,conclusion,status' |
-            ConvertFrom-Json |
-            Where-Object { $_.headSha -eq $local } |
-            Select-Object -First 1 -ExpandProperty conclusion)
+        #
+        # Indexed rather than piped into Select-Object -First. That cmdlet stops the
+        # pipeline by throwing, and inside a try with ErrorActionPreference Stop the catch
+        # below swallows it: the check reported "no finished run for this commit yet" while
+        # a green run for exactly that commit sat first in the list.
+        #
+        # Ten rather than one, so a run that finished after a newer commit was pushed is
+        # still found.
+        $runs = gh run list --branch main --limit 10 --json 'headSha,conclusion,status' | ConvertFrom-Json
+        $mine = @($runs | Where-Object { $_.headSha -eq $local })
+        if ($mine.Count -gt 0) { $conclusion = $mine[0].conclusion }
     }
     catch {
         $conclusion = ''
