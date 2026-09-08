@@ -137,7 +137,13 @@ export interface ScanResult {
 export type Severity = "critical" | "error" | "warning" | "info";
 
 /** How much machinery a repair needs, and how much can go wrong. See docs/SPEC.md. */
-export type FixTier = 1 | 2 | 3 | 4;
+/**
+ * How much a repair can go wrong, and therefore how much it has to say first.
+ *
+ * Three, not four. There was an assembly-level tier for rewriting a mod's DLL; it is gone,
+ * and docs/SPEC.md keeps the reasoning so the idea is not re-derived from its absence.
+ */
+export type FixTier = 1 | 2 | 3;
 
 export interface ProposedFix {
   /** Stable identifier for the repair the engine would perform. */

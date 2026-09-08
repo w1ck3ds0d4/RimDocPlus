@@ -49,7 +49,6 @@ const TIER_MEANING: Record<number, string> = {
   1: "Tier 1: metadata and load order. Reversible, and nothing that loads changes.",
   2: "Tier 2: XML patch repair. Diffed before it is applied.",
   3: "Tier 3: missing or oversized content. Changes what the game loads.",
-  4: "Tier 4: assembly level. Never silent, always explained, undone in one click.",
 };
 
 /**
