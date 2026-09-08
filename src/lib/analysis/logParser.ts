@@ -617,25 +617,40 @@ function exceptionTypeOf(message: string): string | undefined {
  * because they name the patching mod outright, which beats guessing from a frame.
  */
 function namespacesOf(frames: string[], message: string): string[] {
-  const roots = new Set<string>();
-  const add = (root?: string) => {
-    if (root && !FRAMEWORK_ROOTS.has(root)) roots.add(root);
+  // Ranked, not filtered. Every mod on the path stays named, because the trace is the only
+  // evidence there is and dropping a name to look decisive would sometimes drop the culprit.
+  // What changes is which one is first, and the title uses the first.
+  //
+  //   1. A mod's own frame. Its code ran and the fault came out of it.
+  //   2. A prefix, transpiler or finaliser. Each runs before or around the method body, so
+  //      each can have set up the state the body then choked on.
+  //   3. A postfix. It runs after the body returned, so a fault thrown inside the body is
+  //      not its doing. A fault inside the postfix itself puts the postfix's own mod at the
+  //      top of the stack under rank 1, where it belongs.
+  //
+  // Within a rank, nearest the fault first, which is the order the frames already have.
+  const ranked = new Map<string, number>();
+  const add = (root: string | undefined, rank: number, at: number) => {
+    if (!root || FRAMEWORK_ROOTS.has(root)) return;
+    // First sighting wins: a mod named by its own frame is not demoted by also appearing
+    // as a postfix further down.
+    if (!ranked.has(root)) ranked.set(root, rank * 1000 + at);
   };
 
-  for (const frame of frames) {
-    const patch = /^-\s+(?:PREFIX|POSTFIX|TRANSPILER|FINALIZER)\s+([\w.]+)/.exec(frame);
+  frames.forEach((frame, at) => {
+    const patch = /^-\s+(PREFIX|POSTFIX|TRANSPILER|FINALIZER)\s+([\w.]+)/.exec(frame);
     if (patch) {
       // "UnlimitedHugs.HugsLib" identifies the mod on either half of the dot.
-      patch[1].split(".").forEach((part) => add(part));
-      continue;
+      const rank = patch[1].toUpperCase() === "POSTFIX" ? 3 : 2;
+      patch[2].split(".").forEach((part) => add(part, rank, at));
+      return;
     }
-    const at = /^at\s+([A-Za-z_][\w]*)\./.exec(frame);
-    add(at?.[1]);
-  }
+    add(/^at\s+([A-Za-z_][\w]*)\./.exec(frame)?.[1], 1, at);
+  });
 
   // "Error while instantiating a mod of type MedievalOverhaul.Settings" names it inline.
-  add(/type\s+([A-Za-z_][\w]*)\./.exec(message)?.[1]);
-  return [...roots];
+  add(/type\s+([A-Za-z_][\w]*)\./.exec(message)?.[1], 1, frames.length);
+  return [...ranked.entries()].sort((a, b) => a[1] - b[1]).map(([root]) => root);
 }
 
 function readEnvironment(lines: string[]): SessionEnvironment {

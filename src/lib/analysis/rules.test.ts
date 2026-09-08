@@ -541,6 +541,40 @@ describe("log analysis", () => {
     expect(found[0].detail).toContain("OreHighlightRenderer");
   });
 
+  it("blames the patch that could have caused it before the one that could not", () => {
+    // Verbatim shape from a real crash. A prefix runs before the method body, so it can
+    // have set up what the body choked on. A postfix runs after the body returned, so a
+    // fault thrown inside the body is not its doing. Both are still named.
+    const trace = [
+      "Error while determining if VGE_Hunter1 should have Need MechEnergy: System.NullReferenceException: x",
+      "[Ref 32B12C5D]",
+      "  at RimWorld.Pawn_NeedsTracker.ShouldHaveNeed (RimWorld.NeedDef nd) [0x000d1] in <x>:0 ",
+      "    - PREFIX Orion.Hospitality: Boolean Hospitality.Patches.Pawn_NeedsTracker_Patch:Prefix()",
+      "    - POSTFIX rimworld.b4ttl3m3ds.simplebabycarry: Void b4ttl3m3ds.simplebabycarry.Core:Postfix()",
+      "  at RimWorld.Pawn_NeedsTracker.AddOrRemoveNeedsAsAppropriate () [0x0001b] in <x>:0 ",
+      "    - PREFIX OskarPotocki.VEF: Void VEF.AestheticScaling.Patch:Prefix()",
+    ].join(NEWLINE);
+    const ns = analyzeLog(trace).events[0].namespaces;
+    // Nearest prefix, then the further prefix, then the postfix. Nothing is dropped.
+    expect(ns.indexOf("Orion")).toBeLessThan(ns.indexOf("VEF"));
+    expect(ns.indexOf("VEF")).toBeLessThan(ns.indexOf("simplebabycarry"));
+    expect(ns).toContain("simplebabycarry");
+  });
+
+  it("puts a mod's own frame above any patch annotation", () => {
+    // Its code ran and the fault came out of it, which beats having been on the way.
+    const trace = [
+      "System.InvalidOperationException: Collection was modified",
+      "[Ref ABCD0001]",
+      "  at System.Collections.Generic.HashSet`1+Enumerator[T].MoveNext () [0x00013] in <x>:0 ",
+      "    - POSTFIX Some.Bystander: Void Bystander.Patch:Postfix()",
+      "  at AllowTool.HaulUrgentlyCacheHandler.GetMapHaulables (Verse.Map map) [0x0006e] in <y>:0 ",
+    ].join(NEWLINE);
+    const ns = analyzeLog(trace).events[0].namespaces;
+    expect(ns[0]).toBe("AllowTool");
+    expect(ns).toContain("Bystander");
+  });
+
   it("collapses repeats of the same fault into one counted event", () => {
     const spam = Array(50).fill("Created WorkshopItem for 123 but there is no folder for it.").join("\n");
     const events = analyzeLog(spam).events;
