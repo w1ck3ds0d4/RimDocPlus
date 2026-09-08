@@ -2850,13 +2850,29 @@ tr.dev-error td {
   display: block;
 }
 
+/* A mod with no preview of its own.
+   Short rather than 16:9: reserving three hundred and ninety pixels for two letters made a
+   mod look broken rather than plain, and the drawer shows one mod at a time so there is no
+   row of cards whose heights have to agree. The grid is the one the app generates for its
+   own companion mod, so a missing image reads as a made placeholder and not a failed load. */
 .banner.empty {
+  aspect-ratio: auto;
+  height: 120px;
+  /* Explicit, because dropping the aspect ratio also dropped the width it was deriving:
+     the placeholder collapsed to the size of its two letters and sat in the middle of an
+     otherwise empty row. */
+  width: 100%;
   display: grid;
   place-items: center;
   color: var(--dim);
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background-color: var(--panel-2);
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
 .chips {
