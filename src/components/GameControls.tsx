@@ -170,7 +170,12 @@ export function GameControls({
               }}
             >
               <b>Play</b>
-              <small>Starts the game and leaves it to you.</small>
+              {/*
+                Both entries start a watched run. Saying this one "leaves it to you" was
+                true until Play started watching too, and then it was the app describing
+                behaviour it no longer had.
+              */}
+              <small>Starts the game and leaves you where you are.</small>
             </button>
             <button
               className="split-item"
@@ -182,7 +187,7 @@ export function GameControls({
               }}
             >
               <b>Play and watch</b>
-              <small>Follows the log as it is written, so a crash on load is in front of you.</small>
+              <small>Opens the console with it, so the log is in front of you as it is written.</small>
             </button>
           </div>
         )}
