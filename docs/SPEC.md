@@ -192,6 +192,18 @@ edit this app could make to their assembly.
 - On mod update, previously active repairs are re-applied if they still apply cleanly and
   flagged loudly if they do not.
 
+### What this app does not do
+
+It does not recommend mods. It reports what an install does: what is measured, what the log
+said, where the order disagrees with what an author asked for. "You should install X" is an
+opinion, it dates the moment a mod is superseded, and it turns a diagnostic tool into a
+shopping list maintained by whoever wrote it.
+
+The line is between reading and advising. Naming the mod an author's own description points
+at is reading. Keeping a list of mods this app has decided are good is advising, and the
+same reasoning removed tier 4: shipping other people's work, or opinions about it, is not
+what this is for.
+
 ### Fix registry (planned)
 
 Repairs are shareable as **recipes**, not as mod files: a signed patch keyed on
