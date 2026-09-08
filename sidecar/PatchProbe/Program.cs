@@ -143,7 +143,7 @@ public static class Program
         return 1;
     }
 
-    private static Report Probe(Request request)
+    internal static Report Probe(Request request)
     {
         var game = ReadGameTypes(request.Managed);
         var patches = new List<PatchReport>();

@@ -75,7 +75,14 @@ export default defineConfig({
   },
   // Parsing and rule logic is pure TS so it runs headless; `pnpm test`.
   test: {
+    // node by default, because most of what is tested here is parsing and planning and
+    // pays nothing for a DOM. The few files that render a component ask for jsdom with a
+    // `@vitest-environment` docblock of their own.
+    //
+    // jsdom is pinned to 25. Newer majors pull undici 8, which calls
+    // webidl.util.markAsUncloneable, added in Node 22. CI runs Node 20, where importing
+    // jsdom throws before a single test runs.
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });
