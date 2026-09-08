@@ -53,6 +53,14 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
   const [lookingFor, setLookingFor] = useState<FaultShape>("load");
   const [boot, setBoot] = useState<BootResult | null>(null);
   const watching = useRef<(() => void) | null>(null);
+  /**
+   * Set when the search should stop launching things.
+   *
+   * runUnattended is a plain loop holding its own copy of the session, so nothing in React
+   * could reach it: switching tabs unmounted this component and the loop carried on writing
+   * ModsConfig.xml and starting RimWorld for a search nobody was watching.
+   */
+  const stopped = useRef(false);
   const transcript = useRef<string[]>([]);
   const { confirm, dialog } = useConfirm();
   const shell = inShell();
@@ -63,7 +71,16 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
     saveBisect(next);
   }
 
-  useEffect(() => () => watching.current?.(), []);
+  useEffect(
+    () => () => {
+      // The listener goes, and the loop is told to stop before its next trial. A game that
+      // is already open is left alone: it is the player's, and closing someone's RimWorld
+      // because they changed tab would be worse than the search ending untidily.
+      stopped.current = true;
+      watching.current?.();
+    },
+    [],
+  );
 
   /**
    * Run a trial and judge it from the log, without asking.
@@ -125,9 +142,17 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
 
   /** Drive the whole search, one trial at a time, until a single suspect is left. */
   async function runUnattended(from: BisectSession) {
+    stopped.current = false;
     let current = from;
     while (!isSettled(current)) {
+      // Checked before each trial rather than only by the loop condition, because what has
+      // to stop is the launching, and a trial takes a whole run of the game to finish.
+      if (stopped.current) {
+        setStatus("Search stopped.");
+        return;
+      }
       const failed = await runTrialAuto(trialOrder(current, scan.mods), `Trial ${current.step}`);
+      if (stopped.current) return;
       current = applyVerdict(current, failed ? "still-there" : "gone");
       commit(current);
     }
@@ -146,6 +171,12 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
     setBusy(true);
     setStatus(null);
     try {
+      // The previous trial's game first. This path launches a supervised run, and the
+      // shell tracks one at a time, so starting a second left the first untracked and
+      // running: two RimWorlds against one ModsConfig.xml, and a trial judged from a log
+      // both of them were writing to.
+      await stopGame();
+
       await applyModsConfig(`${config}/ModsConfig.xml`, toModsConfigXml(order, scan.gameVersion));
 
       // Supervised even when a person is doing the judging. The trial is played either way,
@@ -229,6 +260,7 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
       confirmLabel: "Restore and finish",
     });
     if (!ok) return;
+    stopped.current = true;
     await runTrial(session.original, "Restored");
     record({ kind: "order", summary: "Restored the load order the search began from" });
     commit(null);

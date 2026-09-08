@@ -1591,6 +1591,24 @@ struct GameExit {
 /// and the transcript are what the player and the rules reason about afterwards.
 #[tauri::command(async)]
 fn launch_supervised(app: AppHandle, game_dir: String, log_path: String) -> Result<String, String> {
+    // One supervised run at a time. The pid is tracked in a single slot, so a second launch
+    // overwrote the first and left it running and untracked: two games writing to one log,
+    // and a trial judged from both. The caller stops the previous run first; this is here so
+    // a caller that forgets cannot orphan a process.
+    //
+    // The slot is only believed when the process behind it is still alive, because a run
+    // that ended without its watcher clearing the slot would otherwise refuse every launch
+    // afterwards.
+    if let Ok(slot) = GAME_PID.lock() {
+        if let Some(pid) = *slot {
+            if memory_mb(pid).is_some() {
+                return Err(
+                    "A supervised run is already going. Stop it before starting another.".into(),
+                );
+            }
+        }
+    }
+
     let exe = rimworld_exe(&game_dir)?;
     let mut child = Command::new(&exe)
         .current_dir(&game_dir)
