@@ -1,3 +1,4 @@
+import { ToggleMod } from "./ToggleMod";
 import { useEffect, useState } from "react";
 import type { Finding, ModEntry, ScanResult, WorkshopCache } from "../lib/types";
 import { workshopUrl } from "../lib/library";
@@ -59,6 +60,7 @@ export function ModDetail({ mod, scan, workshop, findings, onOpen, onClose }: Mo
             <h2>{mod.name}</h2>
             <code className="pid">{mod.packageId}</code>
           </div>
+          <ToggleMod mod={mod} />
           <button className="btn icon" type="button" onClick={onClose} aria-label="Close">
             ✕
           </button>
