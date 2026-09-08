@@ -73,6 +73,46 @@ function findingWith(fix: ProposedFix, over: Partial<Finding> = {}): Finding {
 const auto = { tier: 1 as const, auto: true, label: "Fix" };
 const manual = { tier: 1 as const, auto: false, label: "Fix" };
 
+describe("reset-mod-settings", () => {
+  it("names the file RimWorld actually writes, which is the folder and not the packageId", () => {
+    // Every one of the 28 settings files in the reference install is Mod_<folder>_<Class>.xml,
+    // and a Workshop mod's folder is its numeric id. Built from the dotted packageId, the
+    // pattern matched nothing, deleted nothing, and the run still reported success.
+    const target = mod("Dubwise.Rimatomics", {
+      folder: "C:/Program Files (x86)/Steam/steamapps/workshop/content/294100/1127530465",
+      steamId: "1127530465",
+    });
+    const plan = planRepair({
+      scan: scanOf([target], ["Dubwise.Rimatomics"]),
+      modpack: profileOf(["Dubwise.Rimatomics"]),
+      finding: findingWith(
+        { kind: "reset-mod-settings", label: "Reset its settings", tier: 1, auto: false },
+        { packageIds: ["Dubwise.Rimatomics"] },
+      ),
+    });
+    expect(plan?.kind).toBe("files");
+    const files = plan?.kind === "files" ? plan : null;
+    expect(files?.actions[0]).toMatchObject({
+      op: "delete-matching",
+      pattern: "Mod_1127530465_*.xml",
+    });
+  });
+
+  it("uses a local mod's folder name, which is what RimWorld uses for one", () => {
+    const local = mod("some.author.localmod", { folder: "C:/RimWorld/Mods/MyLocalMod", source: "local" });
+    const plan = planRepair({
+      scan: scanOf([local], ["some.author.localmod"]),
+      modpack: profileOf(["some.author.localmod"]),
+      finding: findingWith(
+        { kind: "reset-mod-settings", label: "Reset its settings", tier: 1, auto: false },
+        { packageIds: ["some.author.localmod"] },
+      ),
+    });
+    const files = plan?.kind === "files" ? plan : null;
+    expect(files?.actions[0]).toMatchObject({ pattern: "Mod_MyLocalMod_*.xml" });
+  });
+});
+
 describe("disable-overriding-mod", () => {
   const winner = mod("later.mod", { name: "Later Mod" });
   const loser = mod("earlier.mod", { name: "Earlier Mod" });

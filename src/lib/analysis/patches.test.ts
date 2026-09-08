@@ -40,6 +40,19 @@ function scanOf(mods: ModEntry[]): ScanResult {
 const TARGET = '/Defs/ThingDef[defName="MealSurvivalPack"]/graphicData/texPath';
 
 describe("runPatchRules", () => {
+  it("does not call two mods inserting at one anchor a collision", () => {
+    // PatchOperationInsert adds a sibling beside the node it matched and leaves that node
+    // alone, so both insertions apply. Reported as an override, it told someone the earlier
+    // mod's change was discarded and offered to disable the later mod to get it back.
+    const findings = runPatchRules(
+      scanOf([
+        mod("a.first", [op(TARGET, "PatchOperationInsert")], 0),
+        mod("b.second", [op(TARGET, "PatchOperationInsert")], 1),
+      ]),
+    );
+    expect(findings).toHaveLength(0);
+  });
+
   it("reports two mods overwriting the same node", () => {
     const findings = runPatchRules(
       scanOf([mod("a.first", [op(TARGET)], 0), mod("b.second", [op(TARGET)], 1)]),
