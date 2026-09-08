@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ScanResult } from "../lib/types";
 import { toModsConfigXml, type Modpack } from "../lib/modpacks";
 import { configDir } from "../lib/repair/repairs";
-import { applyModsConfig, inShell, launchGame } from "../lib/shell";
+import { applyModsConfig, inShell } from "../lib/shell";
 import { useConfirm } from "./Confirm";
 import { record } from "../lib/history";
 
@@ -18,15 +18,22 @@ export function GameControls({
   modpack,
   onRescan,
   scanning,
-  onPlayAndWatch,
+  onPlay,
 }: {
   scan: ScanResult;
   modpack: Modpack;
   /** Retake the scan, so the findings describe the install as it is now. */
   onRescan: () => void;
   scanning: boolean;
-  /** Hands over to the Session tab, which is where a watched run is followed. */
-  onPlayAndWatch: () => void;
+  /**
+   * Start a run this app is watching.
+   *
+   * Both buttons do this. Plain Play used to spawn the game and stop caring, so a launch
+   * that died ten seconds later left nothing behind: no exit code, no log, no measurement,
+   * nothing to look at afterwards. The only difference now is whether the tab that shows
+   * the run comes forward.
+   */
+  onPlay: (opts: { show: boolean }) => void;
 }) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -104,20 +111,6 @@ export function GameControls({
     }
   }
 
-  async function launch() {
-    if (!scan.paths.game) return;
-    setBusy(true);
-    try {
-      await launchGame(scan.paths.game);
-      setStatus("RimWorld started");
-      record({ kind: "launch", summary: "Started RimWorld", detail: scan.paths.game });
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="game-controls">
       {dialog}
@@ -144,8 +137,12 @@ export function GameControls({
           className="btn play"
           type="button"
           disabled={!shell || busy || !scan.paths.game}
-          title={shell ? "Start RimWorld" : "Needs the desktop app"}
-          onClick={() => void launch()}
+          title={
+            shell
+              ? "Start RimWorld. The run is watched either way, so there is something to read if it dies."
+              : "Needs the desktop app"
+          }
+          onClick={() => onPlay({ show: false })}
         >
           <span aria-hidden="true">&#9654;</span> Play
         </button>
@@ -169,7 +166,7 @@ export function GameControls({
               role="menuitem"
               onClick={() => {
                 setOpen(false);
-                void launch();
+                onPlay({ show: false });
               }}
             >
               <b>Play</b>
@@ -181,7 +178,7 @@ export function GameControls({
               role="menuitem"
               onClick={() => {
                 setOpen(false);
-                onPlayAndWatch();
+                onPlay({ show: true });
               }}
             >
               <b>Play and watch</b>
