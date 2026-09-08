@@ -41,6 +41,63 @@ function rules(scan: ScanResult, rule: string) {
   return runStaticRules(scan).filter((f) => f.rule === rule);
 }
 
+describe("ruleLoadLast", () => {
+  const asks = (text: string) => ({ description: text });
+  const run = (mods: ModEntry[]) =>
+    rules(
+      scanOf(
+        mods,
+        mods.map((m) => m.packageId),
+      ),
+      "load-last-position",
+    );
+  const filler = (n: number) => Array.from({ length: n }, (_, i) => mod(`filler.${i}`));
+
+  it("reads the instruction out of the author's own words", () => {
+    // Both real phrasings from the reference install. The second names the mod and never
+    // says "load" at all, which is how the one mod that most needs to be last was missed.
+    const first = mod("a.retexture", asks("Load this mod by the end of your mod list."));
+    const second = mod("b.perf", {
+      ...asks("MissileGirl should be the last mod in your mod list."),
+      name: "Missile Girl",
+    });
+    const found = run([first, second, ...filler(20)]);
+    expect(found).toHaveLength(2);
+    expect(found[1].title).toBe("Missile Girl asks to load last, and 20 mods load after it");
+  });
+
+  it("quotes the sentence, so the reader can judge it rather than trust it", () => {
+    const found = run([
+      mod("a.one", asks("Adds a thing. Load this mod at the end of your list. Safe mid-save.")),
+      ...filler(20),
+    ]);
+    expect(found[0].detail).toContain("Load this mod at the end of your list.");
+  });
+
+  it("says nothing about a mod that is already near the end", () => {
+    const found = run([...filler(20), mod("z.last", asks("Load this mod last."))]);
+    expect(found).toHaveLength(0);
+  });
+
+  it("does not count other mods that were also told to be last", () => {
+    // Two authors both claiming the end is a disagreement between them, not a mistake by
+    // the reader, and blaming whichever lost would be inventing a winner.
+    const found = run([
+      mod("a.one", asks("Load this mod last.")),
+      ...filler(20),
+      mod("y.also", asks("Load this mod last.")),
+      mod("z.also", asks("Load this mod last.")),
+    ]);
+    expect(found).toHaveLength(1);
+    expect(found[0].title).toContain("20 mods load after it");
+  });
+
+  it("ignores a description that merely mentions loading", () => {
+    expect(run([mod("a.one", asks("Loads new textures for meals.")), ...filler(20)])).toHaveLength(0);
+    expect(run([mod("a.one", asks("Load order does not matter.")), ...filler(20)])).toHaveLength(0);
+  });
+});
+
 describe("ruleDuplicateDefs", () => {
   const defs = (n: number, prefix = "D") => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
   const dupes = (mods: ModEntry[]) =>
