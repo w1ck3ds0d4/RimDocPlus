@@ -6,6 +6,47 @@ const RESET =
   "Caught exception while loading play data but there are active mods other than Core. " +
   "Resetting mods config and trying again.";
 
+describe("judging past the main menu", () => {
+  const loadedThen = (...after: string[]) => [
+    "[HugsLib] v11.0.4",
+    "Verse.LoadedModManager:CreateModClasses",
+    ...after,
+  ];
+
+  it("fails a trial that loaded and then died", () => {
+    // The search used to stop the moment mod construction was reached, which is the
+    // earliest point at which nothing has gone wrong yet. Every post-menu crash passed.
+    const result = bootVerdict(
+      loadedThen(
+        "Could not allocate memory: System out of memory!",
+        "A crash has been intercepted by the crash handler. For call stack and other details, see...",
+      ),
+    );
+    expect(result.verdict).toBe("crashed-after-load");
+    expect(isBootFailure(result.verdict)).toBe(true);
+  });
+
+  it("still calls a death before the load a plain crash", () => {
+    const result = bootVerdict(["Could not allocate memory: System out of memory!"]);
+    expect(result.verdict).toBe("crashed");
+  });
+
+  it("stops watching a load hunt once the list loads, and a play hunt only when it ends", () => {
+    // The same run, judged against two different questions. A fault that needs a colony is
+    // still ahead of a game that has merely finished loading.
+    const loaded = bootVerdict(loadedThen()).verdict;
+    expect(loaded).toBe("loaded");
+    expect(isDecided(loaded, "load")).toBe(true);
+    expect(isDecided(loaded, "play")).toBe(false);
+  });
+
+  it("ends a play hunt the moment the game dies, whichever question was asked", () => {
+    const died = bootVerdict(loadedThen("A crash has been intercepted by the crash handler.")).verdict;
+    expect(isDecided(died, "play")).toBe(true);
+    expect(isDecided(died, "load")).toBe(true);
+  });
+});
+
 describe("judging a run from what it wrote", () => {
   it("calls a load that reached mod construction loaded", () => {
     const lines = ["[HugsLib] version 12.0.0", "Verse.LoadedModManager:CreateModClasses():0"];

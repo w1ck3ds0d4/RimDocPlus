@@ -3665,6 +3665,52 @@ tr.clickable:hover td {
 /* The offer, before a search has started. Amber across the whole panel rather than only on
    the heading and the button, so it reads as one block at the end of a tab of answers
    instead of two coloured pieces inside a grey box. */
+/* What the search is looking for, asked before it starts because it changes when a trial
+   is over. Two options side by side rather than a dropdown: there are only ever two, and
+   the difference between them is the whole reason the question is asked. */
+.fault-shape {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+
+.fault-shape legend {
+  padding: 0 0 6px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fault-shape label {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.fault-shape label.picked {
+  border-color: rgba(217, 171, 65, 0.5);
+  background: rgba(217, 171, 65, 0.08);
+}
+
+.fault-shape b {
+  display: block;
+  font-size: 12px;
+}
+
+.fault-shape small {
+  display: block;
+  margin-top: 2px;
+  color: var(--dim);
+}
+
 .bisect.offer {
   border-color: rgba(217, 171, 65, 0.4);
   background: linear-gradient(180deg, rgba(217, 171, 65, 0.07), var(--panel));

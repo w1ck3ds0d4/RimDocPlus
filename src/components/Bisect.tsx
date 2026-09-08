@@ -3,8 +3,15 @@ import type { ScanResult } from "../lib/types";
 import type { Modpack } from "../lib/modpacks";
 import { toModsConfigXml } from "../lib/modpacks";
 import { configDir } from "../lib/repair/repairs";
-import { applyModsConfig, inShell, launchGame, launchSupervised, stopGame, watchGame } from "../lib/shell";
-import { bootVerdict, describeVerdict, isBootFailure, isDecided, type BootResult } from "../lib/bootCheck";
+import { applyModsConfig, inShell, launchSupervised, stopGame, watchGame } from "../lib/shell";
+import {
+  bootVerdict,
+  describeVerdict,
+  isBootFailure,
+  isDecided,
+  type BootResult,
+  type FaultShape,
+} from "../lib/bootCheck";
 import { record } from "../lib/history";
 import { useConfirm } from "./Confirm";
 import {
@@ -36,6 +43,14 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [auto, setAuto] = useState(false);
+  /**
+   * What the search is looking for, which decides when a trial is over.
+   *
+   * A fault that stops the mod list loading is settled the moment the list loads. One that
+   * needs a colony is not, so those trials are watched until the game closes and judged on
+   * whether it died on the way.
+   */
+  const [lookingFor, setLookingFor] = useState<FaultShape>("load");
   const [boot, setBoot] = useState<BootResult | null>(null);
   const watching = useRef<(() => void) | null>(null);
   const transcript = useRef<string[]>([]);
@@ -87,7 +102,7 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
           transcript.current.push(...batch);
           const result = bootVerdict(transcript.current);
           setStatus(`${label}: ${transcript.current.length} lines`);
-          if (isDecided(result.verdict)) {
+          if (isDecided(result.verdict, lookingFor)) {
             setBoot(result);
             finish(isBootFailure(result.verdict));
           }
@@ -132,7 +147,22 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
     setStatus(null);
     try {
       await applyModsConfig(`${config}/ModsConfig.xml`, toModsConfigXml(order, scan.gameVersion));
-      await launchGame(scan.paths.game);
+
+      // Supervised even when a person is doing the judging. The trial is played either way,
+      // and reading the log costs nothing on top of that: what it buys is the app being able
+      // to say "this one crashed" instead of only asking whether it did.
+      transcript.current = [];
+      setBoot(null);
+      watching.current?.();
+      watching.current = await watchGame({
+        onLines: (chunk) => {
+          transcript.current.push(...chunk);
+          const seen = bootVerdict(transcript.current);
+          if (isBootFailure(seen.verdict)) setBoot(seen);
+        },
+        onExited: (exit) => setBoot(bootVerdict(transcript.current, exit.code)),
+      });
+      await launchSupervised(scan.paths.game, scan.paths.playerLog!);
       setStatus(`${label}: ${order.length} mods written, RimWorld starting`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
@@ -219,6 +249,35 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
           Triage repairs what the rules can name. When the game crashes or drags and nothing on disk says why,
           the way to find it is to halve the list, run the game, and halve again.
         </p>
+
+        {/*
+          Asked before the search starts, because it decides when a trial is over. A load
+          fault is settled the moment the list loads; a fault that needs a colony is not, and
+          treating the two the same is what made every post-menu trial pass.
+        */}
+        <fieldset className="fault-shape">
+          <legend>What are you chasing?</legend>
+          {(
+            [
+              ["load", "It stops the game loading", "The mod list fails, or the game dies before the menu"],
+              ["play", "It happens once I am playing", "Loads fine, then crashes or drags in a colony"],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <label key={value} className={lookingFor === value ? "picked" : ""}>
+              <input
+                type="radio"
+                name="fault-shape"
+                checked={lookingFor === value}
+                onChange={() => setLookingFor(value)}
+              />
+              <span>
+                <b>{label}</b>
+                <small>{hint}</small>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+
         <div className="repair-actions">
           <button
             className="btn warn"
@@ -255,7 +314,7 @@ export function Bisect({ scan, modpack }: { scan: ScanResult; modpack: Modpack }
           <span className="setting-text">
             <b>Judge it for me</b>
             <small>
-              Runs each trial and reads the log itself. Only for faults that stop the mod list loading.
+              Runs each trial and reads the log itself, without waiting for you to say what happened.
             </small>
           </span>
         </label>
