@@ -252,7 +252,12 @@ export function listSaves(): Promise<SaveMeta[]> {
 }
 
 export interface GameExit {
-  /** Null when the process was terminated rather than exiting on its own. */
+  /**
+   * The process's exit code.
+   *
+   * Nullable because the Rust type is. On Windows every process that ends has one, a killed
+   * process included, so nothing should be written that only works when this is null.
+   */
   code: number | null;
   durationMs: number;
   lines: number;
