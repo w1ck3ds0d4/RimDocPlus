@@ -443,6 +443,51 @@ describe("log analysis", () => {
     expect(found).toHaveLength(2);
   });
 
+  it("reads the fault classes RimWorld reports in plain words", () => {
+    // Five shapes, all present in a real session, none of which matched anything before:
+    // a texture nothing ships, a key two mods both claim, a mod reading a DefOf before the
+    // game filled it in, two things claiming one saved id, and a mesh built from nothing.
+    const plain = [
+      "Could not load Texture2D at 'Things/UI/Icons/Ammo_9M133M' in any active mod or in base resources.",
+      "Tried to use an uninitialized DefOf of type DamageDefOf. DefOfs are initialized right after all defs all loaded.",
+      "Cannot register MVCF.VerbWithComps MVCF.VerbWithComps, (id=Thing_VAEA_Apparel_MiniTurretPack825121_4_0_Managed in loaded object directory. Id already used by MVCF.VerbWithComps",
+      "Failed setting triangles. Some indices are referencing out of bounds vertices. IndexCount: 36, VertexCount: 0",
+    ].join(NEWLINE);
+    const titles = findingsFromLog(analyzeLog(plain), []).map((f) => f.title);
+    expect(titles).toContain("Missing texture Things/UI/Icons/Ammo_9M133M");
+    expect(titles).toContain("A mod read DamageDefOf before the game filled it in");
+    expect(titles).toContain(
+      "Two things claim the saved id Thing_VAEA_Apparel_MiniTurretPack825121_4_0_Managed",
+    );
+    expect(titles).toContain("A mesh was built from indices pointing past its own vertices");
+  });
+
+  it("reports one key clash however many ways round the game writes it", () => {
+    const clash = [
+      "Key binding conflict: MainTab_History and MainTab_AM_LevelSchedule are both bound to F9.",
+      "Key binding conflict: MainTab_AM_LevelSchedule and MainTab_History are both bound to F9.",
+    ].join(NEWLINE);
+    const found = findingsFromLog(analyzeLog(clash), []);
+    expect(found).toHaveLength(1);
+    expect(found[0].title).toBe("MainTab_History and MainTab_AM_LevelSchedule both use F9");
+    // No badge. It happened once, and RimWorld restating it is not a second conflict.
+    expect(found[0].count).toBeUndefined();
+  });
+
+  it("gathers every type loading an asset off the main thread into one row", () => {
+    // Twenty of these in a real session, one per type. Twenty warnings saying the same
+    // thing about work only the mod authors can do is a tab nobody reads.
+    const many = [
+      "Type HediffComp_TurretGun probably needs a StaticConstructorOnStartup attribute, because it has a field ForcedTargetLineMat of type Material. All assets must be loaded in the main thread.",
+      "Type OreHighlightRenderer probably needs a StaticConstructorOnStartup attribute, because it has a field sharedStripeTexture of type Texture2D. All assets must be loaded in the main thread.",
+    ].join(NEWLINE);
+    const found = findingsFromLog(analyzeLog(many), []);
+    expect(found).toHaveLength(1);
+    expect(found[0].title).toBe("2 types load an asset off the main thread");
+    expect(found[0].detail).toContain("HediffComp_TurretGun");
+    expect(found[0].detail).toContain("OreHighlightRenderer");
+  });
+
   it("collapses repeats of the same fault into one counted event", () => {
     const spam = Array(50).fill("Created WorkshopItem for 123 but there is no folder for it.").join("\n");
     const events = analyzeLog(spam).events;
