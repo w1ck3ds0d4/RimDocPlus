@@ -45,6 +45,15 @@ export interface ModpackDiff {
   added: string[];
   removed: string[];
   reordered: boolean;
+  /**
+   * How many mods would have to be picked up and put down to get from one order to the other.
+   *
+   * The fewest, not the number whose index changed: moving one mod past five others shifts
+   * all six, and reporting six moves for one drag would be counting the consequence rather
+   * than the change. That number is the list length minus its longest common subsequence,
+   * which is exactly the set that can stay where it is.
+   */
+  moved: number;
 }
 
 const STORAGE_KEY = "rimdoc.modpacks.v1";
@@ -242,11 +251,35 @@ export function diffModpacks(from: string[], to: string[]): ModpackDiff {
   const added = to.filter((id) => !before.has(id));
   const removed = from.filter((id) => !after.has(id));
   const survivors = (list: string[]) => list.filter((id) => before.has(id) && after.has(id));
+  const kept = survivors(from);
+  const moved = kept.length - longestCommonRun(kept, survivors(to));
   return {
     added,
     removed,
-    reordered: survivors(from).join("|") !== survivors(to).join("|"),
+    reordered: moved > 0,
+    moved,
   };
+}
+
+/**
+ * The longest subsequence two orders share, which is the set that need not move.
+ *
+ * Plain O(n*m): a load order is a few hundred entries, so this is tens of thousands of
+ * cells and imperceptible, and the alternatives are harder to read for no gain anyone
+ * would notice.
+ */
+function longestCommonRun(a: string[], b: string[]): number {
+  // One row at a time rather than the whole table, which is the only concession to size
+  // here and costs nothing in clarity.
+  let previous = new Array<number>(b.length + 1).fill(0);
+  for (const left of a) {
+    const row = new Array<number>(b.length + 1).fill(0);
+    for (let j = 0; j < b.length; j++) {
+      row[j + 1] = left === b[j] ? previous[j] + 1 : Math.max(row[j], previous[j + 1]);
+    }
+    previous = row;
+  }
+  return previous[b.length];
 }
 
 /** Render a modpack as the ModsConfig.xml RimWorld reads on launch. */

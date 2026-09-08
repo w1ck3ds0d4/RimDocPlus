@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import type { ScanResult } from "../lib/types";
-import { toModsConfigXml, type Modpack } from "../lib/modpacks";
+import { diffModpacks, toModsConfigXml, type Modpack, type ModpackDiff } from "../lib/modpacks";
 import { configDir } from "../lib/repair/repairs";
 import { applyModsConfig, inShell } from "../lib/shell";
 import { useConfirm } from "./Confirm";
 import { record } from "../lib/history";
+
+/** What is waiting to be written, in the order someone would ask about it. */
+function describeDrift(drift: ModpackDiff): string {
+  const parts = [
+    drift.added.length && `${drift.added.length} to add`,
+    drift.removed.length && `${drift.removed.length} to remove`,
+    drift.moved && `${drift.moved} to move`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : "nothing";
+}
 
 /**
  * Apply a modpack to the game, and start it.
@@ -72,6 +82,11 @@ export function GameControls({
   const shell = inShell();
   const config = configDir(scan);
 
+  // Against the scan rather than the baseline: the question is whether the game has this
+  // order, and the scan is what the game has.
+  const drift = diffModpacks(scan.activeOrder, modpack.activeOrder);
+  const pending = drift.added.length + drift.removed.length + drift.moved;
+
   async function apply() {
     const ok = await confirm({
       title: "Write this modpack into the game?",
@@ -98,6 +113,9 @@ export function GameControls({
         toModsConfigXml(modpack.activeOrder, scan.gameVersion),
       );
       setStatus(`Applied ${modpack.activeOrder.length} mods`);
+      // The scan is what the count is measured against, so without this the button stays
+      // green over a game that already has the order.
+      onRescan();
       record({
         kind: "order",
         summary: `Wrote ${modpack.activeOrder.length} mods into ModsConfig.xml`,
@@ -114,14 +132,27 @@ export function GameControls({
   return (
     <div className="game-controls">
       {dialog}
+      {/*
+        Green with a count while the modpack and the game disagree, and refused when they
+        do not. Everything in this app edits a working copy, so "is any of it in the game
+        yet" is the question this button answers, and it was answering it with nothing:
+        pressed on an unchanged order it rewrote the same file and reported success.
+      */}
       <button
-        className="btn"
+        className={pending > 0 ? "btn go" : "btn"}
         type="button"
-        disabled={!shell || busy || !config}
-        title={shell ? "Write this modpack into ModsConfig.xml" : "Needs the desktop app"}
+        disabled={!shell || busy || !config || pending === 0}
+        title={
+          !shell
+            ? "Needs the desktop app"
+            : pending === 0
+              ? "The game already has this load order"
+              : `Write this modpack into ModsConfig.xml: ${describeDrift(drift)}`
+        }
         onClick={() => void apply()}
       >
         Apply to game
+        {pending > 0 && <span className="tier">{pending}</span>}
       </button>
       <button
         className="btn"

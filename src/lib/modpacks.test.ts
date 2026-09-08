@@ -158,9 +158,34 @@ describe("diffModpacks", () => {
       added: ["c"],
       removed: [],
       reordered: false,
+      moved: 0,
     });
-    expect(diffModpacks(["a", "b"], ["b", "a"])).toEqual({ added: [], removed: [], reordered: true });
-    expect(diffModpacks(["a", "b"], ["a"])).toEqual({ added: [], removed: ["b"], reordered: false });
+    expect(diffModpacks(["a", "b"], ["b", "a"])).toEqual({
+      added: [],
+      removed: [],
+      reordered: true,
+      moved: 1,
+    });
+    expect(diffModpacks(["a", "b"], ["a"])).toEqual({
+      added: [],
+      removed: ["b"],
+      reordered: false,
+      moved: 0,
+    });
+  });
+
+  it("counts the fewest mods that would have to move, not the ones that shifted", () => {
+    // Moving one mod past five others shifts all six. Reporting six moves for one drag
+    // would be counting the consequence rather than the change, and this number is what
+    // the Apply button shows.
+    expect(diffModpacks(["a", "b", "c", "d", "e", "f"], ["f", "a", "b", "c", "d", "e"]).moved).toBe(1);
+    expect(diffModpacks(["a", "b", "c"], ["c", "b", "a"]).moved).toBe(2);
+    expect(diffModpacks(["a", "b", "c"], ["a", "b", "c"]).moved).toBe(0);
+  });
+
+  it("does not count a mod that only moved because something around it left", () => {
+    expect(diffModpacks(["a", "b", "c"], ["a", "c"]).moved).toBe(0);
+    expect(diffModpacks(["a", "b"], ["x", "a", "b"]).moved).toBe(0);
   });
 
   it("does not call a list reordered when the only change is a removal", () => {
