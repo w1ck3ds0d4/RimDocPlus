@@ -3550,6 +3550,24 @@ tr.clickable:hover td {
 }
 
 /* A rescan keeps the app on screen, so it reports in a strip rather than taking it over. */
+/* How the last run ended, when it ended badly and you were not watching. Amber, sitting
+   where the rescan strip sits, because it is the same kind of thing: the app telling you
+   what it just saw rather than asking you for anything. */
+.run-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(217, 171, 65, 0.35);
+  background: rgba(217, 171, 65, 0.1);
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.run-notice span {
+  flex: 1;
+}
+
 .rescan-strip {
   display: flex;
   align-items: center;

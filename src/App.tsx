@@ -62,6 +62,8 @@ export default function App() {
   const [pasted, setPasted] = useState("");
   /** Bumped when the header asks for a watched run. */
   const [watchRequest, setWatchRequest] = useState(0);
+  /** How the last run ended, when that is worth saying. Null when it ended normally. */
+  const [badRun, setBadRun] = useState<string | null>(null);
   const [openMod, setOpenMod] = useState<string | null>(null);
   const [workshop, setWorkshop] = useState<WorkshopCache | null>(null);
   const [loading, setLoading] = useState(true);
@@ -378,10 +380,11 @@ export default function App() {
             modpack={active}
             onRescan={rescan}
             scanning={scanning}
-            onPlayAndWatch={() => {
-              // The watched run lives on the Session tab, so the menu takes you there and
-              // starts it rather than starting something you cannot see.
-              setTab("performance");
+            onPlay={({ show }) => {
+              setBadRun(null);
+              // Watched either way. The tab only comes forward when you asked to follow it;
+              // otherwise the run is recorded quietly and says so when it ends badly.
+              if (show) setTab("performance");
               setWatchRequest((n) => n + 1);
             }}
           />
@@ -435,6 +438,30 @@ export default function App() {
         <TabButton id="library" tab={tab} setTab={setTab} label="Library" />
         <TabButton id="settings" tab={tab} setTab={setTab} label="Settings" />
       </nav>
+
+      {/*
+        A run started from the header is watched whether or not this tab is open, and a run
+        that died on a tab nobody was looking at may as well not have been watched. Only
+        shown for an ending worth reading about: a clean exit needs no announcement.
+      */}
+      {badRun && tab !== "performance" && (
+        <div className="run-notice" role="status" aria-live="polite">
+          <span>{badRun}</span>
+          <button
+            className="btn small"
+            type="button"
+            onClick={() => {
+              setTab("performance");
+              setBadRun(null);
+            }}
+          >
+            Show me
+          </button>
+          <button className="btn small" type="button" onClick={() => setBadRun(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {scanning && (
         <div className="rescan-strip" role="status" aria-live="polite">
@@ -511,7 +538,24 @@ export default function App() {
         */}
         {active && (
           <div hidden={tab !== "performance"}>
-            <GameWatch scan={workingScan} modpack={active} startSignal={watchRequest} />
+            <GameWatch
+              scan={workingScan}
+              modpack={active}
+              startSignal={watchRequest}
+              onFinished={(exit) => {
+                // A clean exit needs no announcement. Anything else is the thing someone
+                // pressed Play to find out about, whichever tab they are on.
+                if (exit.code === 0 && !exit.wentQuiet) return;
+                const minutes = Math.round(exit.durationMs / 60000);
+                setBadRun(
+                  exit.code === null
+                    ? "RimWorld was stopped rather than exiting on its own."
+                    : exit.code !== 0
+                      ? `RimWorld exited with code ${exit.code} after ${minutes} minute${minutes === 1 ? "" : "s"}.`
+                      : `RimWorld stopped writing to its log well before it closed, after ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+                );
+              }}
+            />
           </div>
         )}
         {tab === "performance" && <TickCost scan={workingScan} modpack={active} onModpack={applyModpack} />}

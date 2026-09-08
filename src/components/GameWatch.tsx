@@ -25,6 +25,7 @@ export function GameWatch({
   scan,
   modpack,
   startSignal = 0,
+  onFinished,
 }: {
   scan: ScanResult;
   modpack: Modpack;
@@ -35,6 +36,13 @@ export function GameWatch({
    * boolean that is already true says nothing the second time.
    */
   startSignal?: number;
+  /**
+   * Called once a run has ended, however it ended.
+   *
+   * The run can be started from the header without coming here to watch it, and a run that
+   * dies on a tab nobody is looking at may as well not have been watched at all.
+   */
+  onFinished?: (exit: GameExit) => void;
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [lines, setLines] = useState<string[]>([]);
@@ -149,6 +157,7 @@ export function GameWatch({
               : `RimWorld exited with code ${finished.code ?? "unknown"}`,
           detail: `${finished.lines.toLocaleString()} log lines${finished.wentQuiet ? ", went quiet before exiting" : ""}`,
         });
+        onFinished?.(finished);
       },
     });
 
