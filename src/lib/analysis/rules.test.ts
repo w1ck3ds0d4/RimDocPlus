@@ -41,6 +41,59 @@ function rules(scan: ScanResult, rule: string) {
   return runStaticRules(scan).filter((f) => f.rule === rule);
 }
 
+describe("ruleDuplicateDefs", () => {
+  const defs = (n: number, prefix = "D") => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
+  const dupes = (mods: ModEntry[]) =>
+    rules(
+      scanOf(
+        mods,
+        mods.map((m) => m.packageId),
+      ),
+      "duplicate-defs",
+    );
+
+  it("reports a mod that declares nothing another does not", () => {
+    // Two versions of one mod published as separate Workshop items, which is the real case
+    // this was written for: RimWorld keeps one def per name and drops the other, silently.
+    const found = dupes([
+      mod("author.complete", { name: "Complete", defNames: defs(25), loadIndex: 0 }),
+      mod("author.missions", { name: "Missions", defNames: defs(20), loadIndex: 1 }),
+    ]);
+    expect(found).toHaveLength(1);
+    expect(found[0].title).toBe("Missions declares nothing Complete does not");
+    expect(found[0].count).toBe(20);
+    // Named from the contained side, and reported once rather than once per direction.
+    expect(found[0].packageIds).toEqual(["author.missions", "author.complete"]);
+  });
+
+  it("says nothing about mods that merely overlap", () => {
+    // Twenty-one active pairs in the reference install share defNames on purpose. An
+    // expansion redefining what it expands is the system working.
+    const partial = defs(20).slice(0, 19).concat(["OwnThing"]);
+    expect(
+      dupes([mod("a.big", { defNames: defs(25) }), mod("b.overlapping", { defNames: partial })]),
+    ).toHaveLength(0);
+  });
+
+  it("says nothing about a mod redefining vanilla, which is how mods work", () => {
+    // The rule's first run reported EdB Prepare Carefully as a duplicate of Core for
+    // redefining twenty-six of its defs. That is the mod working.
+    expect(
+      dupes([
+        mod("ludeon.rimworld", { name: "Core", source: "official", defNames: defs(4493) }),
+        mod("edb.preparecarefully", { defNames: defs(26) }),
+      ]),
+    ).toHaveLength(0);
+  });
+
+  it("ignores an overlap too small to mean anything", () => {
+    // Two mods happening to name four defs the same way says nothing about either.
+    expect(dupes([mod("a.big", { defNames: defs(25) }), mod("b.tiny", { defNames: defs(4) })])).toHaveLength(
+      0,
+    );
+  });
+});
+
 describe("orphan-active", () => {
   it("reports enabled ids with no folder on disk", () => {
     const scan = scanOf([mod("a.one")], ["a.one", "b.missing"]);

@@ -113,6 +113,14 @@ pub struct ModEntry {
     /// TypeScript type (which leaves room for a producer that skips them) this
     /// implementation always populates both.
     pub textures: TextureStats,
+    /// Every defName the mod declares in a Defs folder, sorted and deduplicated.
+    ///
+    /// Declarations only. A defName inside a Patches file is an insertion into someone
+    /// else's def, which is how mods are meant to build on each other; a defName in Defs is
+    /// this mod saying the def is its own, and two mods saying that about one name means
+    /// RimWorld keeps whichever loaded later and silently drops the other.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub def_names: Vec<String>,
     pub patches: Vec<PatchOperation>,
     /// How many PatchOperations the mod ships in total.
     ///
@@ -510,6 +518,7 @@ fn scan_mod_dir(dir: &Path, source: ModSource, progress: &mut dyn FnMut(&str)) -
 
         if let Some(mut mod_entry) = parse_about(input) {
             mod_entry.assemblies = measured.assemblies;
+            mod_entry.def_names = measured.def_names;
             mod_entry.textures = measured.textures;
             let scanned = read_patches(&folder);
             mod_entry.patch_count = scanned.total;
@@ -550,7 +559,18 @@ struct MeasuredMod {
     /// it costs nothing beyond the string: a mod bundling a library that belongs to another
     /// mod is a packaging mistake worth naming, and the file name is all that identifies it.
     assemblies: Vec<String>,
+    /// defNames declared under a Defs folder, from the same walk.
+    def_names: Vec<String>,
 }
+
+/// The most defNames kept for one mod.
+///
+/// Core, the largest in the reference install, declares 4,493. The cap is far above that
+/// because it exists only so a generated or pathological mod cannot put an unbounded list
+/// into every scan, not as a working limit. A mod that reaches it has its list dropped
+/// rather than truncated: the rule that reads these asks whether one mod's defs are all
+/// contained in another's, and half a set answers that question wrongly in both directions.
+const MAX_DEF_NAMES: usize = 20000;
 
 /// One pass over a mod folder producing both its on-disk size and its texture footprint.
 /// Walking twice would double the IO on a 253-mod install for no extra information.
@@ -561,8 +581,11 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
     let mut vram: u64 = 0;
     let mut oversized: Vec<OversizedTexture> = Vec::new();
     let mut assemblies: Vec<String> = Vec::new();
+    let mut def_names: Vec<String> = Vec::new();
     let mut truncated = false;
-    let mut stack = vec![dir.to_path_buf()];
+    // Carried with each directory rather than recomputed from the path, so <mod>/Defs and
+    // <mod>/1.6/Defs both count and a folder called Defs anywhere below one keeps counting.
+    let mut stack = vec![(dir.to_path_buf(), false)];
 
     loop {
         if stack.is_empty() {
@@ -573,7 +596,7 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
             break;
         }
         // Non-empty per the check above, so this pop cannot fail.
-        let current = stack.pop().expect("stack checked non-empty");
+        let (current, in_defs) = stack.pop().expect("stack checked non-empty");
         let entries = match fs::read_dir(&current) {
             Ok(e) => e,
             Err(_) => continue,
@@ -589,7 +612,8 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
                 Err(_) => continue,
             };
             if is_dir {
-                stack.push(full);
+                let named_defs = entry.file_name().eq_ignore_ascii_case("Defs");
+                stack.push((full, in_defs || named_defs));
                 continue;
             }
             let size = match entry.metadata() {
@@ -601,6 +625,9 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
             let name = entry.file_name().to_string_lossy().to_lowercase();
             if name.ends_with(".dll") {
                 assemblies.push(name.clone());
+            }
+            if in_defs && name.ends_with(".xml") && def_names.len() < MAX_DEF_NAMES {
+                read_def_names_into(&full, &mut def_names);
             }
             if !name.ends_with(".png") {
                 continue;
@@ -625,6 +652,11 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
 
     assemblies.sort();
     assemblies.dedup();
+    if def_names.len() >= MAX_DEF_NAMES {
+        def_names.clear();
+    }
+    def_names.sort();
+    def_names.dedup();
 
     MeasuredMod {
         size_bytes: total,
@@ -635,6 +667,26 @@ fn measure_mod(dir: &Path, budget: usize) -> MeasuredMod {
             truncated,
         },
         assemblies,
+        def_names,
+    }
+}
+
+/// Append every defName one Defs file declares.
+///
+/// The same tag scan the patch reader uses, rather than an XML parser: mod XML is routinely
+/// malformed in ways a parser refuses and the game tolerates, and a file this cannot read
+/// at all should cost its own defNames rather than the whole mod's.
+fn read_def_names_into(file: &Path, out: &mut Vec<String>) {
+    let Ok(bytes) = fs::read(file) else { return };
+    let text = String::from_utf8_lossy(&bytes);
+    for (_, start, end) in find_all_tag_matches(&text, "defName") {
+        let name = text[start..end].trim();
+        if !name.is_empty() && name.len() < 200 {
+            out.push(name.to_string());
+        }
+        if out.len() >= MAX_DEF_NAMES {
+            return;
+        }
     }
 }
 
@@ -842,6 +894,7 @@ fn parse_about(input: AboutInput) -> Option<ModEntry> {
     Some(ModEntry {
         // Filled in by the caller, which is the only place that has walked the files.
         assemblies: Vec::new(),
+        def_names: Vec::new(),
         package_id,
         name,
         author,
