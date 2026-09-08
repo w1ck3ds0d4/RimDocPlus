@@ -1,5 +1,6 @@
 import type { Finding, ModEntry, ScanResult } from "../types";
 import { BOOTSTRAP_PACKAGE_IDS, OFFICIAL_PACKAGE_IDS } from "./about.ts";
+import { LOAD_INSTRUCTION } from "./patches.ts";
 import { DEFAULT_ANALYSIS, runPerformanceRules, type AnalysisOptions } from "./performance.ts";
 import { ruleBundledAssemblies, ruleWorkshopUpdates } from "./packaging.ts";
 import { runPatchRules } from "./patches.ts";
@@ -51,6 +52,7 @@ export function runStaticRulesWithDiagnostics(
     ["inactive-dependency", () => ruleInactiveDependency(active, activeSet, byId)],
     ["incompatible-pair", () => ruleIncompatiblePair(active, activeSet, byId)],
     ["load-order-violation", () => ruleLoadOrder(active, position)],
+    ["load-last-position", () => ruleLoadLast(active, position)],
     ["version-mismatch", () => ruleVersionMismatch(active, scan.gameCycle)],
     ["bundled-assemblies", () => ruleBundledAssemblies(active)],
     ["workshop-updates", () => ruleWorkshopUpdates(active, options.workshop ?? null)],
@@ -415,6 +417,78 @@ function ruleDuplicateDefs(active: ModEntry[]): Finding[] {
     }
   }
   return findings;
+}
+
+/**
+ * A mod the author told you to load last, that is not.
+ *
+ * Read out of the author's own description rather than a list kept here. Nothing in
+ * RimWorld's metadata says "load me last": no mod on the 253-mod reference install declares
+ * loadBottom, so the instruction only ever exists as a sentence someone wrote, and reading
+ * the sentence is the only way to honour it without this app deciding for them which mods
+ * are special.
+ *
+ * The two that say it on that install are a performance mod, "MissileGirl should be the
+ * last mod in your mod list", sitting at 151 of 224 with 73 mods after it, and a retexture
+ * asking to be loaded by the end, sitting at 50 with 174 after it. Both are the author
+ * saying their mod only works from where they put it.
+ */
+function ruleLoadLast(active: ModEntry[], position: Map<string, number>): Finding[] {
+  const asked = active.filter((mod) => mod.description && LOAD_INSTRUCTION.test(mod.description));
+  const findings: Finding[] = [];
+
+  for (const mod of asked) {
+    const at = position.get(mod.packageId);
+    if (at === undefined) continue;
+    // Mods after it that were not also told to be last. Two mods both asking to be last is
+    // a disagreement between authors, not a mistake by the reader, and blaming whichever
+    // lost would be inventing a winner.
+    const after = active.filter((other) => {
+      const theirs = position.get(other.packageId);
+      return theirs !== undefined && theirs > at && !asked.includes(other);
+    });
+    // A handful behind it is the ordinary noise of a list this long. What the rule is for
+    // is a mod sitting in the middle of one.
+    if (after.length < 10) continue;
+
+    findings.push({
+      id: `load-last:${mod.packageId}`,
+      rule: "load-last-position",
+      severity: "warning",
+      title: `${mod.name} asks to load last, and ${after.length} mods load after it`,
+      detail:
+        `${mod.name} says so in its own description, which is the only place RimWorld lets an ` +
+        `author say it: nothing in the metadata carries "load me last". A mod that patches or ` +
+        `retextures what everything else has already set has to run after them to see it, and ` +
+        `from position ${at + 1} of ${active.length} it does not.` +
+        NEWLINE +
+        NEWLINE +
+        "The author's words:" +
+        NEWLINE +
+        "  " +
+        quoteInstruction(mod.description ?? ""),
+      packageIds: [mod.packageId],
+      count: after.length,
+      fix: {
+        kind: "sink-to-bottom",
+        label: "Move it to the end",
+        tier: 1,
+        auto: false,
+        params: { id: mod.packageId },
+      },
+    });
+  }
+  return findings;
+}
+
+/** The sentence the instruction is in, so the reader can judge it rather than trust it. */
+function quoteInstruction(description: string): string {
+  const found = LOAD_INSTRUCTION.exec(description);
+  if (!found) return "";
+  const at = found.index;
+  const start = description.lastIndexOf(".", at) + 1;
+  const end = description.indexOf(".", at + found[0].length);
+  return description.slice(start, end === -1 ? undefined : end + 1).trim();
 }
 
 /** loadAfter and loadBefore constraints the current order violates. */

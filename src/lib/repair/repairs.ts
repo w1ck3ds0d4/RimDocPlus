@@ -173,6 +173,20 @@ const REPAIRS: Record<string, RepairFn> = {
     };
   },
 
+  /** Move one mod to the end of the order, which is where its author asked for it. */
+  "sink-to-bottom": (ctx) => {
+    const id = str(ctx, "id");
+    const mod = ctx.scan.mods.find((m) => m.packageId === id);
+    if (!id || !mod) return null;
+    const without = ctx.modpack.activeOrder.filter((other) => other.toLowerCase() !== id.toLowerCase());
+    if (without.length === ctx.modpack.activeOrder.length) return null;
+    return {
+      kind: "modpack",
+      modpack: { ...ctx.modpack, activeOrder: [...without, id] },
+      summary: `Moves ${mod.name} to the end of the load order, where its description asks for it.`,
+    };
+  },
+
   "hoist-official-content": applySort,
   "hoist-bootstrap": applySort,
   reorder: applySort,

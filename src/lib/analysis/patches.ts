@@ -17,9 +17,16 @@ const TOO_BROAD = new Set(["/Defs", "/", "/Defs/*"]);
 
 export type OverrideIntent = "declared" | "documented" | "content" | "assumed";
 
-/** The author telling players where to load the mod, which is intent in plain words. */
-const LOAD_INSTRUCTION =
-  /\bload\s+(this\s+|the\s+|it\s+)?(mod\s+)?(by\s+the\s+end|at\s+the\s+end|last|after|below|later|towards?\s+the\s+(end|bottom))/i;
+/**
+ * The author telling players where to load the mod, which is intent in plain words.
+ *
+ * Two shapes, because authors write both and the first version only caught one. "Load this
+ * mod by the end of your mod list" leads with the verb; "MissileGirl should be the last mod
+ * in your mod list" names the mod and never says load at all, which is how the one mod on
+ * the reference install that most needs to be last went unnoticed.
+ */
+export const LOAD_INSTRUCTION =
+  /\bload\s+(this\s+|the\s+|it\s+)?(mod\s+)?(by\s+the\s+end|at\s+the\s+end|last|after|below|later|towards?\s+the\s+(end|bottom))|\b(should\s+be|goes|belongs|put\s+(this|it))\s+(loaded\s+)?(the\s+)?(very\s+)?(last|at\s+the\s+(end|bottom)|near\s+the\s+(end|bottom))/i;
 
 /** Language that marks a mod as content built on top of something else. */
 const CONTENT_LANGUAGE =
