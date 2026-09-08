@@ -18,6 +18,10 @@ const INTO = join(ROOT, "src-tauri", "resources", "probe-mod");
 
 const files = [
   ["About/About.xml", "About/About.xml"],
+  // RimWorld draws this beside the mod in its own list, and every one of the 248 Workshop
+  // mods on the reference install ships one. Without it the companion mod was the only
+  // entry with a hole where the others have a picture, in the game and in this app.
+  ["About/Preview.png", "About/Preview.png"],
   ["bin/Release/RimDocProbe.dll", "Assemblies/RimDocProbe.dll"],
 ];
 
