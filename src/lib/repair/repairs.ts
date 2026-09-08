@@ -433,7 +433,16 @@ const REPAIRS: Record<string, RepairFn> = {
   "reset-mod-settings": (ctx) => {
     const dir = configDir(ctx.scan);
     const packageId = ctx.finding.packageIds[0];
-    if (!dir || !packageId) return null;
+    const mod = ctx.scan.mods.find((m) => m.packageId === packageId);
+    // RimWorld names a settings file after the mod's FOLDER, not its packageId: a Workshop
+    // mod's folder is its numeric id, a local mod's is whatever it is called on disk. Every
+    // one of the 28 files in the reference install is Mod_<folder>_<Class>.xml. Built from
+    // the packageId, the pattern matched nothing, deleted nothing, and reported success.
+    const folder = mod?.folder
+      .replace(/[\/]+$/, "")
+      .split(/[\/]/)
+      .pop();
+    if (!dir || !folder) return null;
     return {
       kind: "files",
       summary:
@@ -443,7 +452,7 @@ const REPAIRS: Record<string, RepairFn> = {
         {
           op: "delete-matching",
           directory: dir,
-          pattern: `Mod_${packageId}_*.xml`,
+          pattern: `Mod_${folder}_*.xml`,
           reason: "Corrupt or unreadable mod settings",
         },
       ],

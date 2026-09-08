@@ -3,8 +3,14 @@ import type { Finding, ModEntry, ScanResult } from "../types";
 /**
  * Operations that overwrite or delete what is already there. Two mods adding to the same
  * node usually coexist; two mods replacing it do not, and the later one silently wins.
+ *
+ * Insert is not one of them, whatever this list used to say. PatchOperationInsert adds a
+ * sibling beside the node it matched and leaves that node alone, so two mods inserting at
+ * one anchor both apply. Calling that a collision told someone their earlier mod's change
+ * was discarded, and offered to disable the later mod to get it back, when nothing had
+ * been lost and disabling would only remove content.
  */
-const DESTRUCTIVE = /Replace|Remove|AttributeSet|AttributeRemove|Insert/i;
+const DESTRUCTIVE = /Replace|Remove|AttributeSet|AttributeRemove/i;
 
 /** Xpaths broad enough that a collision on them says nothing useful. */
 const TOO_BROAD = new Set(["/Defs", "/", "/Defs/*"]);
