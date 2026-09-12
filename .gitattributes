@@ -1,0 +1,26 @@
+# Normalize line endings: store text files as LF in the repository.
+* text=auto
+
+# Windows-native scripts keep CRLF in the working tree.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Shell scripts stay LF even on Windows checkouts.
+*.sh   text eol=lf
+
+# Treat common assets as binary (no line-ending or diff mangling).
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
+*.pdf  binary
+*.mp3  binary
+*.wav  binary
+*.mp4  binary
