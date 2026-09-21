@@ -10,9 +10,50 @@ Built as a Tauri v2 desktop app (Rust + React + TypeScript), with a .NET sidecar
 
 > **Design rule:** RimDoc+ never edits a mod in place. Every repair is either an overlay mod that loads after the target or a derived copy in the vault with a diff attached, so the original stays pristine and every change is one click from reverted. Fixes are distributed as recipes applied to your own copy, never as redistributed mod files.
 
----
+## Contents
 
-## Features (Built)
+- [Tech stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Getting started](#getting-started)
+- [Features (built)](#features-built)
+- [How the repair tiers work](#how-the-repair-tiers-work)
+- [What's not yet built](#whats-not-yet-built)
+- [Documentation](#documentation)
+- [License](#license)
+
+## Tech stack
+
+| Layer               | Choice                                | Why                                                                                      |
+| ------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Shell               | Tauri v2 (Rust)                       | Native filesystem access, process supervision, small binary                              |
+| UI                  | React 19 + TypeScript + Vite          | Same stack as the rest of the toolkit                                                    |
+| Analysis            | Pure TypeScript                       | Runs in the browser preview and headless under vitest, no Rust round trip to test a rule |
+| Assembly inspection | .NET sidecar (Mono.Cecil)             | Harmony target resolution and IL rewriting need the real .NET metadata reader            |
+| Telemetry           | Companion RimWorld mod (C# + Harmony) | The only way to get per-mod tick attribution from inside the running game                |
+
+The split is deliberate: Rust does IO, hashing, and process control; TypeScript does parsing and rules; C# does anything that has to understand a .NET assembly.
+
+## Prerequisites
+
+- Node 20+ and pnpm
+- Rust stable (for the desktop shell)
+- .NET 8+ (for the assembly sidecar)
+- A RimWorld install to point it at
+
+## Getting started
+
+```bash
+pnpm install
+pnpm scan          # read the local install, write dev fixtures
+pnpm dev           # browser preview at http://localhost:1420
+pnpm test          # rules and parsers, headless
+```
+
+`pnpm scan` auto-detects common Steam install locations and the platform save-data folder. Pass a specific log with `pnpm scan --log path/to/Player.log`. The fixtures it writes to `src/dev-data/` are gitignored, since they describe one machine's install.
+
+Without fixtures the UI renders an empty state telling you to run the scan, so a fresh clone starts cleanly.
+
+## Features (built)
 
 ### Home
 
@@ -452,38 +493,6 @@ Two things it deliberately does not call breakage. A patch class carrying a Harm
 
 See [sidecar/README.md](sidecar/README.md) for the probe itself, which runs standalone against any install.
 
-## Tech Stack
-
-| Layer               | Choice                                | Why                                                                                      |
-| ------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Shell               | Tauri v2 (Rust)                       | Native filesystem access, process supervision, small binary                              |
-| UI                  | React 19 + TypeScript + Vite          | Same stack as the rest of the toolkit                                                    |
-| Analysis            | Pure TypeScript                       | Runs in the browser preview and headless under vitest, no Rust round trip to test a rule |
-| Assembly inspection | .NET sidecar (Mono.Cecil)             | Harmony target resolution and IL rewriting need the real .NET metadata reader            |
-| Telemetry           | Companion RimWorld mod (C# + Harmony) | The only way to get per-mod tick attribution from inside the running game                |
-
-The split is deliberate: Rust does IO, hashing, and process control; TypeScript does parsing and rules; C# does anything that has to understand a .NET assembly.
-
-## Prerequisites
-
-- Node 20+ and pnpm
-- Rust stable (for the desktop shell)
-- .NET 8+ (for the assembly sidecar)
-- A RimWorld install to point it at
-
-## Getting Started
-
-```bash
-pnpm install
-pnpm scan          # read the local install, write dev fixtures
-pnpm dev           # browser preview at http://localhost:1420
-pnpm test          # rules and parsers, headless
-```
-
-`pnpm scan` auto-detects common Steam install locations and the platform save-data folder. Pass a specific log with `pnpm scan --log path/to/Player.log`. The fixtures it writes to `src/dev-data/` are gitignored, since they describe one machine's install.
-
-Without fixtures the UI renders an empty state telling you to run the scan, so a fresh clone starts cleanly.
-
 ## How the repair tiers work
 
 Repairs are graded by how much machinery they need and how much can go wrong. See [docs/SPEC.md](docs/SPEC.md) for the full model.
@@ -494,7 +503,7 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 | 2    | XML patch repair: rewriting a stale xpath, quieting a failed operation, resolving a def collision | Low, diffed before apply     |
 | 3    | Missing content: stub defs for absent dependencies, texture path and casing fixes                 | Moderate, changes what loads |
 
-## What's Not Yet Built
+## What's not yet built
 
 - **Unattended reproduction of a fault that needs a colony**: the search judges a trial past the main menu, because a crash writes its own admission to the log and that is now read. What it cannot do is play the colony for you, so those trials are launched and judged rather than run unattended. A slowdown is still yours to call: nothing in the log says a run was slow
 - **Stub defs beyond SoundDef**: an empty def is only ever safe to stand in for where the absence degrades rather than breaks, which today is one type. Widening it is a judgement per type, not a feature
