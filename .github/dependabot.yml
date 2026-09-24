@@ -1,0 +1,37 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+    groups:
+      github-actions-patch:
+        update-types: [patch]
+      github-actions-updates:
+        update-types: [minor, major]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+    groups:
+      npm-patch:
+        update-types: [patch]
+      npm-updates:
+        update-types: [minor, major]
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+    groups:
+      cargo-patch:
+        update-types: [patch]
+      cargo-updates:
+        update-types: [minor, major]
