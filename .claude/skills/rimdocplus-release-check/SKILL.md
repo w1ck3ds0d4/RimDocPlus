@@ -53,7 +53,7 @@ The dry run checks, and reports pass/fail on each:
 - the branch is `main`, the tree is clean, and it is level with `origin/main`.
 - the target tag (`v<version>`) does not already exist.
 - CI has a `success` run for this exact commit SHA (checked via `gh run list
-  --branch main --limit 10 --json headSha,conclusion,status`, indexed rather than
+--branch main --limit 10 --json headSha,conclusion,status`, indexed rather than
   piped into `Select-Object -First 1` so a thrown pipeline error can't be
   swallowed and misreported as "no run yet").
 
