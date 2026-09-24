@@ -4,11 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 # Cancel superseded runs on the same ref to save minutes.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # The analysis layer is pure TypeScript with no shell of its own, so it checks out
@@ -129,3 +133,25 @@ jobs:
             src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: error
           retention-days: 14
+
+  automerge:
+    name: Auto-merge Dependabot patch updates
+    needs: [web, shell]
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v2
+      - name: Merge when every update in the PR is a patch
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          t="${PR_TITLE#chore: }"
+          gh pr merge "$PR_URL" --squash --subject "(chore) ${t,,} (#$PR_NUMBER)" --body ""
