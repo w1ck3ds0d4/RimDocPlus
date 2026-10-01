@@ -49,7 +49,7 @@ Banners reach the two builds by different routes, because neither can use the ot
 
 ### Doctor (L1 static analysis)
 
-Eleven independent rules, each provable without launching the game:
+Independent rules, each provable without launching the game:
 
 - **orphan-active**: enabled package ids with no folder on disk
 - **duplicate-package-id**: the same id in two folders, where RimWorld silently picks one
@@ -60,6 +60,8 @@ Eleven independent rules, each provable without launching the game:
 - **load-order-violation**: `loadAfter` and `loadBefore` constraints the current order breaks
 - **version-mismatch**: mods not advertising the running game cycle, collapsed into one counted finding
 - **bundled-assemblies**: two or more mods shipping the same library. RimWorld loads assemblies into one process, so the first copy wins and the rest are ignored; where the copies are different versions, whichever mod loads second is silently bound to the other's build and fails in a way that looks like a fault in the wrong mod. Reported, never repaired, since whether a bundled library can be removed is the author's call
+- **duplicate-defs**: a mod whose defs are all also declared by another mod, so the later one silently wins
+- **load-last-position**: a mod that asks to load last in its description but has many mods loading after it
 - **workshop-updates**: mods the Workshop has updated more recently than the copy on disk. Steam normally keeps subscriptions current, so a gap usually means a download did not land. Needs `pnpm workshop` data, ignores gaps under two days as folder-time noise, and pairs with Retry download
 
 Every finding carries a proposed repair tagged with its tier and whether it can be applied automatically. The severity counts above the list are filters: click one to show only that severity, click it again to clear. A filter clears itself once nothing of that severity is left, so repairing the last critical never leaves an empty list behind.
@@ -117,7 +119,7 @@ One button that assesses everything, applies what is provably safe, and stages t
 - **Needs you** - Workshop subscriptions and OS settings, with links
 - **No repair yet** - findings the engine cannot act on
 
-The "resolved" count is produced by re-running the rules against the repaired modpack, not by subtracting what it attempted. Triage does not claim the game runs: faults that only appear once the game is executing need the supervised launch and the headless boot check, neither of which is built.
+The "resolved" count is produced by re-running the rules against the repaired modpack, not by subtracting what it attempted. Triage itself does not run the game: faults that only appear once the game is executing need Play and watch or Find the culprit.
 
 ### Library and Workshop data
 
@@ -172,6 +174,10 @@ Measured from the files on disk, not estimated from heuristics.
 - **Downscale repair** (Tier 3): resizes to a maximum dimension preserving aspect ratio, with a real before/after figure computed per texture from its own dimensions. Backs up every file, and never runs automatically because it changes mod content.
 
 On the 253-mod install this was built against: 20.4 GB of decoded texture data, 729 textures at 1024px or larger, costing 4.20 GB between them. Resizing those to 512px brings it to 0.60 GB, a 3.6 GB saving.
+
+### Tick cost
+
+Installs the companion mod into the game (and removes it again), reads its tick report, and shows per-mod rows on the Performance tab with their caveats.
 
 ### Backups
 
@@ -307,9 +313,8 @@ Every watched run is recorded with what it cost: the startup phases the game rep
 peak working set, and the faults found in its log. Two runs can then be compared side by side, which
 is how you tell whether a modpack actually loads faster or just feels like it.
 
-All of it is measured from outside the process. There is no frame rate and no tick rate here, on
-purpose: attributing simulation time to a particular mod means timing methods inside the running
-game, and a number invented in its absence would read exactly like a measured one.
+Frame rate and frame time are not measured here, on purpose. Per-mod tick cost is, by the companion
+mod timing methods inside the running game, so a number is never invented in its absence.
 
 ### Sharing a session
 
