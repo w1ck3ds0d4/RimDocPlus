@@ -1,6 +1,6 @@
 ---
 name: rimdocplus-release-check
-description: Run the pre-tag checks and the release.ps1 dry run before cutting a RimDoc+ release, and walk the manual smoke test first. Use when Daniel says "release RimDoc+", "cut a RimDoc+ version", "is RimDoc+ ready to tag", or before pushing a v* tag on this repo.
+description: Run the pre-tag checks and the release.ps1 dry run before cutting a RimDoc+ release, and walk the manual smoke test first. Use when the maintainer says "release RimDoc+", "cut a RimDoc+ version", "is RimDoc+ ready to tag", or before pushing a v* tag on this repo.
 ---
 
 # RimDoc+ release check
@@ -20,7 +20,7 @@ path.
 `docs/SMOKE-TEST.md` exists because nothing in CI drives the app against a real
 modded install, and the bugs found there were sentences that had quietly stopped
 being true, a shape no automated test catches. Work down it before anything else.
-This needs Daniel at the keyboard against his own RimWorld install; report back
+This needs the maintainer at the keyboard against his own RimWorld install; report back
 what it covers rather than skipping it.
 
 ## 2. Run the same checks CI and the release workflow run
@@ -57,7 +57,7 @@ The dry run checks, and reports pass/fail on each:
   piped into `Select-Object -First 1` so a thrown pipeline error can't be
   swallowed and misreported as "no run yet").
 
-Never run this on Daniel's behalf without `-DryRun`: dropping it prompts to type
+Never run this on the maintainer's behalf without `-DryRun`: dropping it prompts to type
 the tag and then pushes it, which starts a ~12-minute build and opens a draft
 GitHub release. That step is his to take.
 
@@ -65,7 +65,7 @@ GitHub release. That step is his to take.
 
 The 253-mod install referenced throughout `docs/ARCHITECTURE.md`,
 `docs/HOW-IT-WORKS.md`, and `README.md` (load performance, texture-pass timing,
-mod-count-dependent bugs) is Daniel's real local RimWorld install, not a checked-in
+mod-count-dependent bugs) is the maintainer's real local RimWorld install, not a checked-in
 fixture; `src/dev-data/` is gitignored and absent in a fresh clone. If the change
 touches scan performance or mod-count-sensitive logic, ask him to run `pnpm scan`
 against that install and compare, rather than assuming CI's fixture-free run
@@ -92,5 +92,5 @@ covers it.
   actually sitting there green (`87b1c3f`); if the dry run reports that, check
   `gh run list --branch main --limit 10 --json headSha,conclusion,status` by hand
   before assuming CI has not finished.
-- Never drop `-DryRun` yourself; tagging and pushing is Daniel's call to make and
+- Never drop `-DryRun` yourself; tagging and pushing is the maintainer's call to make and
   confirm interactively.

@@ -8,14 +8,14 @@ status is not a fixed release: the L1 static rule set, session capture and the f
 `docs/SPEC.md` are the open surface, and the app keeps getting more useful the more of that
 built-out spec ships.
 
-> How this file is used: Claude Project threads build the first unticked item under **Now**, one item per branch and pull request, and tick it in that same PR as `- [x] ... (#PR)`. Daniel owns the order and the lists; threads never add to Now, Next or Later themselves, they propose under **Ideas**.
+> How this file is used: Claude Project threads build the first unticked item under **Now**, one item per branch and pull request, and tick it in that same PR as `- [x] ... (#PR)`. The maintainer owns the order and the lists; threads never add to Now, Next or Later themselves, they propose under **Ideas**.
 
 ## Now
 
 - [ ] **Add CHANGELOG.md**: a Keep a Changelog file built from tags and merged PRs, since v0.1.0
       shipped 2026-09-08 with no changelog in tree. Done when: the file exists and covers v0.1.0.
 - [ ] **Decide on the v1 acceptance bar**: the app has no ROADMAP.md today despite being the
-      most actively developed repo in the fleet; this file starts that, but Daniel should confirm
+      most actively developed repo in the fleet; this file starts that, but the maintainer should confirm
       whether "continue" or an explicit "release: v1" framing fits better given it is already
       public with users. Done when: the status line above is confirmed or changed.
 - [ ] **XML patch simulation** (`docs/SPEC.md` L1 planned): run every `PatchOperation` against
