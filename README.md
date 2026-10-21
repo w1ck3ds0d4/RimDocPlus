@@ -10,9 +10,50 @@ Built as a Tauri v2 desktop app (Rust + React + TypeScript), with a .NET sidecar
 
 > **Design rule:** RimDoc+ never edits a mod in place. Every repair is either an overlay mod that loads after the target or a derived copy in the vault with a diff attached, so the original stays pristine and every change is one click from reverted. Fixes are distributed as recipes applied to your own copy, never as redistributed mod files.
 
----
+## Contents
 
-## Features (Built)
+- [Tech stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Getting started](#getting-started)
+- [Features (built)](#features-built)
+- [How the repair tiers work](#how-the-repair-tiers-work)
+- [What's not yet built](#whats-not-yet-built)
+- [Documentation](#documentation)
+- [License](#license)
+
+## Tech stack
+
+| Layer               | Choice                                | Why                                                                                      |
+| ------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Shell               | Tauri v2 (Rust)                       | Native filesystem access, process supervision, small binary                              |
+| UI                  | React 19 + TypeScript + Vite          | Same stack as the rest of the toolkit                                                    |
+| Analysis            | Pure TypeScript                       | Runs in the browser preview and headless under vitest, no Rust round trip to test a rule |
+| Assembly inspection | .NET sidecar (Mono.Cecil)             | Harmony target resolution and IL rewriting need the real .NET metadata reader            |
+| Telemetry           | Companion RimWorld mod (C# + Harmony) | The only way to get per-mod tick attribution from inside the running game                |
+
+The split is deliberate: Rust does IO, hashing, and process control; TypeScript does parsing and rules; C# does anything that has to understand a .NET assembly.
+
+## Prerequisites
+
+- Node 20+ and pnpm
+- Rust stable (for the desktop shell)
+- .NET 8+ (for the assembly sidecar)
+- A RimWorld install to point it at
+
+## Getting started
+
+```bash
+pnpm install
+pnpm scan          # read the local install, write dev fixtures
+pnpm dev           # browser preview at http://localhost:1420
+pnpm test          # rules and parsers, headless
+```
+
+`pnpm scan` auto-detects common Steam install locations and the platform save-data folder. Pass a specific log with `pnpm scan --log path/to/Player.log`. The fixtures it writes to `src/dev-data/` are gitignored, since they describe one machine's install.
+
+Without fixtures the UI renders an empty state telling you to run the scan, so a fresh clone starts cleanly.
+
+## Features (built)
 
 ### Home
 
@@ -49,7 +90,7 @@ Banners reach the two builds by different routes, because neither can use the ot
 
 ### Doctor (L1 static analysis)
 
-Independent rules, each provable without launching the game:
+Eleven independent rules, each provable without launching the game:
 
 - **orphan-active**: enabled package ids with no folder on disk
 - **duplicate-package-id**: the same id in two folders, where RimWorld silently picks one
@@ -60,8 +101,6 @@ Independent rules, each provable without launching the game:
 - **load-order-violation**: `loadAfter` and `loadBefore` constraints the current order breaks
 - **version-mismatch**: mods not advertising the running game cycle, collapsed into one counted finding
 - **bundled-assemblies**: two or more mods shipping the same library. RimWorld loads assemblies into one process, so the first copy wins and the rest are ignored; where the copies are different versions, whichever mod loads second is silently bound to the other's build and fails in a way that looks like a fault in the wrong mod. Reported, never repaired, since whether a bundled library can be removed is the author's call
-- **duplicate-defs**: a mod whose defs are all also declared by another mod, so the later one silently wins
-- **load-last-position**: a mod that asks to load last in its description but has many mods loading after it
 - **workshop-updates**: mods the Workshop has updated more recently than the copy on disk. Steam normally keeps subscriptions current, so a gap usually means a download did not land. Needs `pnpm workshop` data, ignores gaps under two days as folder-time noise, and pairs with Retry download
 
 Every finding carries a proposed repair tagged with its tier and whether it can be applied automatically. The severity counts above the list are filters: click one to show only that severity, click it again to clear. A filter clears itself once nothing of that severity is left, so repairing the last critical never leaves an empty list behind.
@@ -119,7 +158,7 @@ One button that assesses everything, applies what is provably safe, and stages t
 - **Needs you** - Workshop subscriptions and OS settings, with links
 - **No repair yet** - findings the engine cannot act on
 
-The "resolved" count is produced by re-running the rules against the repaired modpack, not by subtracting what it attempted. Triage itself does not run the game: faults that only appear once the game is executing need Play and watch or Find the culprit.
+The "resolved" count is produced by re-running the rules against the repaired modpack, not by subtracting what it attempted. Triage does not claim the game runs: faults that only appear once the game is executing need the supervised launch and the headless boot check, neither of which is built.
 
 ### Library and Workshop data
 
@@ -174,10 +213,6 @@ Measured from the files on disk, not estimated from heuristics.
 - **Downscale repair** (Tier 3): resizes to a maximum dimension preserving aspect ratio, with a real before/after figure computed per texture from its own dimensions. Backs up every file, and never runs automatically because it changes mod content.
 
 On the 253-mod install this was built against: 20.4 GB of decoded texture data, 729 textures at 1024px or larger, costing 4.20 GB between them. Resizing those to 512px brings it to 0.60 GB, a 3.6 GB saving.
-
-### Tick cost
-
-Installs the companion mod into the game (and removes it again), reads its tick report, and shows per-mod rows on the Performance tab with their caveats.
 
 ### Backups
 
@@ -313,8 +348,9 @@ Every watched run is recorded with what it cost: the startup phases the game rep
 peak working set, and the faults found in its log. Two runs can then be compared side by side, which
 is how you tell whether a modpack actually loads faster or just feels like it.
 
-Frame rate and frame time are not measured here, on purpose. Per-mod tick cost is, by the companion
-mod timing methods inside the running game, so a number is never invented in its absence.
+All of it is measured from outside the process. There is no frame rate and no tick rate here, on
+purpose: attributing simulation time to a particular mod means timing methods inside the running
+game, and a number invented in its absence would read exactly like a measured one.
 
 ### Sharing a session
 
@@ -457,38 +493,6 @@ Two things it deliberately does not call breakage. A patch class carrying a Harm
 
 See [sidecar/README.md](sidecar/README.md) for the probe itself, which runs standalone against any install.
 
-## Tech Stack
-
-| Layer               | Choice                                | Why                                                                                      |
-| ------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Shell               | Tauri v2 (Rust)                       | Native filesystem access, process supervision, small binary                              |
-| UI                  | React 19 + TypeScript + Vite          | Same stack as the rest of the toolkit                                                    |
-| Analysis            | Pure TypeScript                       | Runs in the browser preview and headless under vitest, no Rust round trip to test a rule |
-| Assembly inspection | .NET sidecar (Mono.Cecil)             | Harmony target resolution and IL rewriting need the real .NET metadata reader            |
-| Telemetry           | Companion RimWorld mod (C# + Harmony) | The only way to get per-mod tick attribution from inside the running game                |
-
-The split is deliberate: Rust does IO, hashing, and process control; TypeScript does parsing and rules; C# does anything that has to understand a .NET assembly.
-
-## Prerequisites
-
-- Node 20+ and pnpm
-- Rust stable (for the desktop shell)
-- .NET 8+ (for the assembly sidecar)
-- A RimWorld install to point it at
-
-## Getting Started
-
-```bash
-pnpm install
-pnpm scan          # read the local install, write dev fixtures
-pnpm dev           # browser preview at http://localhost:1420
-pnpm test          # rules and parsers, headless
-```
-
-`pnpm scan` auto-detects common Steam install locations and the platform save-data folder. Pass a specific log with `pnpm scan --log path/to/Player.log`. The fixtures it writes to `src/dev-data/` are gitignored, since they describe one machine's install.
-
-Without fixtures the UI renders an empty state telling you to run the scan, so a fresh clone starts cleanly.
-
 ## How the repair tiers work
 
 Repairs are graded by how much machinery they need and how much can go wrong. See [docs/SPEC.md](docs/SPEC.md) for the full model.
@@ -499,7 +503,7 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 | 2    | XML patch repair: rewriting a stale xpath, quieting a failed operation, resolving a def collision | Low, diffed before apply     |
 | 3    | Missing content: stub defs for absent dependencies, texture path and casing fixes                 | Moderate, changes what loads |
 
-## What's Not Yet Built
+## What's not yet built
 
 - **Unattended reproduction of a fault that needs a colony**: the search judges a trial past the main menu, because a crash writes its own admission to the log and that is now read. What it cannot do is play the colony for you, so those trials are launched and judged rather than run unattended. A slowdown is still yours to call: nothing in the log says a run was slow
 - **Stub defs beyond SoundDef**: an empty def is only ever safe to stand in for where the absence degrades rather than breaks, which today is one type. Widening it is a judgement per type, not a feature
