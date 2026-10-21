@@ -37,7 +37,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.check-token.outputs.skip == 'false'
 
       - uses: anthropics/claude-code-action@v1
