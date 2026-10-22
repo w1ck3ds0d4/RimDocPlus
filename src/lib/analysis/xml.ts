@@ -13,12 +13,34 @@ export interface XmlDependency {
   displayName?: string;
 }
 
-/** Build the open/close pair for a tag, tolerating attributes and stray whitespace. */
+const tagPatternCache = new Map<string, RegExp>();
+
+/** Build the open/close pair for a tag, tolerating attributes and stray whitespace. Cached per
+ * tag so the same regex is not recompiled on every read across a large mod library. The pattern
+ * is non-global and used with exec(), so there is no lastIndex state to share. */
 function tagPattern(tag: string): RegExp {
-  return new RegExp(String.raw`<${tag}(?:\s[^>]*)?>([\s\S]*?)<\/${tag}\s*>`, "i");
+  let re = tagPatternCache.get(tag);
+  if (!re) {
+    re = new RegExp(String.raw`<${tag}(?:\s[^>]*)?>([\s\S]*?)<\/${tag}\s*>`, "i");
+    tagPatternCache.set(tag, re);
+  }
+  return re;
 }
 
 const LI_PATTERN = /<li(?:\s[^>]*)?>([\s\S]*?)<\/li\s*>/gi;
+
+const stripPatternCache = new Map<string, RegExp>();
+
+/** Global `<tag>...</tag>` matcher, cached per tag. Safe to reuse across String.replace calls,
+ * which reset the regex lastIndex on each call. */
+function stripPattern(tag: string): RegExp {
+  let re = stripPatternCache.get(tag);
+  if (!re) {
+    re = new RegExp(String.raw`<${tag}(?:\s[^>]*)?>[\s\S]*?<\/${tag}\s*>`, "gi");
+    stripPatternCache.set(tag, re);
+  }
+  return re;
+}
 
 /**
  * Remove whole `<tag>...</tag>` blocks.
@@ -29,10 +51,7 @@ const LI_PATTERN = /<li(?:\s[^>]*)?>([\s\S]*?)<\/li\s*>/gi;
  * id as its identity, and every mod depending on Harmony would collapse into one entry.
  */
 export function stripBlocks(xml: string, tags: string[]): string {
-  return tags.reduce(
-    (acc, tag) => acc.replace(new RegExp(String.raw`<${tag}(?:\s[^>]*)?>[\s\S]*?<\/${tag}\s*>`, "gi"), ""),
-    xml,
-  );
+  return tags.reduce((acc, tag) => acc.replace(stripPattern(tag), ""), xml);
 }
 
 /** First text value of `tag`, trimmed. Case-insensitive on the tag name. */
