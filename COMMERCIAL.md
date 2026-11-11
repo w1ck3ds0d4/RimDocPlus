@@ -6,7 +6,7 @@ If you want to use this project without the AGPL requirements - for example, emb
 
 ## Contact
 
-daniel.svs@outlook.com
+support@wickitlab.com
 
 Please include:
 
