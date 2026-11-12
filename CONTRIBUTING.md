@@ -14,7 +14,7 @@ pnpm dev          # the browser build, on a fixture
 pnpm tauri:dev    # the desktop app, against your real install
 ```
 
-You need Node 20+, pnpm 10, and for the desktop build a Rust toolchain (1.77 or newer) plus
+You need Node 22.19 or newer (see .nvmrc), pnpm 10, and for the desktop build a Rust toolchain (1.77 or newer) plus
 the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform.
 
 The browser build runs without a RimWorld install. It reads a fixture from `src/dev-data/`,
