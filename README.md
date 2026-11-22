@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="RimDoc+ - diagnose, repair, supervise" />
+  <img src="assets/banner.png" alt="RimDocPlus banner" />
 </p>
 
 **Diagnose, repair, and supervise a modded RimWorld install**
 
 RimDoc+ is a desktop companion for large RimWorld mod lists. It reads your install, proves what will break before you press Play, supervises the game while it runs with a structured live log, and turns the wreckage of a crash into a ranked list of causes with repairs attached. Where a mod manager answers "what order do these load in", RimDoc+ answers "why is my colony throwing 40,000 red errors and which of my 253 mods did it".
 
-Built as a Tauri v2 desktop app (Rust + React + TypeScript), with a .NET sidecar for assembly inspection. The parsing and diagnostic layers are pure TypeScript, so the whole rules engine runs headless under `vitest` against fixtures captured from a real install.
+It is a Tauri v2 desktop app (Rust + React + TypeScript) with a .NET sidecar for assembly inspection and a small companion RimWorld mod for per-mod tick timing. The parsing and diagnostic layers are pure TypeScript, so the whole rules engine runs headless under `vitest` against fixtures captured from a real install, and the same UI runs in a browser preview on a fixture.
 
 > **Design rule:** RimDoc+ never edits a mod in place. Every repair is either an overlay mod that loads after the target or a derived copy in the vault with a diff attached, so the original stays pristine and every change is one click from reverted. Fixes are distributed as recipes applied to your own copy, never as redistributed mod files.
 
@@ -17,481 +17,242 @@ Built as a Tauri v2 desktop app (Rust + React + TypeScript), with a .NET sidecar
 - [Getting started](#getting-started)
 - [Features (built)](#features-built)
 - [How the repair tiers work](#how-the-repair-tiers-work)
-- [What's not yet built](#whats-not-yet-built)
 - [Documentation](#documentation)
+- [Security](#security)
+- [What's not yet built](#whats-not-yet-built)
 - [License](#license)
 
 ## Tech stack
 
-| Layer               | Choice                                | Why                                                                                      |
+| Layer               | Technology                            | Why                                                                                      |
 | ------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------- |
 | Shell               | Tauri v2 (Rust)                       | Native filesystem access, process supervision, small binary                              |
-| UI                  | React 19 + TypeScript + Vite          | Same stack as the rest of the toolkit                                                    |
+| UI                  | React 19 + TypeScript + Vite          | One UI for the desktop app and the browser preview                                       |
 | Analysis            | Pure TypeScript                       | Runs in the browser preview and headless under vitest, no Rust round trip to test a rule |
-| Assembly inspection | .NET sidecar (Mono.Cecil)             | Harmony target resolution and IL rewriting need the real .NET metadata reader            |
+| Assembly inspection | .NET sidecar (Mono.Cecil)             | Harmony target resolution needs the real .NET metadata reader                            |
 | Telemetry           | Companion RimWorld mod (C# + Harmony) | The only way to get per-mod tick attribution from inside the running game                |
+| Tests               | vitest, `cargo test`, `dotnet test`   | Rules and parsers run against fixtures; the shell and the probe have their own suites    |
 
 The split is deliberate: Rust does IO, hashing, and process control; TypeScript does parsing and rules; C# does anything that has to understand a .NET assembly.
 
 ## Prerequisites
 
-- Node 20+ and pnpm
-- Rust stable (for the desktop shell)
-- .NET 8+ (for the assembly sidecar)
-- A RimWorld install to point it at
+- Node 22.19+ (see `.nvmrc`) and pnpm 10
+- Rust stable, 1.77 or newer, plus the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform (for the desktop shell)
+- .NET 10 SDK (for the assembly sidecar and the companion mod; the app runs without them and says so)
+- A RimWorld install to point it at (the browser preview runs on a fixture without one)
+
+The packaged releases are Windows only. The Steam and process handling in the desktop shell uses `steam.exe`, `tasklist`, `reg` and `taskkill`.
 
 ## Getting started
 
-```bash
-pnpm install
-pnpm scan          # read the local install, write dev fixtures
-pnpm dev           # browser preview at http://localhost:1420
-pnpm test          # rules and parsers, headless
-```
+### Install a release
 
-`pnpm scan` auto-detects common Steam install locations and the platform save-data folder. Pass a specific log with `pnpm scan --log path/to/Player.log`. The fixtures it writes to `src/dev-data/` are gitignored, since they describe one machine's install.
+Download the latest installer from the [Releases page](https://github.com/w1ck3ds0d4/RimDocPlus/releases/latest): an NSIS `-setup.exe` or an `.msi`. The installers are unsigned, so Windows SmartScreen warns on first run: click **More info**, then **Run anyway**.
 
-Without fixtures the UI renders an empty state telling you to run the scan, so a fresh clone starts cleanly.
+### Run from source
+
+1. Install dependencies and read your local install into dev fixtures:
+
+   ```bash
+   pnpm install
+   pnpm scan          # auto-detects Steam install locations and the save-data folder
+   ```
+
+   Pass a specific log with `pnpm scan --log path/to/Player.log`. The fixtures land in `src/dev-data/`, which is gitignored because they describe one machine's install. Without them the UI renders an empty state telling you to run the scan.
+
+2. Start the browser preview at `http://localhost:1420`, and run the headless rules and parser tests:
+
+   ```bash
+   pnpm dev
+   pnpm test
+   ```
+
+3. Run or build the desktop app:
+
+   ```bash
+   pnpm tauri:dev     # desktop app against the dev server
+   pnpm tauri:build   # release binary and installers
+   ```
+
+4. Optional, to fetch Workshop metadata (the opt-in network step; results cache for a week):
+
+   ```bash
+   pnpm workshop           # fetch anything missing or older than a week
+   pnpm workshop --force   # refetch everything
+   ```
+
+5. Optional, to enable the Harmony check and per-mod tick timing, build and stage the sidecar and the companion mod:
+
+   ```bash
+   pnpm probe:build        # dotnet publish of the patch probe
+   pnpm probe:stage        # copy it where Tauri expects a sidecar
+   pnpm probe:verify       # trimmed and untrimmed builds must report the same thing
+   pnpm probe-mod:build    # the companion RimWorld mod
+   pnpm probe-mod:stage
+   ```
+
+6. Before opening a pull request, run `pnpm verify` (types, tests, formatting) and `cargo test --manifest-path src-tauri/Cargo.toml`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the rest of the checks.
 
 ## Features (built)
 
-### Home
-
-The landing page: whether anything needs attention, and what has been happening to the install.
-
-- A one-line verdict coloured by severity, so the page reads before any of its numbers do
-- Blocking findings, warnings, faults from the last session and texture memory, each a way into the tab that explains it
-- **What RimDoc+ did**: a journal of every repair applied, load order written and rollback run, with what an undo would reach. Recorded where the change happens, so nothing can be missed by omission
-- **What changed in your mods**: added, removed and updated since the previous scan, from folder modification times. Steam replaces Workshop mods without asking, so the change that broke a save is often one you never made
-- **What's new in RimDoc+**: the app's own release notes, including what is still not true of the build you are running
-
-The install comparison is stored against the scan that produced it rather than recomputed, because the comparison is destructive: once the snapshot advances the previous state is gone, and reopening the app would otherwise report no changes at all.
-
-### Mod details
-
-Click any mod, in the Library or the load order, for everything the scan already read about it:
-
-- The mod's own banner image, read from `About/Preview.png`
-- Author, package id, source, load position and which game cycles it advertises
-- Description, with the rich-text markup authors write in it stripped rather than printed raw
-- What it costs: disk, texture count, decoded texture memory, patch operations, subscribers, when its folder last changed
-- What it needs, what depends on it, what it conflicts with, and what it must load around. Every relationship is a jump to that mod, and one that is declared but not installed stays visible and inert rather than being dropped
-- The findings that name it, so the Doctor's verdict on a mod is next to the mod
-
-Banners reach the two builds by different routes, because neither can use the other's. The desktop shell reads them through a command that will only open a `Preview` image inside an `About` folder, which is narrower than enabling Tauri's asset protocol and would have let the webview read any file on the machine to show a picture. The browser build is served them in development by a Vite middleware whose allowlist is the exact set of paths the scan recorded.
-
-### Install scan
+### Install scan and library
 
 - Walks the official `Data` folder, local `Mods`, and the Steam Workshop content folder
 - Tolerant `About.xml` reader that survives the malformed files a strict XML parser rejects: stray ampersands, mid-file BOMs, unclosed tags, inconsistent casing
-- Resolves each mod's own `packageId` correctly even when the file declares `<modDependencies>` above its own identity, which otherwise collapses every Harmony-dependent mod into one entry
-- Detects compiled assemblies and XML patch folders, including payloads nested under a version folder such as `1.6/Assemblies`
+- Resolves each mod's own `packageId` even when the file declares `<modDependencies>` above its own identity
+- Detects compiled assemblies and XML patch folders, including payloads under a version folder such as `1.6/Assemblies`
 - Cross-references `ModsConfig.xml` to mark active mods and their load position
+- Live scanning in the desktop build: a **Rescan** button, plus an automatic rescan after any repair that touched disk. The Rust scanner is a port of `scripts/scan.mjs`, validated by diffing every field of both against the same 252-mod install. Both skip `.rimdocbak` backups so a repair never makes the next scan report what it just resolved
+- A **Library** table of every installed mod, sortable by dependents, decoded texture cost, disk size, Workshop subscribers and favorites, and days since the author updated it
+- **Cleanup candidates**: enabled mods with real texture weight that nothing depends on. A shortlist to look at, not a recommendation
+- **Mod details** for any mod: its own banner from `About/Preview.png`, author, package id, source, load position, advertised game versions, cost (disk, textures, texture memory, patch operations), what it needs, what depends on it, what it conflicts with, and the findings that name it. Relationships are jumps to that mod; a declared but missing mod stays visible and inert
 
-### Doctor (L1 static analysis)
+### Home
 
-Eleven independent rules, each provable without launching the game:
+- A one-line verdict colored by severity, with blocking findings, warnings, faults from the last session and texture memory, each a way into the tab that explains it
+- **What RimDoc+ did**: a journal of every repair applied, load order written and rollback run
+- **What changed in your mods**: added, removed and updated since the previous scan, from folder modification times, stored against the scan that produced it
+- **What's new in RimDoc+**: the app's own release notes
+
+### Doctor (static analysis)
+
+Independent rules, each provable without launching the game:
 
 - **orphan-active**: enabled package ids with no folder on disk
 - **duplicate-package-id**: the same id in two folders, where RimWorld silently picks one
-- **dlc-after-mods**: official expansions loading behind third-party content, so mods patched defs that did not exist yet
+- **dlc-after-mods**: official expansions loading behind third-party content
 - **bootstrap-position**: Prepatcher or Harmony loading after a mod that ships C#
 - **missing-dependency** and **inactive-dependency**: separated, because one needs an install and the other needs a click
 - **incompatible-pair**: both mods enabled where one declares the conflict
 - **load-order-violation**: `loadAfter` and `loadBefore` constraints the current order breaks
+- **load-last-position**: a mod that asks to load last but has many mods behind it
+- **duplicate-defs**: a mod that declares nothing another mod does not already declare
 - **version-mismatch**: mods not advertising the running game cycle, collapsed into one counted finding
-- **bundled-assemblies**: two or more mods shipping the same library. RimWorld loads assemblies into one process, so the first copy wins and the rest are ignored; where the copies are different versions, whichever mod loads second is silently bound to the other's build and fails in a way that looks like a fault in the wrong mod. Reported, never repaired, since whether a bundled library can be removed is the author's call
-- **workshop-updates**: mods the Workshop has updated more recently than the copy on disk. Steam normally keeps subscriptions current, so a gap usually means a download did not land. Needs `pnpm workshop` data, ignores gaps under two days as folder-time noise, and pairs with Retry download
+- **bundled-assemblies**: two or more mods shipping the same library; reported, never repaired, since removing a bundled library is the author's call
+- **workshop-updates**: mods the Workshop has updated more recently than the copy on disk (needs `pnpm workshop` data)
+- **patch-override**, **oversized-textures** and **texture-footprint**, described under XML patch analysis and Performance below
+- **Harmony patch check**: see below
 
-Every finding carries a proposed repair tagged with its tier and whether it can be applied automatically. The severity counts above the list are filters: click one to show only that severity, click it again to clear. A filter clears itself once nothing of that severity is left, so repairing the last critical never leaves an empty list behind.
+Every finding carries a proposed repair tagged with its tier and whether it can be applied automatically. The severity counts above the list are filters. The doctor analyses the modpack you are editing, not the load order the game happens to hold, so toggling a mod updates the findings immediately. See [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) for each rule in detail.
+
+### Harmony patch check
+
+When RimWorld updates, methods get renamed, moved or deleted, and a Harmony patch aimed at one that has gone cannot apply. **Check Harmony patches** on the Doctor tab reads the assemblies of every code mod in your modpack and resolves each declared patch target against the installed game. It reads .NET metadata and never loads an assembly, so nothing in any mod runs.
+
+- One finding per mod rather than per patch; where a method moved, it says where to
+- A patch class with a Harmony `Prepare()` is reported separately, since it may skip a missing target on purpose
+- Patches whose target is built in code (`TargetMethod()`, `harmony.Patch(...)`) are counted and reported as unchecked rather than passing silently
+
+See [sidecar/README.md](sidecar/README.md) for the probe itself, which runs standalone against any install.
+
+### XML patch analysis
+
+The scanner reads every mod's `Patches` folder, including the versioned `1.6/Patches` layout, and extracts each xpath-targeting operation, nested ones included. Collisions are reported per pair of mods, only when at least one side overwrites rather than adds, and the finding names which mod wins by load order.
+
+Overrides are explained rather than flagged, because overwriting is how RimWorld content layers. Each one is a note with its evidence quoted: **declared** (the later mod lists `loadAfter` or depends on the other), **documented** (its description says where to load it), **content** (its name or description reads as layered content), or **assumed**. Nothing here proposes a reorder.
 
 ### Session report (log intelligence)
 
 - Filters Unity's fallback-handler noise, which is most of what makes a RimWorld log unreadable
-- Clusters identical faults by fingerprint so 40,000 repeats of one NullReference become one row with a count
-- **Full stack trace on every fault**, with engine plumbing dimmed and the frames belonging to a mod highlighted. In a 40-frame Mono trace, typically three lines matter and the rest is reflection.
-- Reads the trace across the `[Ref ...]` tag RimWorld interleaves between a message and its stack, which is why traces are captured at all
-- Consumes the whole trace block, so a continuation line such as `(wrapper ...System.Exception&)` is never reported as its own error
-- Reads Harmony patch annotations (`- POSTFIX ModName: ...`) out of the trace, which name the patching mod outright rather than leaving it to be guessed
+- Clusters identical faults by fingerprint, so 40,000 repeats of one NullReference become one row with a count
+- A full stack trace on every fault, with engine plumbing dimmed and mod frames highlighted
 - Attributes each fault to a mod by matching stack-frame namespace roots and inline tokens against the scanned mod list
-- Explains recognised conditions in plain language instead of echoing the raw line: ghost Workshop subscriptions, duplicate loads, settings-constructor failures, failed XML patches, unresolved cross-references, broken vsync, refresh-rate drift
-- Detects the mod-config reset, where a failed load makes RimWorld silently rewrite ModsConfig.xml back to Core only
-- Scrapes the environment header: game build, Unity version, GPU, VRAM, driver
-- Ranks startup phase costs, so a slow launch points at the phase responsible
+- Reads Harmony patch annotations (`- POSTFIX ModName: ...`) out of the trace and lists each patch above it with its kind, method and owning mod; a transpiler is marked differently from a prefix or postfix
+- Explains recognised conditions in plain language: ghost Workshop subscriptions, duplicate loads, settings-constructor failures, failed XML patches, unresolved cross-references, broken vsync, refresh-rate drift
+- Detects the mod-config reset, where a failed load makes RimWorld rewrite `ModsConfig.xml` back to Core only
+- Scrapes the environment header (game build, Unity version, GPU, VRAM, driver) and ranks startup phase costs
+- **Findings the scan has settled**: where the current scan can show that a fault is fixed (a duplicate with one copy left, a ghost subscription whose mod has arrived, a mod list that is populated again), the finding moves to a note with its reason. Nothing else is settled, because silence is not proof
+- **Share a session**: the environment, the clustered faults with what each was blamed on, and the active mod list, small enough to paste into a forum (252 lines and 12.8 KB on the reference install). Copied or saved, never sent
 
-**Findings the scan has settled.** A log finding describes a run that has already finished, so
-repairing the files cannot change what the log says happened. A fixed fault used to come back on
-every triage and read as the repair having achieved nothing. Where the current scan can settle the
-question it now says so and moves the finding to a note with its reason: a duplicate when one copy
-is left, a ghost subscription when the mod has arrived, a mod-list reset when the order holds mods
-again. Nothing else is settled, because most faults leave no trace on disk and silence is not
-proof.
+### Modpacks and load order
 
-### Modpacks
+- A modpack is a named, saved mod list in load order. Create from the game's current setup or start minimal; duplicate, rename and delete
+- A drift indicator per modpack shows what it adds, removes and reorders relative to what the game currently runs
+- Export as `ModsConfig.xml` or as a portable `.rimdoc.json`
+- Dependents count per mod: how many enabled mods declare it. That is the difference between a mod you can drop and one that takes fifty others with it
+- Enable and disable individually or in bulk across a filtered set; enabling inserts at a defensible position so a framework lands ahead of what depends on it
+- **Auto-sort**: a stable topological sort putting bootstrappers first, then Ludeon content in canonical order, then everything else resolved against `loadAfter`, `loadBefore`, `forceLoadAfter`, `forceLoadBefore` and dependency constraints. Ties keep their current position so the diff stays reviewable, and constraint cycles keep their existing order
+- Filter by name or package id, tagged by source and by whether the mod ships C# or XML patches
 
-A modpack is a named, saved mod list: the set of package ids you want the game to run, in load order. Build as many as you like and switch between them.
+### Repairs and triage
 
-- Create from the game's current setup, or start minimal with Ludeon content and the bootstrappers only
-- Duplicate, rename, and delete
-- Drift indicator per modpack showing what it adds, removes, and reorders relative to what the game is currently set to run
-- Export as `ModsConfig.xml`, which is the file RimWorld reads on launch, or as a portable `.rimdoc.json`
+Every finding with a repair explains its plan before anything happens; the button reveals what would change, and only the plan carries the action.
 
-### Load order editor
+- **Modpack repairs** apply instantly and are fully undoable, because a modpack is app state: drop orphan entries, enable a dependency, reorder to satisfy constraints
+- **Choice repairs** refuse to guess but still reason. A duplicate install is ranked on version support, local pins, update recency and subscriber count, and the suggested copy says why; when the signals disagree, the disagreement is printed
+- **File repairs** list every path they would touch and generate a PowerShell script that backs up each file first
+- **External repairs** (resubscribing to a Workshop item) link straight to the right page
+- An **Auto** toggle: off, anything ambiguous is a modal question with a Recommended answer and its reasoning; on, the app answers using the same reasoning and records what it decided. Auto never touches disk unasked: a decision that removes files is staged into the repair script, which you read and run yourself
+- **Fix all automatic** applies every deterministic modpack repair in one batch, each planned against the previous result, undone as a unit
+- **Triage** assesses everything, applies what is provably safe as one undoable step, and stages the rest: needs your decision, needs a script (one PowerShell script, deduplicated), needs you (Workshop and OS settings, with links), and no repair yet. The resolved count comes from re-running the rules against the repaired modpack, and Triage does not claim the game runs
+- A streaming repair console with a wall-clock estimate for staged file work (a throughput model of 30 ms per file plus 15 ms per megapixel, validated within 1% on a 30-file sample)
+- Anything that cannot be undone asks first; Escape cancels and Enter is deliberately unbound
 
-- **Dependents count** per mod: how many enabled mods declare it as a dependency. Harmony reads 131 on the install this was built against, Vanilla Expanded Framework 48. That is the difference between a mod you can drop and one that takes fifty others with it.
-- Author descriptions from `About.xml`, on hover
-- Enable and disable any installed mod, individually or in bulk across a filtered set
-- Enabling inserts at a defensible position rather than appending, so a framework lands ahead of the mods that depend on it instead of behind them
-- Move a mod up or down the order
-- **Auto-sort**: stable topological sort putting bootstrappers first, then Ludeon content in canonical order, then everything else resolved against declared `loadAfter`, `loadBefore`, `forceLoadAfter`, `forceLoadBefore`, and dependency constraints. Ties keep their current position so a mostly-correct list barely moves and the diff stays reviewable. Constraint cycles are emitted in existing order rather than dropped.
-- Filterable by name or package id, tagged by source and by whether the mod ships C# or XML patches
-
-**The doctor analyses the modpack you are editing, not the load order the game happens to hold.** Toggling a mod updates the findings immediately. Turning off a framework that 53 mods depend on surfaces 53 findings before you ever launch the game.
-
-### Triage
-
-One button that assesses everything, applies what is provably safe, and stages the rest as a worklist:
-
-- **Applied to the modpack** - every deterministic repair, chained and committed as one undoable step
-- **Needs your decision** - the ambiguous ones, with the options spelled out
-- **Needs a script** - every disk change gathered into a single PowerShell script that backs up each file first, deduplicated so no file is touched twice
-- **Needs you** - Workshop subscriptions and OS settings, with links
-- **No repair yet** - findings the engine cannot act on
-
-The "resolved" count is produced by re-running the rules against the repaired modpack, not by subtracting what it attempted. Triage does not claim the game runs: faults that only appear once the game is executing need the supervised launch and the headless boot check, neither of which is built.
-
-### Library and Workshop data
-
-Every installed mod in one table, sortable by the things that actually differ:
-
-| Signal                           | Source                                  |
-| -------------------------------- | --------------------------------------- |
-| Depended on                      | local: how many enabled mods declare it |
-| Texture cost                     | local: decoded VRAM from PNG headers    |
-| Disk size                        | local                                   |
-| Subscribers, favorites           | Steam Workshop                          |
-| Days since the author updated it | Steam Workshop                          |
-
-**Cleanup candidates** narrows it to mods that are enabled, carrying real texture weight, and that nothing else depends on. Deliberately conservative, and a shortlist to look at rather than a recommendation: "nothing depends on it" and "you do not want it" are different statements, and only one of them is measurable.
-
-Workshop data is one of only two things that ever leave the machine, and it is a separate opt-in command:
-
-```bash
-pnpm workshop          # fetch anything missing or older than a week
-pnpm workshop --force  # refetch everything
-```
-
-What leaves the machine is a list of Workshop file ids, which are public identifiers for public mods. No Steam account, no API key, no credential: `GetPublishedFileDetails` is anonymous. Results cache to a gitignored file with a one-week TTL, and the app works fully without ever running it.
-
-### XML patch analysis
-
-RimWorld applies patches in load order and says nothing when two of them fight: the later operation just wins. That makes overwrite collisions invisible in the log and effectively undebuggable from inside the game.
-
-The scanner reads every mod's `Patches` folder, including the versioned `1.6/Patches` layout, and extracts each xpath-targeting operation. Extraction anchors on the xpath rather than the `Operation` element, because operations nest inside `PatchOperationSequence` and `PatchOperationConditional`, and the `Class` attribute also appears on def elements inside a `<value>` block. Every xpath belongs to the nearest `Class` above it, whatever the nesting.
-
-Collisions are reported per pair of mods rather than per path, and only when at least one side overwrites rather than adds. The finding names which mod wins, since load order decides it.
-
-Overrides are then explained rather than flagged. Overwriting is how RimWorld content layers: an expansion, a retexture or a patch mod exists precisely to change what an earlier mod set, so an override is the normal case and every one of these is reported as a note.
-
-What varies is how directly the intent can be evidenced, and the evidence is quoted so the reasoning can be disagreed with rather than just the conclusion:
-
-- **declared** - the later mod lists `loadAfter` or depends on the mod it overrides
-- **documented** - its description says where to load it. Rustic Meal Retexture's reads "Load this mod by the end of your mod list."
-- **content** - its description or name reads as layered content. Fantasy Biotech's is "A fantasy reimagining of Biotech."
-- **assumed** - nothing says either way, so it is taken as intended and noted as worth a glance only if the earlier mod's version was what you wanted
-
-Nothing here proposes a reorder. On the install this was built against, the "more specialised mod should win" heuristic was already satisfied in most cases and would have been actively wrong in the rest: Combat Extended overriding Vanilla Weapons Expanded is not a bug, it is what a combat overhaul is for.
-
-On that install: 9,809 xpath operations across 130 active mods, producing 12 overrides, 8 declared and 4 evidenced from the author's own description. None unexplained.
-
-### Performance analysis
-
-Measured from the files on disk, not estimated from heuristics.
-
-- **Texture footprint**: the scanner reads PNG headers for every texture and sums width x height x 4. Unity uploads textures decoded, so on-disk compression buys nothing at runtime: a 2048px texture costs 16 MB resident whether it compresses to 4 KB or 4 MB.
-- **Oversized textures**: everything at 1024px or larger, named per mod. RimWorld draws at roughly 64px per tile, so past 512px is detail the camera never resolves.
-- **Downscale repair** (Tier 3): resizes to a maximum dimension preserving aspect ratio, with a real before/after figure computed per texture from its own dimensions. Backs up every file, and never runs automatically because it changes mod content.
-
-On the 253-mod install this was built against: 20.4 GB of decoded texture data, 729 textures at 1024px or larger, costing 4.20 GB between them. Resizing those to 512px brings it to 0.60 GB, a 3.6 GB saving.
-
-### Backups
+### Backups and rollback
 
 Nothing is changed before a copy exists.
 
-- On first scan RimDoc+ records the load order as it was found, and never overwrites that record. It is kept apart from the modpack list rather than sitting in it as a second identical entry, and a **Restore original load order** control appears only once a modpack has actually diverged from it, since before that there is nothing to restore to.
-- Every generated script opens with a backup phase: it copies the save-data `Config` folder to `~/RimDoc-Backups/original-version` once and never overwrites it, so that copy stays the install as it was before RimDoc+ first touched anything rather than before the latest run.
-- Each run additionally copies every file it will change into a timestamped `run-*` folder, so one run can be undone as a unit.
-- Individual files still get a `.rimdocbak` alongside them, so a single change can be reverted on its own.
-- Every repair plan also generates a **rollback script**, which restores from those backups and reports what it restored and what it skipped. It lists the paths explicitly rather than searching for backups, since the plan already knows exactly what it touched, and it is safe to run twice.
+- On first scan RimDoc+ records the load order as found and never overwrites that record; **Restore original load order** appears only once a modpack has diverged from it
+- Every generated script copies the save-data `Config` folder to `~/RimDoc-Backups/original-version` once, then copies each file it will change into a timestamped `run-*` folder so one run can be undone as a unit
+- Individual files get a `.rimdocbak` alongside them
+- Every repair plan also generates a rollback script that lists exact paths, reports what it restored and skipped, and is safe to run twice
 
-### Repairs
+### Performance
 
-Every finding that has a repair explains its plan before anything happens. The button reveals what would change; only the plan carries the action.
+Measured from the files on disk, not estimated.
 
-Repairs split by what they actually have to touch:
+- **Texture footprint**: PNG headers are read and summed as width x height x 4, since Unity uploads textures decoded and on-disk compression buys nothing at runtime
+- **Oversized textures**: everything at 1024px or larger, named per mod
+- **Downscale repair** (tier 3): resizes to a maximum dimension preserving aspect ratio, with a before/after figure per texture, backed up first and never run automatically. On the 253-mod install this was built against, 729 oversized textures cost 4.20 GB and resizing to 512px brings that to 0.60 GB
+- **Per-mod tick cost**: the companion mod times each mod's code per tick from inside the running game and reports it on the Performance tab
 
-- **Modpack repairs** apply instantly and are fully undoable, because a modpack is app state: drop orphan entries, enable a disabled dependency, reorder to satisfy constraints. Nothing on disk changes.
-- **Choice repairs** refuse to guess, but they do not refuse to reason. A duplicate install is ranked on version support, whether a copy is a deliberate local pin, update recency and subscriber count, and the suggested copy is labelled with why. When the signals disagree the disagreement is printed rather than buried: the real case this was built against recommends a fork updated 398 days more recently while stating that the original has four times the subscribers. Two mods declaring mutual incompatibility, or one package id in two folders, is a decision only you can make, so RimDoc+ lays out the options and their consequences.
-- **File repairs** list every path they would touch, then generate a PowerShell script that backs up each file before changing it. Stamping a version into `About.xml`, resetting a mod's settings, restoring `ModsConfig.xml` after the game wiped it.
-- **External repairs** are the ones no tool can do for you, such as resubscribing to a Workshop item, and link straight to the right page.
+### Running and judging the game
 
-An **Auto** toggle sits beside the button. Off, anything ambiguous is put to you as a modal question with the app's preferred answer marked Recommended and the reasoning shown underneath, including whatever argues against it. On, the app answers those itself using the same reasoning, and the console records what it decided and why, flagging any decision where the evidence was contested.
-
-Auto still cannot touch disk unasked. A decision that resolves to removing files is staged into the repair script, which you read and run yourself, so the confirmation step is the script rather than the toggle.
-
-The run streams into a terminal-style console: what was scanned, how long the analysis took, each repair as it lands, and an estimated wall-clock for the staged file work. That estimate comes from a throughput model calibrated against timed runs on a real install (30 ms per file plus 15 ms per megapixel), validated to within 1% on a 30-file sample.
-
-Every finding is accounted for in the summary, including the ones proposing no repair because none is wanted. Reporting "none auto-fixable" while twelve of fifteen findings were informational notes and three had already been staged was wrong on both counts.
-
-Anything that cannot be undone asks first: deleting a modpack, restoring the original order. The dialog says what will be lost and what will not, and Escape cancels while Enter is deliberately unbound so a destructive action always needs a real click.
-
-**Fix all automatic** applies every deterministic modpack repair in one go. Each is planned against the result of the previous one, so a batch can never apply two conflicting edits to the same load order, and the whole batch undoes as a unit.
-
-### Settings and developer mode
-
-A **Developer mode** toggle in Settings opens a diagnostics panel:
-
-- **Self-checks**: invariants about RimDoc+ itself, not about your mods. Finding ids are unique (duplicates make React silently collapse rows), every proposed fix names a repair that actually exists, no finding renders as an empty row, the load order still resolves to installed mods.
-- **Captured console**: errors and warnings mirrored into the app, repeats collapsed into a count. React reports duplicate keys and render warnings to the console and nowhere else, so they are invisible unless devtools happens to be open.
-- **Rules**: what each rule produced, how long it took, and the error if it threw. Rules run isolated, so one throwing is recorded and skipped rather than blanking the whole list.
-- **Parse counts**: descriptions read, dependencies declared, patch operations extracted, textures measured, Workshop items matched.
-- **Suspicious zeroes**: any count that should never be zero on a real install is flagged red.
-
-That last part is the point. The failure mode worth catching is not a crash, it is a parser or matcher that silently matches nothing: it throws nothing, breaks no test that only asserts "did not crash", and returns a clean empty result that looks like good news. A regex whose word boundaries had become literal backspace characters failed exactly that way and cost an hour. It would now read as a zero on this panel.
-
-The panel found a bug in itself on first run: an intent breakdown that sampled `loadAfter` pairs, which are all "declared" by definition, so the other three categories could only ever read zero however well the classifier worked. It now counts the overrides actually reported.
-
-**Reset the app** sits in the same panel. It clears everything RimDoc+ remembers, so the next
-start is a first one: modpacks and their pins, run history, any search in progress, the install
-baseline, and the settings themselves. Swept by prefix rather than from a list of keys, because
-that list is spread across a dozen modules and a reset that quietly missed one would leave the app
-in a state no first run can produce. Your install, the backups a repair took and the builds in the
-vault are left alone: those are how real changes get undone, and this is not a repair.
-
-An orange strip across the top marks dev mode as on, since a diagnostic mode that looks identical to normal use is easy to leave running.
-
-A render crash shows the error and component stack rather than a blank page, since a tool for explaining failures should not fail silently itself.
-
-### Exact builds
-
-A modpack records which mods it uses, which makes it repeatable. It does not record which builds,
-which is what would make it reproducible, and Steam overwrites a Workshop mod in place. So a setup
-can stop working without anything about it appearing to have changed.
-
-Pinning records the content hash of every mod in a modpack. Checking re-reads them and reports
-drift: the mod is still there, still enabled, and is not the build this setup was known to work
-with. Nothing about a load order changes when Steam replaces a mod underneath it, so that state is
-otherwise invisible.
-
-The vault keeps the copies a pin refers to, addressed by content rather than by the version in
-About.xml, which is whatever the author last remembered to change. Hashed from file contents, not
-sizes and modification times: a copy rewrites every mtime, and two builds can differ by one byte at
-the same length. Paths go in alongside the content, since moving a file without editing it still
-makes a different mod, and the file list is sorted because directory order is whatever the
-filesystem feels like.
-
-Two things are left out of the identity deliberately: this app's own `.rimdocbak` backups, and
-Steam's `PublishedFileId.txt`. Including either would give one build different hashes depending on
-what had happened to it since, which is the one thing a content address must not do.
-
-Keyed by hash, so vaulting a build already held costs one walk and no copy. Restoring backs up what
-it replaces, and a drifted mod can only be restored when its pinned build is actually in the vault:
-a pin naming a build nobody kept describes something already lost, and the button says so rather
-than failing when pressed.
-
-### Judging a run without being asked
-
-A run is classified from what it wrote, using markers taken from two real logs on the reference
-install: a failed load of 43 lines and a successful one of 2,689.
-
-The decisive failure is RimWorld's own admission. When loading throws with mods active it writes
-that it is resetting ModsConfig.xml back to Core and retrying, which is both the clearest signal
-there is and destructive, since any load order not saved elsewhere is gone by then. Everything after
-that line describes the recovery attempt with Core only, so the verdict returns at it rather than
-letting the recovery read as a success.
-
-Success is reaching mod construction, which only happens once every def has loaded. That is not the
-main menu and the verdict does not claim the game is playable; it claims the mod list loaded.
-
-Nothing is inferred from silence. A run still going, or one that ended in a way these markers do not
-describe, is reported as unknown.
-
-With that, the search can judge its own trials: it runs each one, reads the log, and stops the game
-as soon as the verdict lands, because a trial has answered its question by then and sitting at the
-main menu answers nothing more. It stops only the run it started, never a copy of the game it did
-not launch.
-
-Offered rather than assumed, and only sound for a fault that stops the mod list loading. Anything
-that goes wrong after the main menu looks identical to a healthy boot from outside the process.
-
-### Watching a run
-
-Play and watch starts the game and follows it. The log streams in as it is written, so a crash on
-load is in front of you rather than something to go looking for afterwards, and the run reports how
-it ended: exit code, how long it lasted, how many lines it wrote, and the faults the same analysis
-the Session tab uses finds in them.
-
-The log is followed from wherever it stands when the game starts, because RimWorld truncates
-Player.log on launch. Reading from the beginning would replay the previous run as this one, and
-reading from the old end would miss everything until the file grew past it, so a shrinking file is
-taken as the truncation and the offset resets with it. A trailing partial line is held back rather
-than shown, since the game writes in chunks and splitting mid-line puts half a stack frame in the
-transcript.
-
-A run that stops writing for 90 seconds while still alive is called out. That is well past anything
-a working load produces, and it reports rather than acts: a quiet run is a fact about the log, not
-proof of a hang, and killing someone's game on a guess is not worth being right.
-
-### Measured runs
-
-Every watched run is recorded with what it cost: the startup phases the game reports, wall clock,
-peak working set, and the faults found in its log. Two runs can then be compared side by side, which
-is how you tell whether a modpack actually loads faster or just feels like it.
-
-All of it is measured from outside the process. There is no frame rate and no tick rate here, on
-purpose: attributing simulation time to a particular mod means timing methods inside the running
-game, and a number invented in its absence would read exactly like a measured one.
-
-### Sharing a session
-
-Asking for help usually means pasting tens of thousands of lines of Unity noise into a forum. By the
-time anyone is looking at the Session tab the parts that matter have already been found, so what the
-report carries is the environment, the clustered faults with what each was blamed on, and the active
-mod list. On the reference install that is 252 lines and 12.8 KB, against a log of many thousands.
-
-Copied or saved, never sent. The app is offline by default and this does not change that: it produces
-something small enough to paste wherever you were going to ask, and where it goes is your choice.
-
-### Patches named in a trace
-
-A patched method reports the patch in the stack rather than the original, so the frames name every mod
-whose code was on the way to a fault. That is a different question from which mod threw: a fault
-inside a postfix belongs to whoever wrote the postfix, not to whatever they patched.
-
-Those frames are pulled out above the trace, each with its kind, the patch method, and the mod that
-owns it. A transpiler is marked differently from a prefix or postfix, because it rewrites the method
-body and can break things the other two cannot. A patch whose owner is not installed is still listed
-rather than dropped.
-
-### Saves
-
-Every save carries its own list of the mods it was made with. Opening one against a different list is
-a kind of breakage nothing on disk shows: the install is fine, it simply is not the install this
-colony was built on. RimWorld drops whatever content it cannot resolve, which is how a colony opens
-with its buildings gone.
-
-Only mods the save expects and the load order lacks are treated as a problem, and a missing one is
-distinguished between installed-but-disabled, which is one click away, and not installed at all. A
-mod uninstalled since is named from the save's own record, which is the only thing left that knows
-what it was called. Mods added since are ordinary and shown quietly; reordering is counted rather
-than listed, because order matters far less than presence and RimWorld sorts it at load.
-
-Only the head of each file is read. The mod list sits in a meta block at the top: 20 KB of it in a
-102 MB save on the reference install, so listing saves does not mean reading a gigabyte of world
-data. RimWorld's own `.rws.old` backups are skipped, since they would double the list with an older
-copy of every save.
+- **Play and watch** starts RimWorld and streams its log as it is written, then reports exit code, duration, lines written and the faults found by the Session analysis. The log is followed from where it stands at launch, because RimWorld truncates `Player.log`. A run that goes quiet for 90 seconds while alive is called out, never killed on a guess
+- **Run classification**: a run is judged from the markers it wrote, taken from real failed and successful logs. RimWorld's own reset-to-Core admission is the decisive failure; reaching mod construction is success, which means the mod list loaded, not that the game is playable. Anything else is reported as unknown
+- **Measured runs**: every watched run records startup phases, wall clock, peak working set and faults, and two runs can be compared side by side. All of it is measured from outside the process; there is no frame rate or tick rate in this section on purpose
+- **Saves**: each save's own mod list is compared with the current load order, distinguishing installed-but-disabled from not installed, naming mods removed since from the save's own record. Only the head of each file is read (20 KB of a 102 MB save on the reference install); `.rws.old` backups are skipped
 
 ### Find the culprit
 
-Triage repairs what the rules can name. This is for the rest: the game crashes, or drags, and
-nothing on disk says why.
+For a crash or slowdown nothing on disk explains: half the mods are switched off, the order is written into the game and the game is started. You say whether the problem is still there and the list halves again; a 224-mod list settles in about eight launches. Every verdict is yours.
 
-Half the mods are switched off, the order is written into the game and the game is started. You say
-whether the problem is still there, and the list halves again. A 224-mod list settles in about eight
-launches. Every verdict is yours: nothing here decides whether a fault is present, because that would
-mean claiming to know what a fault looks like from outside the game.
+- Official content and the bootstrap layer are never switched off, and every dependency of a kept mod is pulled back in, but a mod pulled in that way stays a suspect
+- The search is saved on every step, and the original load order is restored when it ends, however it ends
+- Where the run can judge itself (a fault that stops the mod list loading), a trial stops the game as soon as the verdict lands, and only a game it started
+- It cannot find a fault that needs two particular mods together, and says so up front
 
-Two things make the trials mean anything. Official content and the bootstrap layer are never switched
-off, since removing Core is not a test and disabling Harmony breaks everything that patches through
-it. And every dependency of a kept mod is pulled back in whether or not the split happened to include
-it, because otherwise half the trials fail for a missing dependency rather than the fault, and the
-search follows the wrong half from there. A mod pulled in that way stays a suspect: being needed by
-something is not evidence of innocence.
+### Exact builds and the vault
 
-The search is saved on every step, since a trial means launching the game and coming back. The load
-order it started from is restored when it ends, however it ends.
+- **Pinning** records the content hash of every mod in a modpack; checking re-reads them and reports drift when Steam has replaced a mod underneath a setup
+- The vault stores the copies a pin refers to, addressed by file contents and paths (sorted) rather than by the version in `About.xml`. `.rimdocbak` backups and Steam's `PublishedFileId.txt` are excluded from the identity. Vaulting a build already held costs one walk and no copy
+- Restoring backs up what it replaces, and a drifted mod can only be restored when its pinned build is in the vault
 
-It cannot find a fault that needs two particular mods together. That is stated up front rather than
-discovered at the end of eight launches.
+### Retry a download
 
-### Retry a Workshop download
+For a mod that arrived damaged rather than absent. It drops Steam's installed record for the item while keeping the subscription, and removes the mod folder, which makes Steam fetch it again. The manifest edit and the folder delete move together, and both are backed up first.
 
-For a mod that arrived damaged rather than absent, where the Workshop page offers nothing but
-unsubscribing and resubscribing by hand.
-
-Steam's `appworkshop_294100.acf` keeps two lists: what it believes it has downloaded, and what the
-account subscribes to. Dropping the installed record while leaving the subscription is what makes
-Steam fetch the item again, which is why this is not the same as unsubscribing. The mod folder goes
-too, because Steam treats a present folder as proof of a good copy and a half-downloaded one will
-otherwise survive several retries.
-
-Steam holds that record in memory and rewrites the file when it exits, so an edit made underneath
-it is simply undone, and a repair that silently achieves nothing is worse than one that declines.
-So it needs Steam closed, and there are two ways to get there.
-
-**Close Steam, apply, start it again** does all three in one press, narrating each step in the
-transcript. It uses Steam's own shutdown rather than killing it, because a kill is the case where
-the record never gets written at all and the repair would then be editing a stale file. It waits
-for Steam to actually be gone, treats "could not tell" as still running rather than guessing, and
-starts Steam again whether or not the repair worked, but only if this run was what closed it.
-
-It refuses outright when Steam is running a game, read from Steam's own `RunningAppID`. The
-headless shutdown cannot raise Steam's usual "a game is running" prompt, so without that check it
-would take a live session down with no warning and no save. That is the one consequence the
-button's label does not imply, so it is the one thing that blocks.
-
-**Or apply the rest now.** A run that contains a Steam-blocked repair no longer refuses outright.
-It applies everything that is free to go and names what it held back. Repairs move whole, never
-action by action, because this one pairs the manifest edit with deleting the mod folder: doing
-only the second leaves the mod gone and Steam still believing it has it, which is worse than not
-repairing at all. The shell enforces the same pairing where the writing happens, so a folder
-delete whose manifest edit was refused is skipped rather than carried out anyway.
-
-Both the folder and the manifest are backed up first, so undoing puts the current copy back.
-
-It is offered on any Workshop mod from its detail panel, and on the ghost-subscription finding the
-session report raises when Steam registered a subscription and no folder ever arrived.
-
-### Live scanning
-
-The desktop build walks the install itself rather than reading a fixture written at build time.
-
-- A **Rescan** button, and an automatic rescan after any repair that touched disk
-- The scanner is a port of `scripts/scan.mjs`, validated by running both against the same 252-mod install and diffing every field: name, author, source, versions, dependencies, load order constraints, size, texture stats and all 9,782 patch operations. They agree on all of them.
-- Both scanners skip `.rimdocbak`. Repairs write their backups beside the originals, which puts them inside the tree the next scan walks: removing a duplicate mod folder left `<id>.rimdocbak` behind carrying the same `packageId`, so the rescan reported the duplicate the repair had just resolved, and backed-up files made a texture pass look like it had grown the install.
-- Folder modification times are recorded to the second. At millisecond precision the two implementations disagreed on 117 of 252 mods purely from filesystem rounding, which the install-change feed would have read as 117 updates.
-
-Without the shell the app still reads the `pnpm scan` fixture, so the browser preview is unchanged.
+- Steam rewrites its manifest on exit, so the repair needs Steam closed. **Close Steam, apply, start it again** does all three, using Steam's own shutdown, and refuses outright if Steam is running a game (read from `RunningAppID`)
+- **Apply the rest now** applies everything that does not need Steam closed and names what it held back
+- Offered on any Workshop mod from its detail panel and on the ghost-subscription finding
 
 ### Desktop shell
 
-In the browser, RimDoc+ analyses and plans; the desktop build also carries plans out.
+In the browser RimDoc+ analyses and plans; the desktop build also carries plans out.
 
 - **Apply to game** writes the modpack's load order into `ModsConfig.xml`, backing up the current file first
 - **Play** starts RimWorld from its install folder
-- **Apply directly** runs a repair plan natively: metadata stamps, config writes, folder removals and texture downscaling, with an original-version backup taken before anything is touched
-- **Undo this run** restores every backup the run made, reporting what it restored and what had none
+- **Apply directly** runs a repair plan natively (metadata stamps, config writes, folder removals, texture downscaling) with an original-version backup taken first. One failing action does not abort a run; it is reported against its own target
+- **Undo this run** restores every backup the run made
 
-The same plan object drives all three executors, so nothing about the analysis or repair layers changes between browser and desktop. Only who carries a plan out does. Shell-only actions render disabled with the reason rather than being hidden, so the browser build still shows what the desktop build adds.
+The same plan object drives all three executors, and shell-only actions render disabled with the reason rather than being hidden in the browser build.
 
-```bash
-pnpm tauri:dev     # run the desktop app against the dev server
-pnpm tauri:build   # produce a release binary
-```
+### Settings and developer mode
 
-One failing action does not abort a run: the remaining actions still apply and the failure is reported against its own target, because a plan of 730 texture resizes should not be abandoned because one file is locked.
-
-### Harmony patch check
-
-When RimWorld updates, methods get renamed, moved or deleted. A Harmony patch aimed at one that has gone cannot apply, and nothing on disk says so: you find out when the game throws at startup, or when a feature quietly stops working.
-
-**Check Harmony patches** on the Doctor tab reads the assemblies of every code mod in your modpack and resolves each declared patch target against the installed game. A few seconds for a thousand assemblies. Nothing in any mod runs: it reads .NET metadata and never loads an assembly, because loading would fire static constructors.
-
-Findings are one per mod rather than one per patch, since a mod with four dead patches is one thing to decide about. Where a method moved rather than went, it says where to.
-
-Two things it deliberately does not call breakage. A patch class carrying a Harmony `Prepare()` decides for itself whether to apply, so a missing target may be one the mod already knows to skip; those are reported separately. And a patch whose target is built in code, through `TargetMethod()` or `harmony.Patch(...)`, was never checked at all, so the report says how many rather than letting a resolved count read as a clean bill of health.
-
-See [sidecar/README.md](sidecar/README.md) for the probe itself, which runs standalone against any install.
+- **Developer mode** opens a diagnostics panel: self-checks about RimDoc+ itself (unique finding ids, every proposed fix names a repair that exists, no empty rows), a captured console with repeats collapsed, per-rule output and timing (rules run isolated, so a throwing rule is recorded and skipped), parse counts, and suspicious zeroes flagged red. An orange strip marks the mode as on
+- **Reset the app** clears everything RimDoc+ remembers so the next start is a first one. It leaves your install, repair backups and the vault alone
+- A render crash shows the error and component stack rather than a blank page
 
 ## How the repair tiers work
 
@@ -503,15 +264,6 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 | 2    | XML patch repair: rewriting a stale xpath, quieting a failed operation, resolving a def collision | Low, diffed before apply     |
 | 3    | Missing content: stub defs for absent dependencies, texture path and casing fixes                 | Moderate, changes what loads |
 
-## What's not yet built
-
-- **Unattended reproduction of a fault that needs a colony**: the search judges a trial past the main menu, because a crash writes its own admission to the log and that is now read. What it cannot do is play the colony for you, so those trials are launched and judged rather than run unattended. A slowdown is still yours to call: nothing in the log says a run was slow
-- **Stub defs beyond SoundDef**: an empty def is only ever safe to stand in for where the absence degrades rather than breaks, which today is one type. Widening it is a judgement per type, not a feature
-- **Scripted soak run**: a long unattended session with faults attributed over time
-- **Frame measurement**: load time, memory and per-mod tick cost are measured, the last of them by the companion mod on the Performance tab. Frame time is not: what the renderer spends is not attributable to a mod by timing ticks
-- **Fix registry**: shared, signed repair recipes keyed on package id, mod version, and game version, with mod-author consent and an upstream export path
-- **Def audits**: unreachable def pruning
-
 ## Documentation
 
 | Document                                         | What is in it                                                                                                            |
@@ -521,13 +273,40 @@ Repairs are graded by how much machinery they need and how much can go wrong. Se
 | [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) | Everything this app can touch, with the source that enforces each limit.                                                 |
 | [docs/SPEC.md](docs/SPEC.md)                     | The original specification, including what is planned and not yet built.                                                 |
 | [docs/SMOKE-TEST.md](docs/SMOKE-TEST.md)         | The list a person works down before a release, ordered so what writes to your game comes last.                           |
+| [sidecar/README.md](sidecar/README.md)           | The patch probe: what it reports and how to run it by hand.                                                              |
 | [CONTRIBUTING.md](CONTRIBUTING.md)               | Building it, the checks that must pass, and the house style.                                                             |
+| [CHANGELOG.md](CHANGELOG.md)                     | Release history.                                                                                                         |
+| [ROADMAP.md](ROADMAP.md)                         | What is being built next.                                                                                                |
+
+## Security
+
+RimDoc+ deletes folders inside your game install when you ask it to repair one, so what it can touch is written down in [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md), with the source that enforces each limit.
+
+- The webview cannot touch the filesystem. It can only call the commands registered in `src-tauri/src/lib.rs`, and five of them write
+- It writes to your RimWorld install, its config folder, and two folders in your home directory (`~/RimDoc-Backups` and `~/RimDoc-Vault`)
+- Every file is copied to `<file>.rimdocbak` before it changes, and every run is undoable
+- There is no telemetry, analytics or crash reporter. The app is offline by default
+- Two things reach the network, both on request: `pnpm workshop` sends a list of public Workshop file ids to Steam's anonymous `GetPublishedFileDetails` (no account, key or credential; results cache for a week; the app works fully without it), and **Fetch** retrieves a shared log from a gist link you pasted
+- The patch probe reads .NET metadata and never loads an assembly, so no mod code runs during a check
+- A CI security scan runs on every pull request and push to main
+
+## What's not yet built
+
+- **Unattended reproduction of a fault that needs a colony**: trials are launched and judged rather than run unattended, and a slowdown is still yours to call
+- **Stub defs beyond SoundDef**: an empty def is only safe to stand in for where the absence degrades rather than breaks, which today is one type
+- **Scripted soak run**: a long unattended session with faults attributed over time
+- **Frame measurement**: load time, memory and per-mod tick cost are measured; frame time is not attributable to a mod by timing ticks
+- **Fix registry**: shared, signed repair recipes keyed on package id, mod version and game version, with mod-author consent and an upstream export path
+- **Def audits**: unreachable def pruning
+- **XML patch simulation**: running every `PatchOperation` against the merged def database to report which xpaths will miss, without launching the game (see [ROADMAP.md](ROADMAP.md))
+- **Session capture on abnormal exit**: a bundled case file (log, mod list, save, system specs, crash dump), also on the roadmap
+- Signed installers; releases are currently unsigned
 
 ## License
 
 This project is dual-licensed:
 
 - [AGPL v3](LICENSE) - free for open-source use. Derivatives and SaaS deployments must release their source under AGPL.
-- [Commercial license](COMMERCIAL.md) - for proprietary / closed-source use or hosted services that do not want to comply with AGPL source-disclosure requirements. Contact for terms.
+- [Commercial license](COMMERCIAL.md) - for proprietary / closed-source use or hosted services that do not want to comply with AGPL source-disclosure requirements. Contact support@wickitlab.com for terms.
 
 RimDoc+ is an unofficial community tool. It is not affiliated with or endorsed by Ludeon Studios.
